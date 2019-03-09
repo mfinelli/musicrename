@@ -4,6 +4,8 @@ import "fmt"
 import "os"
 import "github.com/pborman/getopt"
 
+import "github.com/mfinelli/musicrename/config"
+
 const VERSION = "0.0.1"
 
 func main() {
@@ -20,4 +22,7 @@ func main() {
 		fmt.Printf("musicrename v%s\n", VERSION)
 		os.Exit(0)
 	}
+
+	conf, _ := config.ReadOrCreateConfigFile()
+	fmt.Println(conf)
 }
