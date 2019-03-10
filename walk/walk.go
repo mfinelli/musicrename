@@ -23,7 +23,10 @@ func WalkAndProcessDirectory(verbose bool, dry bool, dir string) [2]int {
 		if artist.IsDir() {
 			dirCount += 1
 			util.Printf(fmt.Sprintf("Found artist: %s\n", artist.Name()), color.Cyan)
-			handleArtistDir(verbose, dry, dir, artist.Name())
+			artistdir := handleArtistDir(verbose, dry, dir, artist.Name())
+			counts := walkAndProcessArtistDir(verbose, dry, path.Join(dir, artistdir))
+			dirCount += counts[0]
+			fileCount += counts[1]
 		}
 	}
 
