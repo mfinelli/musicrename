@@ -64,9 +64,8 @@ func main() {
 	}
 
 	fmt.Printf("doing work in: %s\n", workdir)
-	fmt.Println("conf:", conf)
 
-	counts := walk.WalkAndProcessDirectory(verbose, dryRun, workdir)
+	counts := walk.WalkAndProcessDirectory(verbose, dryRun, workdir, conf)
 
 	end := time.Now()
 	fmt.Printf("Processed %d directories and %d files in %v.\n", counts[0], counts[1], end.Sub(start))

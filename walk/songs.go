@@ -8,9 +8,10 @@ import "path"
 
 import "github.com/gookit/color"
 
+import "github.com/mfinelli/musicrename/config"
 import "github.com/mfinelli/musicrename/util"
 
-func walkAndProcessAlbumDir(verbose bool, dry bool, dir string) [2]int {
+func walkAndProcessAlbumDir(verbose bool, dry bool, dir string, conf config.Config) [2]int {
 	songs, err := ioutil.ReadDir(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -25,20 +26,20 @@ func walkAndProcessAlbumDir(verbose bool, dry bool, dir string) [2]int {
 			dirCount += 1
 		} else {
 			fileCount += 1
-			handleSong(verbose, dry, dir, song.Name())
+			handleSong(verbose, dry, dir, song.Name(), conf)
 		}
 	}
 
 	return [2]int{dirCount, fileCount}
 }
 
-func handleSong(verbose bool, dry bool, workdir string, song string) string {
+func handleSong(verbose bool, dry bool, workdir string, song string, conf config.Config) string {
 	ext := path.Ext(song)
 	filename := song[0 : len(song)-len(ext)]
 
 	switch ext {
 	case ".flac", ".m4a", ".mp3", ".ogg":
-		sanitized := util.Sanitize(filename)
+		sanitized := util.Sanitize(filename, conf.SongMaxlen)
 
 		if sanitized != filename {
 			if verbose {

@@ -5,7 +5,7 @@ import "golang.org/x/text/transform"
 import "golang.org/x/text/unicode/norm"
 import "golang.org/x/text/runes"
 
-func Sanitize(str string) string {
+func Sanitize(str string, max int) string {
 	return translit(str)
 }
 

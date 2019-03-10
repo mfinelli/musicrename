@@ -7,9 +7,10 @@ import "path"
 
 import "github.com/gookit/color"
 
+import "github.com/mfinelli/musicrename/config"
 import "github.com/mfinelli/musicrename/util"
 
-func WalkAndProcessDirectory(verbose bool, dry bool, dir string) [2]int {
+func WalkAndProcessDirectory(verbose bool, dry bool, dir string, conf config.Config) [2]int {
 	artists, err := ioutil.ReadDir(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -23,8 +24,8 @@ func WalkAndProcessDirectory(verbose bool, dry bool, dir string) [2]int {
 		if artist.IsDir() {
 			dirCount += 1
 			util.Printf(fmt.Sprintf("Found artist: %s\n", artist.Name()), color.Cyan)
-			artistdir := handleArtistDir(verbose, dry, dir, artist.Name())
-			counts := walkAndProcessArtistDir(verbose, dry, path.Join(dir, artistdir))
+			artistdir := handleArtistDir(verbose, dry, dir, artist.Name(), conf)
+			counts := walkAndProcessArtistDir(verbose, dry, path.Join(dir, artistdir), conf)
 			dirCount += counts[0]
 			fileCount += counts[1]
 		}
@@ -33,8 +34,8 @@ func WalkAndProcessDirectory(verbose bool, dry bool, dir string) [2]int {
 	return [2]int{dirCount, fileCount}
 }
 
-func handleArtistDir(verbose bool, dry bool, workdir string, dir string) string {
-	sanitized := util.Sanitize(dir)
+func handleArtistDir(verbose bool, dry bool, workdir string, dir string, conf config.Config) string {
+	sanitized := util.Sanitize(dir, conf.ArtistMaxlen)
 
 	if sanitized != dir {
 		if verbose {

@@ -8,9 +8,10 @@ import "regexp"
 
 import "github.com/gookit/color"
 
+import "github.com/mfinelli/musicrename/config"
 import "github.com/mfinelli/musicrename/util"
 
-func walkAndProcessArtistDir(verbose bool, dry bool, dir string) [2]int {
+func walkAndProcessArtistDir(verbose bool, dry bool, dir string, conf config.Config) [2]int {
 	albums, err := ioutil.ReadDir(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -24,9 +25,9 @@ func walkAndProcessArtistDir(verbose bool, dry bool, dir string) [2]int {
 		if album.IsDir() {
 			dirCount += 1
 			util.Printf(fmt.Sprintf("Found album: %s\n", album.Name()), color.Cyan)
-			albumdir := handleAlbumDir(verbose, dry, dir, album.Name())
+			albumdir := handleAlbumDir(verbose, dry, dir, album.Name(), conf)
 			if albumdir != "" {
-				counts := walkAndProcessAlbumDir(verbose, dry, path.Join(dir, albumdir))
+				counts := walkAndProcessAlbumDir(verbose, dry, path.Join(dir, albumdir), conf)
 				dirCount += counts[0]
 				fileCount += counts[1]
 			}
@@ -36,12 +37,12 @@ func walkAndProcessArtistDir(verbose bool, dry bool, dir string) [2]int {
 	return [2]int{dirCount, fileCount}
 }
 
-func handleAlbumDir(verbose bool, dry bool, workdir string, dir string) string {
+func handleAlbumDir(verbose bool, dry bool, workdir string, dir string, conf config.Config) string {
 	if m, _ := regexp.MatchString("^\\[\\d{4}\\] .*$", dir); m {
 		year := dir[1:5]
 		title := dir[7:len(dir)]
 
-		sanitized := util.Sanitize(title)
+		sanitized := util.Sanitize(title, conf.AlbumMaxlen)
 
 		if title != sanitized {
 			newdir := fmt.Sprintf("[%s] %s", year, sanitized)
