@@ -2,13 +2,18 @@ package main
 
 import "fmt"
 import "os"
+import "time"
+
 import "github.com/pborman/getopt"
 
 import "github.com/mfinelli/musicrename/config"
+import "github.com/mfinelli/musicrename/walk"
 
 const VERSION = "0.0.1"
 
 func main() {
+	start := time.Now()
+
 	versionFlag := getopt.BoolLong("version", 'v', "print version")
 	helpFlag := getopt.BoolLong("help", 'h', "print help")
 	dryRunFlag := getopt.BoolLong("dry-run", 'n', "don't move or rename")
@@ -60,4 +65,9 @@ func main() {
 
 	fmt.Printf("doing work in: %s\n", workdir)
 	fmt.Println("conf:", conf)
+
+	counts := walk.WalkAndProcessDirectory(verbose, dryRun, workdir)
+
+	end := time.Now()
+	fmt.Printf("Processed %d directories and %d files in %v.\n", counts[0], counts[1], end.Sub(start))
 }

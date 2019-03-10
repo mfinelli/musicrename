@@ -1,4 +1,6 @@
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/gookit/color v1.1.6 h1:CisXBwYhzdPZUV+F8J4N3nzTclW78mOYz6TbPwUmhV4=
+github.com/gookit/color v1.1.6/go.mod h1:655QfvFggjTrC1SaAufon2qad0RLgbdQa40lCeOdU64=
 github.com/pborman/getopt v0.0.0-20190308214855-fd6d657c3083 h1:5wvubSU9i4wka6AEMh9HnUe7j+sLmtslIPpnvnR3+Mo=
 github.com/pborman/getopt v0.0.0-20190308214855-fd6d657c3083/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
