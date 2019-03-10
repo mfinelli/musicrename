@@ -6,6 +6,10 @@ import "io/ioutil"
 import "os"
 import "path"
 
+import "github.com/gookit/color"
+
+import "github.com/mfinelli/musicrename/util"
+
 func walkAndProcessAlbumDir(verbose bool, dry bool, dir string) [2]int {
 	songs, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -31,10 +35,31 @@ func walkAndProcessAlbumDir(verbose bool, dry bool, dir string) [2]int {
 func handleSong(verbose bool, dry bool, workdir string, song string) string {
 	ext := path.Ext(song)
 	filename := song[0 : len(song)-len(ext)]
-	fmt.Printf("song: %s, ext: %s\n", filename, ext)
 
 	switch ext {
 	case ".flac", ".m4a", ".mp3", ".ogg":
+		sanitized := util.Sanitize(filename)
+
+		if sanitized != filename {
+			if verbose {
+				util.Printf(fmt.Sprintf("Rename %s to %s%s\n", song, sanitized, ext), color.Yellow)
+			}
+
+			if !dry {
+				err := os.Rename(path.Join(workdir, song),
+					path.Join(workdir, fmt.Sprintf("%s%s", sanitized, ext)))
+
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+
+				return fmt.Sprintf("%s%s", sanitized, ext)
+			}
+		}
+
+		return song
+
 	case ".jpg", ".png", ".tiff", ".tif":
 	case ".cue":
 	case ".log":
