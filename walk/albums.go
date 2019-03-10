@@ -3,6 +3,8 @@ package walk
 import "fmt"
 import "io/ioutil"
 import "os"
+import "path"
+import "regexp"
 
 import "github.com/gookit/color"
 
@@ -22,8 +24,45 @@ func walkAndProcessArtistDir(verbose bool, dry bool, dir string) [2]int {
 		if album.IsDir() {
 			dirCount += 1
 			util.Printf(fmt.Sprintf("Found album: %s\n", album.Name()), color.Cyan)
+			albumdir := handleAlbumDir(verbose, dry, dir, album.Name())
+			if albumdir != "" {
+				counts := walkAndProcessAlbumDir(verbose, dry, path.Join(dir, albumdir))
+				dirCount += counts[0]
+				fileCount += counts[1]
+			}
 		}
 	}
 
 	return [2]int{dirCount, fileCount}
+}
+
+func handleAlbumDir(verbose bool, dry bool, workdir string, dir string) string {
+	if m, _ := regexp.MatchString("^\\[\\d{4}\\] .*$", dir); m {
+		year := dir[1:5]
+		title := dir[7:len(dir)]
+
+		sanitized := util.Sanitize(title)
+
+		if title != sanitized {
+			newdir := fmt.Sprintf("[%s] %s", year, sanitized)
+			if verbose {
+				util.Printf(fmt.Sprintf("Rename %s %s\n", dir, newdir), color.Yellow)
+			}
+
+			if !dry {
+				err := os.Rename(path.Join(workdir, dir), path.Join(workdir, newdir))
+
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+
+				return newdir
+			}
+		}
+
+		return dir
+	}
+
+	return ""
 }
