@@ -5,7 +5,10 @@ SOURCES += $(wildcard walk/*.go)
 
 all: mr
 
+clean:
+	rm -f mr
+
 mr: $(SOURCES)
 	go build mr.go
 
-.PHONY: all
+.PHONY: all clean
