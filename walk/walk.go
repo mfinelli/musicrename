@@ -6,6 +6,8 @@ import "os"
 
 import "github.com/gookit/color"
 
+import "github.com/mfinelli/musicrename/util"
+
 func WalkAndProcessDirectory(verbose bool, dry bool, dir string) [2]int {
 	artists, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -19,7 +21,7 @@ func WalkAndProcessDirectory(verbose bool, dry bool, dir string) [2]int {
 	for _, artist := range artists {
 		if artist.IsDir() {
 			dirCount += 1
-			fmt.Println(color.Cyan.Sprintf("Found artist: %s", artist.Name()))
+			util.Printf(fmt.Sprintf("Found artist: %s\n", artist.Name()), color.Cyan)
 		}
 	}
 
