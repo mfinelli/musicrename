@@ -1,6 +1,7 @@
 package models
 
 import "fmt"
+import "path"
 
 type Song struct {
 	Album  *Album
@@ -16,4 +17,8 @@ func (s *Song) String() string {
 	}
 
 	return fmt.Sprintf("%d-%02d %s.%s", s.Disc, s.Track, s.Name, s.Format)
+}
+
+func (s *Song) FullPath() string {
+	return path.Join(s.Album.FullPath(), s.String())
 }
