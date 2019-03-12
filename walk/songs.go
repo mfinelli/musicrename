@@ -24,6 +24,10 @@ func walkAndProcessAlbumDir(verbose bool, dry bool, dir string, conf config.Conf
 	for _, song := range songs {
 		if song.IsDir() {
 			dirCount += 1
+			extradir := handleExtraDir(verbose, dry, dir, song.Name(), conf)
+			if extradir != "" {
+				fileCount += walkAndProcessExtraDir(verbose, dry, path.Join(dir, extradir), conf)
+			}
 		} else {
 			fileCount += 1
 			handleSong(verbose, dry, dir, song.Name(), conf)
@@ -62,6 +66,9 @@ func handleSong(verbose bool, dry bool, workdir string, song string, conf config
 		return song
 
 	case ".jpg", ".png", ".tiff", ".tif":
+		if song == "folder.jpg" {
+			break
+		}
 	case ".cue":
 	case ".log":
 	case ".m3u", ".m3u8":
