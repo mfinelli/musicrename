@@ -1,7 +1,23 @@
 package models_test
 
+import "reflect"
 import "testing"
 import "github.com/mfinelli/musicrename/models"
+
+func TestArtistString(t *testing.T) {
+	tests := []struct {
+		a   models.Artist
+		exp string
+	}{
+		{models.Artist{RootDir: "/tmp", Name: "test"}, "test"},
+	}
+
+	for _, test := range tests {
+		if test.a.String() != test.exp {
+			t.Errorf("Expected %s but got %s", test.exp, test.a.String())
+		}
+	}
+}
 
 func TestArtistFullPath(t *testing.T) {
 	tests := []struct {
@@ -19,17 +35,33 @@ func TestArtistFullPath(t *testing.T) {
 	}
 }
 
-func TestArtistString(t *testing.T) {
+func TestArtistAddAlbum(t *testing.T) {
+	tostr := func(arr []models.Album) []string {
+		ret := make([]string, len(arr))
+		for i, v := range arr {
+			ret[i] = v.String()
+		}
+		return ret
+	}
+
+	album1 := models.Album{Year: 2000, Name: "test0"}
+	album2 := models.Album{Year: 2001, Name: "test1"}
+
 	tests := []struct {
 		a   models.Artist
-		exp string
+		add []models.Album
+		exp []models.Album
 	}{
-		{models.Artist{RootDir: "/tmp", Name: "test"}, "test"},
+		{models.Artist{RootDir: "/tmp", Name: "test", Albums: []models.Album{album1}}, []models.Album{album2}, []models.Album{album1, album2}},
 	}
 
 	for _, test := range tests {
-		if test.a.String() != test.exp {
-			t.Errorf("Expected %s but got %s", test.exp, test.a.String())
+		for _, album := range test.add {
+			test.a.AddAlbum(album)
+		}
+
+		if !reflect.DeepEqual(tostr(test.a.Albums), tostr(test.exp)) {
+			t.Errorf("Expected %v but got %v", test.exp, test.a.Albums)
 		}
 	}
 }
