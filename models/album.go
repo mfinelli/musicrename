@@ -7,6 +7,7 @@ type Album struct {
 	Artist *Artist
 	Year   int
 	Name   string
+	Songs  []Song
 }
 
 func (a *Album) String() string {
