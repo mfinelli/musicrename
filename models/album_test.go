@@ -20,7 +20,7 @@ func TestAlbumString(t *testing.T) {
 }
 
 func TestAlbumFullPath(t *testing.T) {
-	artist := models.Artist{RootDir: "/tmp", Name: "test"}
+	artist := models.Artist{RootDir: "/tmp", Name: "test", RealPath: "test"}
 
 	tests := []struct {
 		a   models.Album

@@ -24,8 +24,8 @@ func TestArtistFullPath(t *testing.T) {
 		a   models.Artist
 		exp string
 	}{
-		{models.Artist{RootDir: "/tmp", Name: "test"}, "/tmp/test"},
-		{models.Artist{RootDir: "/tmp/", Name: "test"}, "/tmp/test"},
+		{models.Artist{RootDir: "/tmp", RealPath: "test", Name: "test"}, "/tmp/test"},
+		{models.Artist{RootDir: "/tmp/", RealPath: "test", Name: "test"}, "/tmp/test"},
 	}
 
 	for _, test := range tests {
@@ -52,7 +52,7 @@ func TestArtistAddAlbum(t *testing.T) {
 		add []models.Album
 		exp []models.Album
 	}{
-		{models.Artist{RootDir: "/tmp", Name: "test", Albums: []models.Album{album1}}, []models.Album{album2}, []models.Album{album1, album2}},
+		{models.Artist{RootDir: "/tmp", RealPath: "test", Name: "test", Albums: []models.Album{album1}}, []models.Album{album2}, []models.Album{album1, album2}},
 	}
 
 	for _, test := range tests {
@@ -62,6 +62,23 @@ func TestArtistAddAlbum(t *testing.T) {
 
 		if !reflect.DeepEqual(tostr(test.a.Albums), tostr(test.exp)) {
 			t.Errorf("Expected %v but got %v", test.exp, test.a.Albums)
+		}
+	}
+}
+
+func TestParseArtist(t *testing.T) {
+	rootDir := "/tmp"
+	tests := []struct {
+		input  string
+		artist models.Artist
+	}{
+		{"test", models.Artist{RootDir: rootDir, RealPath: "test", Name: "test"}},
+	}
+
+	for _, test := range tests {
+		a := models.ParseArtist(rootDir, test.input)
+		if !reflect.DeepEqual(a, test.artist) {
+			t.Errorf("Expected %v but got %v", test.artist, a)
 		}
 	}
 }

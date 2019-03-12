@@ -20,7 +20,7 @@ func TestSongString(t *testing.T) {
 }
 
 func TestSongFullPath(t *testing.T) {
-	artist := models.Artist{RootDir: "/tmp", Name: "test"}
+	artist := models.Artist{RootDir: "/tmp", RealPath: "test", Name: "test"}
 	album, _ := models.ParseAlbum("[2000] test album")
 	artist.AddAlbum(album)
 
