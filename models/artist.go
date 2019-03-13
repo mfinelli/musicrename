@@ -24,10 +24,9 @@ func (a *Artist) FullPath() string {
 	return path.Join(a.RootDir, a.RealPath)
 }
 
-func (a *Artist) AddAlbum(album Album) []Album {
+func (a *Artist) AddAlbum(album *Album) {
 	album.Artist = a
-	a.Albums = append(a.Albums, album)
-	return a.Albums
+	a.Albums = append(a.Albums, *album)
 }
 
 func ParseArtist(rootDir, dir string) Artist {

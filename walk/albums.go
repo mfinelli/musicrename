@@ -27,21 +27,20 @@ func walkAndProcessArtistDir(verbose bool, dry bool, artist *models.Artist, conf
 			album, err := models.ParseAlbum(item.Name())
 
 			if err == nil {
-				artist.AddAlbum(album)
+				artist.AddAlbum(&album)
 
 				if verbose {
 					util.Printf(fmt.Sprintf("Found album: %s\n", album.String()), color.Cyan)
 				}
 
-				al := artist.Albums[len(artist.Albums)-1]
-				err := al.Sanitize(dry, conf)
+				err := album.Sanitize(dry, conf)
 
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
 				}
 
-				counts := walkAndProcessAlbumDir(verbose, dry, al.FullPath(), conf)
+				counts := walkAndProcessAlbumDir(verbose, dry, album.FullPath(), conf)
 				dirCount += counts[0]
 				fileCount += counts[1]
 

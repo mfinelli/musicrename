@@ -57,7 +57,7 @@ func TestArtistAddAlbum(t *testing.T) {
 
 	for _, test := range tests {
 		for _, album := range test.add {
-			test.a.AddAlbum(album)
+			test.a.AddAlbum(&album)
 		}
 
 		if !reflect.DeepEqual(tostr(test.a.Albums), tostr(test.exp)) {
