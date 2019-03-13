@@ -2,9 +2,15 @@ package models
 
 import "errors"
 import "fmt"
+import "os"
 import "path"
 import "regexp"
 import "strconv"
+
+import "github.com/gookit/color"
+
+import "github.com/mfinelli/musicrename/config"
+import "github.com/mfinelli/musicrename/util"
 
 type Song struct {
 	Album    *Album
@@ -71,4 +77,38 @@ func ParseSong(item string) (Song, error) {
 	}
 
 	return Song{}, errors.New(fmt.Sprintf("Unable to parse song from: %s", item))
+}
+
+func (s *Song) Sanitize(dry bool, conf config.Config) error {
+	var original string
+	if s.Disc == 0 {
+		original = fmt.Sprintf("%02d %s", s.Track, s.Name)
+	} else {
+		original = fmt.Sprintf("%d-%02d %s", s.Disc, s.Track, s.Name)
+	}
+
+	sanitized := util.Sanitize(original, conf.SongMaxlen)
+
+	if sanitized != original {
+		newName := fmt.Sprintf("%s.%s", sanitized, s.Format)
+		util.Printf(fmt.Sprintf("Rename %s to %s.%s\n", s.String(), newName, s.Format), color.Yellow)
+
+		if s.Disc == 0 {
+			s.Name = sanitized[3:len(sanitized)]
+		} else {
+			s.Name = sanitized[5:len(sanitized)]
+		}
+
+		if !dry {
+			err := os.Rename(s.FullPath(), path.Join(s.Album.FullPath(), newName))
+
+			if err != nil {
+				return err
+			}
+
+			s.RealPath = newName
+		}
+	}
+
+	return nil
 }

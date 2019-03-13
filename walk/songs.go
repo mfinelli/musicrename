@@ -31,40 +31,37 @@ func walkAndProcessAlbumDir(verbose bool, dry bool, album *models.Album, conf co
 			}
 		} else {
 			fileCount += 1
-			handleSong(verbose, dry, album.FullPath(), song.Name(), conf)
+			handleSong(verbose, dry, album, song.Name(), conf)
 		}
 	}
 
 	return [2]int{dirCount, fileCount}
 }
 
-func handleSong(verbose bool, dry bool, workdir string, song string, conf config.Config) string {
+func handleSong(verbose bool, dry bool, album *models.Album, song string, conf config.Config) {
 	ext := path.Ext(song)
-	filename := song[0 : len(song)-len(ext)]
 
 	switch ext {
 	case ".flac", ".m4a", ".mp3", ".ogg":
-		sanitized := util.Sanitize(filename, conf.SongMaxlen)
+		song, err := models.ParseSong(song)
 
-		if sanitized != filename {
+		if err == nil {
+			album.AddSong(&song)
+
 			if verbose {
-				util.Printf(fmt.Sprintf("Rename %s to %s%s\n", song, sanitized, ext), color.Yellow)
+				util.Printf(fmt.Sprintf("Found song: %s\n", song.String()), color.Cyan)
 			}
 
-			if !dry {
-				err := os.Rename(path.Join(workdir, song),
-					path.Join(workdir, fmt.Sprintf("%s%s", sanitized, ext)))
+			err := song.Sanitize(dry, conf)
 
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(1)
-				}
-
-				return fmt.Sprintf("%s%s", sanitized, ext)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
 			}
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
-
-		return song
 
 	case ".jpg", ".png", ".tiff", ".tif":
 		if song == "folder.jpg" {
@@ -78,6 +75,4 @@ func handleSong(verbose bool, dry bool, workdir string, song string, conf config
 		fmt.Fprintln(os.Stderr, errors.New(fmt.Sprintf("unsupported extension: %s\n", ext)))
 		os.Exit(1)
 	}
-
-	return song
 }
