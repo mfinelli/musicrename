@@ -22,16 +22,33 @@ func walkAndProcessAlbumDir(verbose bool, dry bool, album *models.Album, conf co
 	dirCount := 0
 	fileCount := 0
 
-	for _, song := range songs {
-		if song.IsDir() {
+	for _, item := range songs {
+		if item.IsDir() {
 			dirCount += 1
-			extradir := handleExtraDir(verbose, dry, album.FullPath(), song.Name(), conf)
-			if extradir != "" {
-				fileCount += walkAndProcessExtraDir(verbose, dry, path.Join(album.FullPath(), extradir), conf)
+
+			extradir, err := models.ParseExtraDir(item.Name())
+
+			if err == nil {
+				album.AddExtraDir(&extradir)
+
+				if verbose {
+					util.Printf(fmt.Sprintf("Found extra dir: %s\n", extradir.String()), color.Cyan)
+				}
+
+				err := extradir.Sanitize(dry, conf)
+
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+
+				fileCount += walkAndProcessExtraDir(verbose, dry, extradir.FullPath(), conf)
+			} else {
+				util.Printf(fmt.Sprintf("Skipping non-album directory: %s\n", item.Name()), color.Red)
 			}
 		} else {
 			fileCount += 1
-			handleSong(verbose, dry, album, song.Name(), conf)
+			handleSong(verbose, dry, album, item.Name(), conf)
 		}
 	}
 
