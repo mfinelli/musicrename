@@ -9,10 +9,11 @@ import "path"
 import "github.com/gookit/color"
 
 import "github.com/mfinelli/musicrename/config"
+import "github.com/mfinelli/musicrename/models"
 import "github.com/mfinelli/musicrename/util"
 
-func walkAndProcessExtraDir(verbose bool, dry bool, dir string, conf config.Config) int {
-	extras, err := ioutil.ReadDir(dir)
+func walkAndProcessExtraDir(verbose bool, dry bool, extradir *models.ExtraDir, conf config.Config) int {
+	extras, err := ioutil.ReadDir(extradir.FullPath())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -20,38 +21,33 @@ func walkAndProcessExtraDir(verbose bool, dry bool, dir string, conf config.Conf
 
 	fileCount := 0
 
-	for _, extra := range extras {
-		if extra.IsDir() {
-			fmt.Fprintln(os.Stderr, errors.New(fmt.Sprintf("too many directories: %s\n", path.Join(dir, extra.Name()))))
+	for _, item := range extras {
+		if item.IsDir() {
+			fmt.Fprintln(os.Stderr, errors.New(fmt.Sprintf("too many directories: %s\n", path.Join(extradir.FullPath(), item.Name()))))
 			os.Exit(1)
 		} else {
 			fileCount += 1
-			handleExtra(verbose, dry, dir, extra.Name(), conf)
-		}
-	}
-
-	return fileCount
-}
-
-func handleExtra(verbose bool, dry bool, workdir string, extra string, conf config.Config) string {
-	sanitized := util.Sanitize(extra, conf.ExtraMaxlen)
-
-	if sanitized != extra {
-		if verbose {
-			util.Printf(fmt.Sprintf("Rename %s to %s\n", extra, sanitized), color.Yellow)
-		}
-
-		if !dry {
-			err := os.Rename(path.Join(workdir, extra), path.Join(workdir, sanitized))
+			extra, err := models.ParseExtra(item.Name())
 
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 
-			return sanitized
+			extradir.AddExtra(&extra)
+
+			if verbose {
+				util.Printf(fmt.Sprintf("Found extra: %s\n", extra.String()), color.Cyan)
+			}
+
+			err = extra.Sanitize(dry, conf)
+
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
 	}
 
-	return extra
+	return fileCount
 }

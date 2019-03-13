@@ -42,7 +42,7 @@ func walkAndProcessAlbumDir(verbose bool, dry bool, album *models.Album, conf co
 					os.Exit(1)
 				}
 
-				fileCount += walkAndProcessExtraDir(verbose, dry, extradir.FullPath(), conf)
+				fileCount += walkAndProcessExtraDir(verbose, dry, &extradir, conf)
 			} else {
 				util.Printf(fmt.Sprintf("Skipping non-album directory: %s\n", item.Name()), color.Red)
 			}

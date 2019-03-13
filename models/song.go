@@ -91,7 +91,7 @@ func (s *Song) Sanitize(dry bool, conf config.Config) error {
 
 	if sanitized != original {
 		newName := fmt.Sprintf("%s.%s", sanitized, s.Format)
-		util.Printf(fmt.Sprintf("Rename %s to %s.%s\n", s.String(), newName, s.Format), color.Yellow)
+		util.Printf(fmt.Sprintf("Rename %s to %s\n", s.String(), newName), color.Yellow)
 
 		if s.Disc == 0 {
 			s.Name = sanitized[3:len(sanitized)]
