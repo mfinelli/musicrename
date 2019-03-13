@@ -13,6 +13,7 @@ type ExtraDir struct {
 	Album    *Album
 	RealPath string
 	Name     string
+	Extras   []Extra
 }
 
 func (ed *ExtraDir) String() string {
@@ -21,6 +22,11 @@ func (ed *ExtraDir) String() string {
 
 func (ed *ExtraDir) FullPath() string {
 	return path.Join(ed.Album.FullPath(), ed.RealPath)
+}
+
+func (ed *ExtraDir) AddExtra(extra *Extra) {
+	extra.ExtraDir = ed
+	ed.Extras = append(ed.Extras, *extra)
 }
 
 func ParseExtraDir(dir string) (ExtraDir, error) {
