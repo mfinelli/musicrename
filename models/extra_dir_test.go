@@ -1,5 +1,6 @@
 package models_test
 
+import "reflect"
 import "testing"
 
 import "github.com/mfinelli/musicrename/models"
@@ -34,6 +35,22 @@ func TestExtraDirFullPath(t *testing.T) {
 	for _, test := range tests {
 		if test.ed.FullPath() != test.exp {
 			t.Errorf("Expected %s but got %s", test.exp, test.ed.FullPath())
+		}
+	}
+}
+
+func TestParseExtraDir(t *testing.T) {
+	tests := []struct {
+		input string
+		exp   models.ExtraDir
+	}{
+		{"test", models.ExtraDir{RealPath: "test", Name: "test"}},
+	}
+
+	for _, test := range tests {
+		ed, _ := models.ParseExtraDir(test.input)
+		if !reflect.DeepEqual(ed, test.exp) {
+			t.Errorf("Expected %v but got %v", test.exp, ed)
 		}
 	}
 }

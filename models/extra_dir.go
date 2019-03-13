@@ -15,3 +15,10 @@ func (ed *ExtraDir) String() string {
 func (ed *ExtraDir) FullPath() string {
 	return path.Join(ed.Album.FullPath(), ed.RealPath)
 }
+
+func ParseExtraDir(dir string) (ExtraDir, error) {
+	return ExtraDir{
+		RealPath: dir,
+		Name:     dir,
+	}, nil
+}
