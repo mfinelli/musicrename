@@ -9,10 +9,11 @@ import "path"
 import "github.com/gookit/color"
 
 import "github.com/mfinelli/musicrename/config"
+import "github.com/mfinelli/musicrename/models"
 import "github.com/mfinelli/musicrename/util"
 
-func walkAndProcessAlbumDir(verbose bool, dry bool, dir string, conf config.Config) [2]int {
-	songs, err := ioutil.ReadDir(dir)
+func walkAndProcessAlbumDir(verbose bool, dry bool, album *models.Album, conf config.Config) [2]int {
+	songs, err := ioutil.ReadDir(album.FullPath())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -24,13 +25,13 @@ func walkAndProcessAlbumDir(verbose bool, dry bool, dir string, conf config.Conf
 	for _, song := range songs {
 		if song.IsDir() {
 			dirCount += 1
-			extradir := handleExtraDir(verbose, dry, dir, song.Name(), conf)
+			extradir := handleExtraDir(verbose, dry, album.FullPath(), song.Name(), conf)
 			if extradir != "" {
-				fileCount += walkAndProcessExtraDir(verbose, dry, path.Join(dir, extradir), conf)
+				fileCount += walkAndProcessExtraDir(verbose, dry, path.Join(album.FullPath(), extradir), conf)
 			}
 		} else {
 			fileCount += 1
-			handleSong(verbose, dry, dir, song.Name(), conf)
+			handleSong(verbose, dry, album.FullPath(), song.Name(), conf)
 		}
 	}
 

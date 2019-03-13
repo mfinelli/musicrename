@@ -40,7 +40,7 @@ func walkAndProcessArtistDir(verbose bool, dry bool, artist *models.Artist, conf
 					os.Exit(1)
 				}
 
-				counts := walkAndProcessAlbumDir(verbose, dry, album.FullPath(), conf)
+				counts := walkAndProcessAlbumDir(verbose, dry, &album, conf)
 				dirCount += counts[0]
 				fileCount += counts[1]
 
