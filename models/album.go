@@ -13,11 +13,12 @@ import "github.com/mfinelli/musicrename/config"
 import "github.com/mfinelli/musicrename/util"
 
 type Album struct {
-	Artist   *Artist
-	RealPath string
-	Year     int
-	Name     string
-	Songs    []Song
+	Artist    *Artist
+	RealPath  string
+	Year      int
+	Name      string
+	Songs     []Song
+	ExtraDirs []ExtraDir
 }
 
 func (a *Album) String() string {
@@ -31,6 +32,11 @@ func (a *Album) FullPath() string {
 func (a *Album) AddSong(song *Song) {
 	song.Album = a
 	a.Songs = append(a.Songs, *song)
+}
+
+func (a *Album) AddExtraDir(dir *ExtraDir) {
+	dir.Album = a
+	a.ExtraDirs = append(a.ExtraDirs, *dir)
 }
 
 func ParseAlbum(dir string) (Album, error) {

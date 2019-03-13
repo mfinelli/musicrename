@@ -68,6 +68,37 @@ func TestAlbumAddSong(t *testing.T) {
 	}
 }
 
+func TestAlbumAddExtraDir(t *testing.T) {
+	tostr := func(arr []models.ExtraDir) []string {
+		ret := make([]string, len(arr))
+		for i, v := range arr {
+			ret[i] = v.String()
+		}
+		return ret
+	}
+
+	dir1 := models.ExtraDir{Name: "test1"}
+	dir2 := models.ExtraDir{Name: "test2"}
+
+	tests := []struct {
+		a   models.Album
+		add []models.ExtraDir
+		exp []models.ExtraDir
+	}{
+		{models.Album{Year: 2000, Name: "test", ExtraDirs: []models.ExtraDir{dir1}}, []models.ExtraDir{dir2}, []models.ExtraDir{dir1, dir2}},
+	}
+
+	for _, test := range tests {
+		for _, dir := range test.add {
+			test.a.AddExtraDir(&dir)
+		}
+
+		if !reflect.DeepEqual(tostr(test.a.ExtraDirs), tostr(test.exp)) {
+			t.Errorf("Expected %v but got %v", test.exp, test.a.ExtraDirs)
+		}
+	}
+}
+
 func TestParseAlbum(t *testing.T) {
 	tests := []struct {
 		input string
