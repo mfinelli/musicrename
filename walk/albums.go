@@ -3,16 +3,15 @@ package walk
 import "fmt"
 import "io/ioutil"
 import "os"
-import "path"
-import "regexp"
 
 import "github.com/gookit/color"
 
 import "github.com/mfinelli/musicrename/config"
+import "github.com/mfinelli/musicrename/models"
 import "github.com/mfinelli/musicrename/util"
 
-func walkAndProcessArtistDir(verbose bool, dry bool, dir string, conf config.Config) [2]int {
-	albums, err := ioutil.ReadDir(dir)
+func walkAndProcessArtistDir(verbose bool, dry bool, artist *models.Artist, conf config.Config) [2]int {
+	albums, err := ioutil.ReadDir(artist.FullPath())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -21,49 +20,36 @@ func walkAndProcessArtistDir(verbose bool, dry bool, dir string, conf config.Con
 	dirCount := 0
 	fileCount := 0
 
-	for _, album := range albums {
-		if album.IsDir() {
+	for _, item := range albums {
+		if item.IsDir() {
 			dirCount += 1
-			util.Printf(fmt.Sprintf("Found album: %s\n", album.Name()), color.Cyan)
-			albumdir := handleAlbumDir(verbose, dry, dir, album.Name(), conf)
-			if albumdir != "" {
-				counts := walkAndProcessAlbumDir(verbose, dry, path.Join(dir, albumdir), conf)
-				dirCount += counts[0]
-				fileCount += counts[1]
-			}
-		}
-	}
 
-	return [2]int{dirCount, fileCount}
-}
+			album, err := models.ParseAlbum(item.Name())
 
-func handleAlbumDir(verbose bool, dry bool, workdir string, dir string, conf config.Config) string {
-	if m, _ := regexp.MatchString("^\\[\\d{4}\\] .*$", dir); m {
-		year := dir[1:5]
-		title := dir[7:len(dir)]
+			if err == nil {
+				artist.AddAlbum(album)
 
-		sanitized := util.Sanitize(title, conf.AlbumMaxlen)
+				if verbose {
+					util.Printf(fmt.Sprintf("Found album: %s\n", album.String()), color.Cyan)
+				}
 
-		if title != sanitized {
-			newdir := fmt.Sprintf("[%s] %s", year, sanitized)
-			if verbose {
-				util.Printf(fmt.Sprintf("Rename %s %s\n", dir, newdir), color.Yellow)
-			}
-
-			if !dry {
-				err := os.Rename(path.Join(workdir, dir), path.Join(workdir, newdir))
+				al := artist.Albums[len(artist.Albums)-1]
+				err := al.Sanitize(dry, conf)
 
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
 				}
 
-				return newdir
+				counts := walkAndProcessAlbumDir(verbose, dry, al.FullPath(), conf)
+				dirCount += counts[0]
+				fileCount += counts[1]
+
+			} else {
+				util.Printf(fmt.Sprintf("Skipping non-album directory: %s\n", item.Name()), color.Red)
 			}
 		}
-
-		return dir
 	}
 
-	return ""
+	return [2]int{dirCount, fileCount}
 }

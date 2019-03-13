@@ -30,9 +30,14 @@ func WalkAndProcessDirectory(verbose bool, dry bool, dir string, conf config.Con
 				util.Printf(fmt.Sprintf("Found artist: %s\n", artist.Name), color.Cyan)
 			}
 
-			artist.Sanitize(dry, conf)
+			err := artist.Sanitize(dry, conf)
 
-			counts := walkAndProcessArtistDir(verbose, dry, artist.FullPath(), conf)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+
+			counts := walkAndProcessArtistDir(verbose, dry, &artist, conf)
 			dirCount += counts[0]
 			fileCount += counts[1]
 		}

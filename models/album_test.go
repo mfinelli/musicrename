@@ -26,7 +26,7 @@ func TestAlbumFullPath(t *testing.T) {
 		a   models.Album
 		exp string
 	}{
-		{models.Album{Artist: &artist, Year: 2000, Name: "test"}, "/tmp/test/[2000] test"},
+		{models.Album{Artist: &artist, Year: 2000, RealPath: "[2000] test", Name: "test"}, "/tmp/test/[2000] test"},
 	}
 
 	for _, test := range tests {
@@ -41,7 +41,7 @@ func TestParseAlbum(t *testing.T) {
 		input string
 		album models.Album
 	}{
-		{"[2000] test album", models.Album{Year: 2000, Name: "test album"}},
+		{"[2000] test album", models.Album{Year: 2000, Name: "test album", RealPath: "[2000] test album"}},
 		{"notanalbum", models.Album{}},
 	}
 
