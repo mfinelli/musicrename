@@ -2,6 +2,7 @@ package models_test
 
 import "reflect"
 import "testing"
+
 import "github.com/mfinelli/musicrename/models"
 
 func TestAlbumString(t *testing.T) {
