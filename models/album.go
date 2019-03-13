@@ -28,6 +28,11 @@ func (a *Album) FullPath() string {
 	return path.Join(a.Artist.FullPath(), a.RealPath)
 }
 
+func (a *Album) AddSong(song *Song) {
+	song.Album = a
+	a.Songs = append(a.Songs, *song)
+}
+
 func ParseAlbum(dir string) (Album, error) {
 	if m, _ := regexp.MatchString("^\\[\\d{4}\\] .*$", dir); m {
 		title := dir[7:len(dir)]

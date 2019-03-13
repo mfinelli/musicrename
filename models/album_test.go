@@ -36,6 +36,37 @@ func TestAlbumFullPath(t *testing.T) {
 	}
 }
 
+func TestAlbumAddSong(t *testing.T) {
+	tostr := func(arr []models.Song) []string {
+		ret := make([]string, len(arr))
+		for i, v := range arr {
+			ret[i] = v.String()
+		}
+		return ret
+	}
+
+	song1 := models.Song{Track: 1, Name: "test1", Format: "flac"}
+	song2 := models.Song{Track: 2, Name: "test2", Format: "flac"}
+
+	tests := []struct {
+		a   models.Album
+		add []models.Song
+		exp []models.Song
+	}{
+		{models.Album{Year: 2000, Name: "test", Songs: []models.Song{song1}}, []models.Song{song2}, []models.Song{song1, song2}},
+	}
+
+	for _, test := range tests {
+		for _, song := range test.add {
+			test.a.AddSong(&song)
+		}
+
+		if !reflect.DeepEqual(tostr(test.a.Songs), tostr(test.exp)) {
+			t.Errorf("Expected %v but got %v", test.exp, test.a.Songs)
+		}
+	}
+}
+
 func TestParseAlbum(t *testing.T) {
 	tests := []struct {
 		input string
