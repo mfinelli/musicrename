@@ -99,6 +99,25 @@ func TestAlbumAddExtraDir(t *testing.T) {
 	}
 }
 
+func TestAlbumAddCue(t *testing.T) {
+	cue := models.Cue{Name: "test album", Format: "cue"}
+
+	tests := []struct {
+		a   models.Album
+		add models.Cue
+	}{
+		{models.Album{Year: 2000, Name: "test album"}, cue},
+	}
+
+	for _, test := range tests {
+		test.a.AddCue(&test.add)
+
+		if test.a.Cue != &test.add {
+			t.Errorf("Expected %v but got %v", test.add, test.a.Cue)
+		}
+	}
+}
+
 func TestParseAlbum(t *testing.T) {
 	tests := []struct {
 		input string

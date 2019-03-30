@@ -85,6 +85,18 @@ func handleSong(verbose bool, dry bool, album *models.Album, song string, conf c
 			break
 		}
 	case ".cue":
+		cue, err := models.ParseCue(song)
+
+		if err == nil {
+			album.AddCue(&cue)
+
+			if verbose {
+				util.Printf(fmt.Sprintf("Found cue: %s\n", cue.String()), color.Cyan)
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case ".log":
 	case ".m3u", ".m3u8":
 	case ".md5":
