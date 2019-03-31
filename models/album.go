@@ -19,6 +19,7 @@ type Album struct {
 	Name      string
 	Songs     []Song
 	ExtraDirs []ExtraDir
+	Folder    *Folder
 	Cue       *Cue
 	Playlist  *Playlist
 }
@@ -44,6 +45,11 @@ func (a *Album) AddExtraDir(dir *ExtraDir) {
 func (a *Album) AddCue(cue *Cue) {
 	cue.Album = a
 	a.Cue = cue
+}
+
+func (a *Album) AddFolder(folder *Folder) {
+	folder.Album = a
+	a.Folder = folder
 }
 
 func (a *Album) AddPlaylist(playlist *Playlist) {

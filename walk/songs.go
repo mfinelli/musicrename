@@ -82,7 +82,21 @@ func handleSong(verbose bool, dry bool, album *models.Album, song string, conf c
 
 	case ".jpg", ".png", ".tiff", ".tif":
 		if song == "folder.jpg" {
-			break
+			folder, err := models.ParseFolder(song)
+
+			if err == nil {
+				album.AddFolder(&folder)
+
+				if verbose {
+					util.Printf(fmt.Sprintf("Found folder: %s\n", folder.String()), color.Cyan)
+				}
+			} else {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, errors.New(fmt.Sprintf("artwork should be in an extra dir: %s\n", song)))
+			os.Exit(1)
 		}
 	case ".cue":
 		cue, err := models.ParseCue(song)

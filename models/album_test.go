@@ -137,6 +137,25 @@ func TestAlbumAddPlaylist(t *testing.T) {
 	}
 }
 
+func TestAlbumAddFolder(t *testing.T) {
+	folder := models.Folder{}
+
+	tests := []struct {
+		a   models.Album
+		add models.Folder
+	}{
+		{models.Album{Year: 2000, Name: "test album"}, folder},
+	}
+
+	for _, test := range tests {
+		test.a.AddFolder(&test.add)
+
+		if test.a.Folder != &test.add {
+			t.Errorf("Expected %v but got %v", test.add, test.a.Folder)
+		}
+	}
+}
+
 func TestParseAlbum(t *testing.T) {
 	tests := []struct {
 		input string
