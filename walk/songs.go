@@ -99,6 +99,18 @@ func handleSong(verbose bool, dry bool, album *models.Album, song string, conf c
 		}
 	case ".log":
 	case ".m3u", ".m3u8":
+		playlist, err := models.ParsePlaylist(song)
+
+		if err == nil {
+			album.AddPlaylist(&playlist)
+
+			if verbose {
+				util.Printf(fmt.Sprintf("Found playlist: %s\n", playlist.String()), color.Cyan)
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case ".md5":
 	default:
 		fmt.Fprintln(os.Stderr, errors.New(fmt.Sprintf("unsupported extension: %s\n", ext)))

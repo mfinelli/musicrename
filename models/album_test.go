@@ -118,6 +118,25 @@ func TestAlbumAddCue(t *testing.T) {
 	}
 }
 
+func TestAlbumAddPlaylist(t *testing.T) {
+	playlist := models.Playlist{Name: "test album", Format: "m3u"}
+
+	tests := []struct {
+		a   models.Album
+		add models.Playlist
+	}{
+		{models.Album{Year: 2000, Name: "test album"}, playlist},
+	}
+
+	for _, test := range tests {
+		test.a.AddPlaylist(&test.add)
+
+		if test.a.Playlist != &test.add {
+			t.Errorf("Expected %v but got %v", test.add, test.a.Playlist)
+		}
+	}
+}
+
 func TestParseAlbum(t *testing.T) {
 	tests := []struct {
 		input string
