@@ -112,6 +112,18 @@ func handleSong(verbose bool, dry bool, album *models.Album, song string, conf c
 			os.Exit(1)
 		}
 	case ".log":
+		log, err := models.ParseLog(song)
+
+		if err == nil {
+			album.AddLog(&log)
+
+			if verbose {
+				util.Printf(fmt.Sprintf("Found log: %s\n", log.String()), color.Cyan)
+			}
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case ".m3u", ".m3u8":
 		playlist, err := models.ParsePlaylist(song)
 
@@ -126,6 +138,8 @@ func handleSong(verbose bool, dry bool, album *models.Album, song string, conf c
 			os.Exit(1)
 		}
 	case ".md5":
+		fmt.Fprintln(os.Stderr, errors.New(fmt.Sprintf("found existing sum file: %s, please remove before continuing\n", song)))
+		os.Exit(1)
 	default:
 		fmt.Fprintln(os.Stderr, errors.New(fmt.Sprintf("unsupported extension: %s\n", ext)))
 		os.Exit(1)

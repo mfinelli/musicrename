@@ -137,6 +137,37 @@ func TestAlbumAddPlaylist(t *testing.T) {
 	}
 }
 
+func TestAlbumAddLog(t *testing.T) {
+	tostr := func(arr []models.Log) []string {
+		ret := make([]string, len(arr))
+		for i, v := range arr {
+			ret[i] = v.String()
+		}
+		return ret
+	}
+
+	log1 := models.Log{Name: "disc1"}
+	log2 := models.Log{Name: "disc2"}
+
+	tests := []struct {
+		a   models.Album
+		add []models.Log
+		exp []models.Log
+	}{
+		{models.Album{Year: 2000, Name: "test", Logs: []models.Log{log1}}, []models.Log{log2}, []models.Log{log1, log2}},
+	}
+
+	for _, test := range tests {
+		for _, log := range test.add {
+			test.a.AddLog(&log)
+		}
+
+		if !reflect.DeepEqual(tostr(test.a.Logs), tostr(test.exp)) {
+			t.Errorf("Expected %v but got %v", test.exp, test.a.Logs)
+		}
+	}
+}
+
 func TestAlbumAddFolder(t *testing.T) {
 	folder := models.Folder{}
 

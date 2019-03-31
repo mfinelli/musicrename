@@ -21,6 +21,7 @@ type Album struct {
 	ExtraDirs []ExtraDir
 	Folder    *Folder
 	Cue       *Cue
+	Logs      []Log
 	Playlist  *Playlist
 }
 
@@ -55,6 +56,11 @@ func (a *Album) AddFolder(folder *Folder) {
 func (a *Album) AddPlaylist(playlist *Playlist) {
 	playlist.Album = a
 	a.Playlist = playlist
+}
+
+func (a *Album) AddLog(log *Log) {
+	log.Album = a
+	a.Logs = append(a.Logs, *log)
 }
 
 func ParseAlbum(dir string) (Album, error) {
