@@ -3,10 +3,7 @@ sudo: false
 
 language: go
 go:
-    - '1.12'
-
-env:
-    - GO111MODULE=on
+    - '1.14'
 
 script:
     - go test -cover ./...
