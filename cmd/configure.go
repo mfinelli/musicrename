@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"os"
 )
 
 // configureCmd represents the configure command
@@ -30,6 +32,8 @@ var configureCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		accessKey := ""
 		secretKey := ""
+		purchasesRegion := ""
+		purchasesBucket := ""
 
 		accessPrompt := &survey.Input{
 			Message: "B2 Access Key",
@@ -45,7 +49,33 @@ var configureCmd = &cobra.Command{
 		survey.AskOne(secretPrompt, &secretKey,
 			survey.WithValidator(survey.Required))
 
-		fmt.Printf("a: %s, s: %s\n", accessKey, secretKey)
+		purchasesRegionPrompt := &survey.Input{
+			Message: "B2 Purchase Bucket Region",
+			Help: "e.g., us-west-001",
+		}
+
+		survey.AskOne(purchasesRegionPrompt, &purchasesRegion,
+			survey.WithValidator(survey.Required))
+
+		purchasesBucketPrompt := &survey.Input{
+			Message: "B2 Purchases Bucket Name",
+		}
+
+		survey.AskOne(purchasesBucketPrompt, &purchasesBucket,
+			survey.WithValidator(survey.Required))
+
+		viper.Set("accesskey", accessKey)
+		viper.Set("secretkey", secretKey)
+		viper.Set("purchases.bucket", purchasesBucket)
+		viper.Set("purchases.region", purchasesRegion)
+
+		// https://github.com/spf13/viper/issues/851#issuecomment-631392387
+		if err := viper.SafeWriteConfig(); err != nil {
+			if err = viper.WriteConfig(); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		}
 	},
 }
 
