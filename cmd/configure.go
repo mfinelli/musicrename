@@ -51,7 +51,7 @@ var configureCmd = &cobra.Command{
 
 		purchasesRegionPrompt := &survey.Input{
 			Message: "B2 Purchase Bucket Region",
-			Help: "e.g., us-west-001",
+			Help:    "e.g., us-west-001",
 		}
 
 		survey.AskOne(purchasesRegionPrompt, &purchasesRegion,

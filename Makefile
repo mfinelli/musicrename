@@ -1,5 +1,6 @@
 SOURCES := $(wildcard *.go)
 SOURCES += $(wildcard cmd/*.go)
+SOURCES += $(wildcard util/*.go)
 
 all: mr
 
