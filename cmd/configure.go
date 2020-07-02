@@ -14,26 +14,38 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
+
 package cmd
 
 import (
 	"fmt"
-
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 )
 
 // configureCmd represents the configure command
 var configureCmd = &cobra.Command{
 	Use:   "configure",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "(Re-)configures musicrename",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("configure called")
+		accessKey := ""
+		secretKey := ""
+
+		accessPrompt := &survey.Input{
+			Message: "B2 Access Key",
+		}
+
+		survey.AskOne(accessPrompt, &accessKey,
+			survey.WithValidator(survey.Required))
+
+		secretPrompt := &survey.Password{
+			Message: "B2 Secret Key",
+		}
+
+		survey.AskOne(secretPrompt, &secretKey,
+			survey.WithValidator(survey.Required))
+
+		fmt.Printf("a: %s, s: %s\n", accessKey, secretKey)
 	},
 }
 
