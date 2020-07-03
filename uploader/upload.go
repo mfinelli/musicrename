@@ -10,6 +10,9 @@ import (
 	// "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
+	"github.com/vbauerster/mpb/v5"
+	"github.com/vbauerster/mpb/v5/decor"
+
 	"github.com/spf13/viper"
 )
 
@@ -44,9 +47,20 @@ S3ForcePathStyle: aws.Bool(true),
 		return err
 	}
 
+	p := mpb.New()
+
 	reader := &CustomReader{
 		fp:   file,
 		size: fileInfo.Size(),
+		signMap: map[int64]struct{}{},
+		bar: p.AddBar(fileInfo.Size(),
+	mpb.PrependDecorators(
+                // simple name decorator
+                decor.Name("uploading..."),
+                // decor.DSyncWidth bit enables column width synchronization
+                decor.Percentage(decor.WCSyncSpace),
+            ),
+    ),
 	}
 
 	uploader := s3manager.NewUploader(sess, func(u *s3manager.Uploader) {
