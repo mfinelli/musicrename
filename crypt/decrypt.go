@@ -9,21 +9,7 @@ import (
 	"os"
 )
 
-func DecryptFile(output string) error {
-	out, err := os.Create(output)
-		if err != nil {
-			return err
-		}
-
-	defer out.Close()
-
-	in, err := os.Open("test.txt")
-		if err != nil {
-			return err
-		}
-
-	defer in.Close()
-
+func DecryptFile(in, out *os.File) error {
 	key := deriveDecryptionKey(in)
 
 	cfg := sio.Config{

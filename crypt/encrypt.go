@@ -7,33 +7,11 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/scrypt"
 	"io"
-	// "io/ioutil"
 	"os"
 )
 
-func EncryptFile(input string) error {
-	in, err := os.Open(input)
-		if err != nil {
-			return err
-		}
-
-	defer in.Close()
-
-	// tmp, err := ioutil.TempFile(os.TempDir(), "")
-
- //    if err != nil {
- //        return err
- //    }
-
- tmp, err := os.Create("test.txt")
-
- if err != nil {
- 	return err
- }
-defer tmp.Close()
-    // defer os.Remove(tmpFile.Name())
-
-    	key := deriveEncryptionKey(tmp)
+func EncryptFile(in, out *os.File) error {
+	key := deriveEncryptionKey(out)
 
 	cfg := sio.Config{
 		MinVersion: sio.Version20,
@@ -41,7 +19,7 @@ defer tmp.Close()
 		CipherSuites: []byte{sio.AES_256_GCM},
 	}
 
-	if _, err := sio.Encrypt(tmp, in, cfg); err != nil {
+	if _, err := sio.Encrypt(out, in, cfg); err != nil {
 		return err
 	}
 

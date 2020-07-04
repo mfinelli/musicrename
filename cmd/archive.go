@@ -24,7 +24,9 @@ import (
 	"github.com/mfinelli/musicrename/util"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 var (
@@ -39,16 +41,47 @@ var archiveCmd = &cobra.Command{
 	Short: "Uploads raws purchase archives to the purchase bucket",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// er := crypt.EncryptFile("input.txt")
-		er := crypt.DecryptFile("output.txt")
+		input, er := os.Open(args[0])
 		if er != nil {
 			fmt.Println(er)
 			os.Exit(1)
 		}
-		os.Exit(0)
+		defer input.Close()
+		tmp, er := ioutil.TempFile(os.TempDir(), "")
+		if er != nil {
+			fmt.Println(er)
+			os.Exit(1)
+		}
+		defer os.Remove(tmp.Name())
+		er = crypt.EncryptFile(input, tmp)
+		if er != nil {
+			fmt.Println(er)
+			os.Exit(1)
+		}
+		tmp.Close()
+
+		// tmp2, er := os.Open(tmp.Name())
+		// if er != nil {
+		// 	fmt.Println(er)
+		// 	os.Exit(1)
+		// }
+		// defer tmp2.Close()
+		// output, er := os.Create("output.txt")
+		// if er != nil {
+		// 	fmt.Println(er)
+		// 	os.Exit(1)
+		// }
+		// defer output.Close()
+		// er = crypt.DecryptFile(tmp2, output)
+		// if er != nil {
+		// 	fmt.Println(er)
+		// 	os.Exit(1)
+		// }
+
+		// os.Exit(0)
 		// fmt.Println(util.PrefixFromArtistAlbum(artist, year, album))
-		key := fmt.Sprintf("%s/thing2", util.PrefixFromArtistAlbum(artist, year, album))
-		err := uploader.Upload(viper.GetString("purchases.bucket"), key, args[0])
+		key := fmt.Sprintf("%s/%s", util.PrefixFromArtistAlbum(artist, year, album), filepath.Base(args[0]))
+		err := uploader.Upload(viper.GetString("purchases.bucket"), key, tmp.Name())
 
 		if err != nil {
 			fmt.Println(err)
