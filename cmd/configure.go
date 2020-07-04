@@ -34,6 +34,8 @@ var configureCmd = &cobra.Command{
 		secretKey := ""
 		purchasesRegion := ""
 		purchasesBucket := ""
+		encryptionPassphrase := ""
+		encryptionPassphraseConfirm := ""
 
 		accessPrompt := &survey.Input{
 			Message: "B2 Access Key",
@@ -64,8 +66,29 @@ var configureCmd = &cobra.Command{
 		survey.AskOne(purchasesBucketPrompt, &purchasesBucket,
 			survey.WithValidator(survey.Required))
 
+		encryptionPassphrasePrompt := &survey.Password{
+			Message: "Encryption Passphrase",
+		}
+
+		survey.AskOne(encryptionPassphrasePrompt, &encryptionPassphrase,
+			survey.WithValidator(survey.Required))
+
+		encryptionPassphraseConfirmPrompt := &survey.Password{
+			Message: "Encryption Passphrase (confirm)",
+		}
+
+		survey.AskOne(encryptionPassphraseConfirmPrompt,
+			&encryptionPassphraseConfirm,
+			survey.WithValidator(survey.Required))
+
+		if encryptionPassphrase != encryptionPassphraseConfirm {
+			fmt.Println("passphrases do not match!")
+			os.Exit(1)
+		}
+
 		viper.Set("accesskey", accessKey)
 		viper.Set("secretkey", secretKey)
+		viper.Set("encryption", encryptionPassphrase)
 		viper.Set("purchases.bucket", purchasesBucket)
 		viper.Set("purchases.region", purchasesRegion)
 

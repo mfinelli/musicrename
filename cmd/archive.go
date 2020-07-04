@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/mfinelli/musicrename/crypt"
 	"github.com/mfinelli/musicrename/uploader"
 	"github.com/mfinelli/musicrename/util"
 	"github.com/spf13/cobra"
@@ -38,6 +39,13 @@ var archiveCmd = &cobra.Command{
 	Short: "Uploads raws purchase archives to the purchase bucket",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// er := crypt.EncryptFile("input.txt")
+		er := crypt.DecryptFile("output.txt")
+		if er != nil {
+			fmt.Println(er)
+			os.Exit(1)
+		}
+		os.Exit(0)
 		// fmt.Println(util.PrefixFromArtistAlbum(artist, year, album))
 		key := fmt.Sprintf("%s/thing2", util.PrefixFromArtistAlbum(artist, year, album))
 		err := uploader.Upload(viper.GetString("purchases.bucket"), key, args[0])
