@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/mfinelli/musicrename/crypt"
 	"github.com/mfinelli/musicrename/uploader"
 	"github.com/mfinelli/musicrename/util"
@@ -42,6 +43,38 @@ var archiveCmd = &cobra.Command{
 	Short: "Uploads raws purchase archives to the purchase bucket",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if !util.VerifyConfig() {
+			fmt.Println("missing configuration; run `mr configure`")
+			os.Exit(1)
+		}
+
+		if artist == "" {
+			artistPrompt := &survey.Input{
+			Message: "Artist",
+		}
+
+		survey.AskOne(artistPrompt, &artist,
+			survey.WithValidator(survey.Required))
+		}
+
+		if album == "" {
+			albumPrompt := &survey.Input{
+			Message: "Album",
+		}
+
+		survey.AskOne(albumPrompt, &album,
+			survey.WithValidator(survey.Required))
+		}
+
+		if year == "" {
+			yearPrompt := &survey.Input{
+			Message: "Album year",
+		}
+
+		survey.AskOne(yearPrompt, &year,
+			survey.WithValidator(survey.Required))
+		}
+
 		start := time.Now()
 
 		encryptStart := time.Now()
@@ -121,9 +154,9 @@ func init() {
 	archiveCmd.Flags().StringVarP(&album, "album", "a", "", "album name")
 	archiveCmd.Flags().StringVarP(&year, "year", "y", "", "album year")
 
-	archiveCmd.MarkFlagRequired("artist")
-	archiveCmd.MarkFlagRequired("album")
-	archiveCmd.MarkFlagRequired("year")
+	// archiveCmd.MarkFlagRequired("artist")
+	// archiveCmd.MarkFlagRequired("album")
+	// archiveCmd.MarkFlagRequired("year")
 
 	// Here you will define your flags and configuration settings.
 
