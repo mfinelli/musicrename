@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 var (
@@ -41,6 +42,9 @@ var archiveCmd = &cobra.Command{
 	Short: "Uploads raws purchase archives to the purchase bucket",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		start := time.Now()
+
+		encryptStart := time.Now()
 		input, er := os.Open(args[0])
 		if er != nil {
 			fmt.Println(er)
@@ -60,6 +64,9 @@ var archiveCmd = &cobra.Command{
 		}
 		tmp.Close()
 
+		encryptEnd := time.Now()
+		fmt.Printf("encrypted %s in %v\n", filepath.Base(args[0]), encryptEnd.Sub(encryptStart))
+
 		// tmp2, er := os.Open(tmp.Name())
 		// if er != nil {
 		// 	fmt.Println(er)
@@ -78,6 +85,8 @@ var archiveCmd = &cobra.Command{
 		// 	os.Exit(1)
 		// }
 
+		uploadStart := time.Now()
+
 		// os.Exit(0)
 		// fmt.Println(util.PrefixFromArtistAlbum(artist, year, album))
 		key := fmt.Sprintf("%s/%s", util.PrefixFromArtistAlbum(artist, year, album), filepath.Base(args[0]))
@@ -87,6 +96,12 @@ var archiveCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
+
+		uploadEnd := time.Now()
+		fmt.Printf("uploaded %s in %v\n", filepath.Base(args[0]), uploadEnd.Sub(uploadStart))
+
+		end := time.Now()
+		fmt.Printf("finished in %v\n", end.Sub(start))
 	},
 }
 
