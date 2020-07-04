@@ -67,6 +67,15 @@ var archiveCmd = &cobra.Command{
 		encryptEnd := time.Now()
 		fmt.Printf("encrypted %s in %v\n", filepath.Base(args[0]), encryptEnd.Sub(encryptStart))
 
+		// sumStart := time.Now()
+		// sha1, err := util.FileSha1(tmp.Name())
+		// if err != nil {
+		// 	fmt.Println(err)
+		// 	os.Exit(1)
+		// }
+		// sumEnd := time.Now()
+		// fmt.Printf("computed sha1 sum in %v\n", sumEnd.Sub(sumStart))
+
 		// tmp2, er := os.Open(tmp.Name())
 		// if er != nil {
 		// 	fmt.Println(er)

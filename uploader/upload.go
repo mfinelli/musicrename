@@ -10,6 +10,8 @@ import (
 	// "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
+	"github.com/mfinelli/musicrename/util"
+
 	"github.com/vbauerster/mpb/v5"
 	"github.com/vbauerster/mpb/v5/decor"
 
@@ -18,6 +20,11 @@ import (
 
 
 func Upload(bucket, key, filename string) error {
+	sha1, err := util.FileSha1(filename)
+		if err != nil {
+			return err
+		}
+
 	s3Config := &aws.Config{
 Credentials: credentials.NewStaticCredentials(viper.GetString("accesskey"), viper.GetString("secretkey"), ""),
 Endpoint: aws.String(fmt.Sprintf("https://s3.%s.backblazeb2.com", viper.GetString("purchases.region"))),
@@ -69,9 +76,14 @@ S3ForcePathStyle: aws.Bool(true),
 	})
 
 	output, err := uploader.Upload(&s3manager.UploadInput{
+		ACL: aws.String("private"),
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 		Body:   reader,
+		Metadata: map[string]*string{
+			"X-Bz-Content-Sha1": aws.String(sha1),
+			"fileInfo": aws.String(fmt.Sprintf("{\"large_file_sha1\":\"%s\"}", sha1)),
+		},
 	})
 
 // 	_, err = s3Client.PutObject(&s3.PutObjectInput{
