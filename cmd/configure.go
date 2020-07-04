@@ -94,10 +94,19 @@ var configureCmd = &cobra.Command{
 
 		// https://github.com/spf13/viper/issues/851#issuecomment-631392387
 		if err := viper.SafeWriteConfig(); err != nil {
-			if err = viper.WriteConfig(); err != nil {
+			overwrite := false
+overwritePrompt := &survey.Confirm{
+    Message: "Overwrite existing configuration?",
+}
+survey.AskOne(overwritePrompt, &overwrite)
+			if overwrite {
+				if err = viper.WriteConfig(); err != nil {
 				fmt.Println(err)
 				os.Exit(1)
 			}
+		} else {
+			fmt.Println("did not overwrite")
+		}
 		}
 	},
 }
