@@ -20,6 +20,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/kurin/blazer/b2"
 	"github.com/mfinelli/musicrename/crypt"
 	"github.com/mfinelli/musicrename/uploader"
 	"github.com/mfinelli/musicrename/util"
@@ -43,6 +44,29 @@ var archiveCmd = &cobra.Command{
 	Short: "Uploads raws purchase archives to the purchase bucket",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// str,e := uploader.FetchShaSumFile(viper.GetString("purchases.bucket"), "t/test/[2000]test/test.txt")
+		fp2, e := os.Create("test2.txt")
+		if e != nil {
+			fmt.Println(e)
+			os.Exit(1)
+		}
+		defer fp2.Close()
+
+		e = uploader.Download(viper.GetString("purchases.bucket"), "t/test/[2000]test/nope.txt", fp2.Name())
+
+		if b2.IsNotExist(e) {
+			fmt.Println("not exist!")
+			os.Exit(0)
+		}
+		if e != nil {
+			fmt.Println(e)
+			os.Exit(1)
+		}
+
+		// fmt.Println(str)
+		os.Exit(0)
+
+
 		if !util.VerifyConfig() {
 			fmt.Println("missing configuration; run `mr configure`")
 			os.Exit(1)
@@ -76,6 +100,14 @@ var archiveCmd = &cobra.Command{
 		}
 
 		start := time.Now()
+
+		sha1, err := util.FileSha1(args[0])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		fmt.Println(sha1)
 
 		encryptStart := time.Now()
 		input, er := os.Open(args[0])
@@ -132,7 +164,7 @@ var archiveCmd = &cobra.Command{
 		// os.Exit(0)
 		// fmt.Println(util.PrefixFromArtistAlbum(artist, year, album))
 		key := fmt.Sprintf("%s/%s", util.PrefixFromArtistAlbum(artist, year, album), filepath.Base(args[0]))
-		err := uploader.Upload2(viper.GetString("purchases.bucket"), key, tmp.Name())
+		err = uploader.Upload2(viper.GetString("purchases.bucket"), key, tmp.Name())
 		// err := uploader.Upload(viper.GetString("purchases.bucket"), key, tmp.Name())
 
 		if err != nil {
