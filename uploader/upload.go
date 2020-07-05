@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/kurin/blazer/b2"
+	"github.com/schollz/progressbar/v3"
 
 	"io"
 )
@@ -70,12 +71,15 @@ if err != nil {
 		w = obj.NewWriter(ctx)
 	}
 
-
+	bar := progressbar.DefaultBytes(
+    fileInfo.Size(),
+    "uploading...",
+)
 
 	// fmt.Println(fileInfo.Size())
 	// fmt.Println(w.ChunkSize)
 	// w.WithAttrs
-	if _, err := io.Copy(w, f); err != nil {
+	if _, err := io.Copy(io.MultiWriter(w, bar), f); err != nil {
 		w.Close()
 		return err
 	}

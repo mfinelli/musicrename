@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/AlecAivazis/survey/v2 v2.0.7
 	github.com/aws/aws-sdk-go v1.33.1
+	github.com/cheggaaa/pb/v3 v3.0.4
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/kurin/blazer v0.5.3
 	github.com/mattn/go-colorable v0.1.7 // indirect
@@ -12,6 +13,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.3.2 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
+	github.com/schollz/progressbar/v3 v3.3.4
 	github.com/spf13/afero v1.3.1 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/cobra v1.0.0
