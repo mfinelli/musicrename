@@ -6,6 +6,7 @@ require (
 	github.com/AlecAivazis/survey/v2 v2.0.7
 	github.com/aws/aws-sdk-go v1.33.1
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/kurin/blazer v0.5.3
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/minio/sio v0.2.0
 	github.com/mitchellh/go-homedir v1.1.0
@@ -18,7 +19,7 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.7.0
 	github.com/vbauerster/mpb/v5 v5.2.2
-	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae // indirect
 	golang.org/x/text v0.3.3
 	gopkg.in/ini.v1 v1.57.0 // indirect

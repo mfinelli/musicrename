@@ -132,7 +132,8 @@ var archiveCmd = &cobra.Command{
 		// os.Exit(0)
 		// fmt.Println(util.PrefixFromArtistAlbum(artist, year, album))
 		key := fmt.Sprintf("%s/%s", util.PrefixFromArtistAlbum(artist, year, album), filepath.Base(args[0]))
-		err := uploader.Upload(viper.GetString("purchases.bucket"), key, tmp.Name())
+		err := uploader.Upload2(viper.GetString("purchases.bucket"), key, tmp.Name())
+		// err := uploader.Upload(viper.GetString("purchases.bucket"), key, tmp.Name())
 
 		if err != nil {
 			fmt.Println(err)

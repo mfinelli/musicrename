@@ -1,6 +1,7 @@
 package uploader
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -16,8 +17,72 @@ import (
 	"github.com/vbauerster/mpb/v5/decor"
 
 	"github.com/spf13/viper"
+
+	"github.com/kurin/blazer/b2"
+
+	"io"
 )
 
+func Upload2(bucketName, key, filename string) error {
+	sha1, err := util.FileSha1(filename)
+		if err != nil {
+			return err
+		}
+
+	ctx := context.Background()
+
+	b2c, err := b2.NewClient(ctx, viper.GetString("accesskey"), viper.GetString("secretkey"))
+if err != nil {
+	return err
+}
+
+	bucket, err := b2c.Bucket(ctx, bucketName)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	obj := bucket.Object(key)
+	// objattr,_ := obj.Attrs(ctx)
+	// objattr.Info = map[string]string{
+	// 	"Test-Thing": "is a test",
+	// }
+
+	var w *b2.Writer
+	if fileInfo.Size() > 1e8 {
+		w = obj.NewWriter(ctx, b2.WithAttrsOption(&b2.Attrs{
+		SHA1: sha1,
+		// Info: map[string]string{
+		// 	"Test-Thing": "is a test",
+		// },
+	}))
+	} else {
+		w = obj.NewWriter(ctx)
+	}
+
+
+
+	// fmt.Println(fileInfo.Size())
+	// fmt.Println(w.ChunkSize)
+	// w.WithAttrs
+	if _, err := io.Copy(w, f); err != nil {
+		w.Close()
+		return err
+	}
+	return w.Close()
+
+	// return nil
+}
 
 func Upload(bucket, key, filename string) error {
 	sha1, err := util.FileSha1(filename)
