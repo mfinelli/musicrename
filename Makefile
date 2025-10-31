@@ -1,7 +1,8 @@
 SOURCES := $(wildcard *.go)
-SOURCES += $(wildcard config/*.go)
+SOURCES += $(wildcard cmd/*.go)
+SOURCES += $(wildcard crypt/*.go)
+SOURCES += $(wildcard uploader/*.go)
 SOURCES += $(wildcard util/*.go)
-SOURCES += $(wildcard walk/*.go)
 
 all: mr
 
@@ -9,6 +10,6 @@ clean:
 	rm -f mr
 
 mr: $(SOURCES)
-	go build mr.go
+	go build -o $@ main.go
 
 .PHONY: all clean
