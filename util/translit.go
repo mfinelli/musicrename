@@ -19,6 +19,7 @@ package util
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/alexsergivan/transliterator"
 )
@@ -36,5 +37,5 @@ func translit(str string) string {
 func whitespace(str string) string {
 	// consolidate whitespace
 	re := regexp.MustCompile(`(\s+)`)
-	return re.ReplaceAllString(str, " ")
+	return strings.TrimSpace(re.ReplaceAllString(str, " "))
 }

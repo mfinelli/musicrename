@@ -47,8 +47,8 @@ func TestWhitespace(t *testing.T) {
 	}{
 		{"abc", "abc"},
 		{"a b c", "a b c"},
-		{"  a  b  c  ", " a b c "},
-		{"	a	b	c	", " a b c "},
+		{"  a  b  c  ", "a b c"},
+		{"	a	b	c	", "a b c"},
 	}
 
 	for _, test := range tests {
