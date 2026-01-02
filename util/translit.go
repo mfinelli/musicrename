@@ -18,15 +18,23 @@
 package util
 
 import (
+	"regexp"
+
 	"github.com/alexsergivan/transliterator"
 )
 
 func SanitizePathSegment(str string) (string, error) {
-	t := translit(str)
+	t := whitespace(translit(str))
 	return t, nil
 }
 
 func translit(str string) string {
 	t := transliterator.NewTransliterator(nil)
 	return t.Transliterate(str, "en")
+}
+
+func whitespace(str string) string {
+	// consolidate whitespace
+	re := regexp.MustCompile(`(\s+)`)
+	return re.ReplaceAllString(str, " ")
 }

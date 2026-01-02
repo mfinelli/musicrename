@@ -39,3 +39,19 @@ func TestTranslit(t *testing.T) {
 		assert.Equal(t, test.expected, translit(test.input))
 	}
 }
+
+func TestWhitespace(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"abc", "abc"},
+		{"a b c", "a b c"},
+		{"  a  b  c  ", " a b c "},
+		{"	a	b	c	", " a b c "},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.expected, whitespace(test.input))
+	}
+}
