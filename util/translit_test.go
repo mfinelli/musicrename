@@ -25,7 +25,7 @@ import (
 
 func TestTranslit(t *testing.T) {
 	tests := []struct {
-		input string
+		input    string
 		expected string
 	}{
 		{"abc", "abc"},
