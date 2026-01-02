@@ -25,7 +25,7 @@ import (
 )
 
 func SanitizePathSegment(str string) (string, error) {
-	t := whitespace(translit(str))
+	t := unrecognized(whitespace(translit(str)))
 	return t, nil
 }
 
@@ -38,4 +38,9 @@ func whitespace(str string) string {
 	// consolidate whitespace
 	re := regexp.MustCompile(`(\s+)`)
 	return strings.TrimSpace(re.ReplaceAllString(str, " "))
+}
+
+func unrecognized(str string) string {
+	re := regexp.MustCompile(`([^0-9A-Za-z,& \-\(\)\[\]\.])`)
+	return re.ReplaceAllString(str, "")
 }

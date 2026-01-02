@@ -55,3 +55,17 @@ func TestWhitespace(t *testing.T) {
 		assert.Equal(t, test.expected, whitespace(test.input))
 	}
 }
+
+func TestUnrecognized(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"abc", "abc"},
+		{"a@!#[]*c", "a[]c"},
+	}
+
+	for _, test := range tests {
+		assert.Equal(t, test.expected, unrecognized(test.input))
+	}
+}
