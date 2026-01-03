@@ -24,6 +24,8 @@ import (
 )
 
 const ARTIST_MAXLENGTH = 60
+const ALBUM_MAXLENGTH = 80
+const SONG_MAXLENGTH = 100
 
 func WalkAndProcessDirectory(dryrun bool, cwd string) error {
 	//fileCount := 0

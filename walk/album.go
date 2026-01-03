@@ -26,54 +26,68 @@ import (
 	"github.com/mfinelli/musicrename/util"
 )
 
-func walkAndParseArtist(dryrun bool, cwd, artist string) error {
-	sanitized, err := util.SanitizePathSegment(artist)
+func walkAndParseAlbum(dryrun bool, cwd, artist string) error {
+	albums, err := os.ReadDir(cwd)
+	if err != nil {
+		return err
+	}
+
+	for _, album := range albums {
+		if album.IsDir() {
+			err = sanitizeAlbum(dryrun, cwd, artist, album.Name())
+			if err != nil {
+				return err
+			}
+		} else {
+			log.Info("Skipping non-album-directory", "artist", artist, "file", album.Name())
+		}
+	}
+
+	return nil
+}
+
+func sanitizeAlbum(dryrun bool, cwd, artist, album string) error {
+	sanitized, err := util.SanitizePathSegment(album)
 	if err != nil {
 		return err
 	}
 
 	lower := strings.ToLower(sanitized)
-	if len(lower) > ARTIST_MAXLENGTH {
-		truncated := lower[0:ARTIST_MAXLENGTH]
+	if len(lower) > ALBUM_MAXLENGTH {
+		truncated := lower[0:ALBUM_MAXLENGTH]
 		lower, err = util.SanitizePathSegment(truncated)
 		if err != nil {
 			return err
 		}
 	}
 
-	final := artistSpecialCase(lower)
+	final := albumSpecialCase(lower)
 
-	if final != artist {
-		log.Info("Renaming artist", "original", artist, "new", final)
+	if final != album {
+		log.Info("Renaming album", "artist", artist, "original", album, "new", final)
 		if !dryrun {
-			err = os.Rename(path.Join(cwd, artist), path.Join(cwd, final))
+			err = os.Rename(path.Join(cwd, album), path.Join(cwd, final))
 			if err != nil {
 				return err
 			}
-			err = walkAndParseAlbum(dryrun, path.Join(cwd, final), final)
+			err = walkAndParseAlbumContents(dryrun, path.Join(cwd, final), artist, final)
 			if err != nil {
 				return err
 			}
 		} else {
-			err = walkAndParseAlbum(dryrun, path.Join(cwd, artist), final)
+			err = walkAndParseAlbumContents(dryrun, path.Join(cwd, album), artist, final)
 			if err != nil {
 				return err
 			}
 		}
-	} else {
-		log.Debug("Artist unchanged by sanitization", "artist", final)
 	}
 
 	return nil
 }
 
-func artistSpecialCase(artist string) string {
-	switch artist {
-	case "acdc": // AC/DC
-		return "ac⁄dc"
-	case "pnk": // P!nk
-		return "pink"
+func albumSpecialCase(album string) string {
+	switch album {
 	default:
-		return artist
+		return album
 	}
 }
