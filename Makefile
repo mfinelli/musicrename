@@ -2,9 +2,8 @@ GO := go
 
 SOURCES := $(wildcard *.go)
 SOURCES += $(wildcard cmd/*.go)
-SOURCES += $(wildcard crypt/*.go)
-SOURCES += $(wildcard uploader/*.go)
 SOURCES += $(wildcard util/*.go)
+SOURCES += $(wildcard walk/*.go)
 
 all: mr
 

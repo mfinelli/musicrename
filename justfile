@@ -21,8 +21,11 @@ test:
 
 [private]
 e2e-setup:
+  @rm -rf tmp
   @mkdir -p tmp
 
   @mkdir -p "tmp/AC_DC"
   @mkdir -p "tmp/AC_DC/[1980] Back In Black"
   @mkdir -p "tmp/AC_DC/[1979] Highway To Hell"
+
+  @mkdir -p "tmp/Beyoncé"

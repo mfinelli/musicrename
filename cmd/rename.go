@@ -18,8 +18,10 @@
 package cmd
 
 import (
-	"fmt"
+	"os"
 
+	"github.com/charmbracelet/log"
+	"github.com/mfinelli/musicrename/walk"
 	"github.com/spf13/cobra"
 )
 
@@ -33,8 +35,18 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("rename called")
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if debug {
+			log.SetLevel(log.DebugLevel)
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		log.Info("Running in root", "directory", cwd)
+		return walk.WalkAndProcessDirectory(dryrun, cwd)
 	},
 }
 

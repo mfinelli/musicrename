@@ -26,6 +26,8 @@ import (
 )
 
 var cfgFile string
+var debug bool
+var dryrun bool
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -59,6 +61,9 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.musicrename.yaml)")
+
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug log messages")
+	rootCmd.PersistentFlags().BoolVarP(&dryrun, "dryrun", "n", false, "don't do anything")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
