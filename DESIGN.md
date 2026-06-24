@@ -15,6 +15,8 @@ tags.
   (case-insensitive) filesystems.
 - **Integrity:** Generate `sums.md5` files for every album to track file
   integrity.
+- **Auditing:** Ability to scan for library "misconfigurations" or unwanted
+  attributes.
 - **Safety:** Provide a `--dry-run` mode to preview all filesystem changes.
 
 ## 3. Technical Specifications
@@ -79,6 +81,8 @@ The tool generates a `sums.md5` file in each album root.
 The tool uses a command-based structure (via `spf13/cobra`):
 - `musicrename rename`: Scans metadata, sanitizes, and moves files.
 - `musicrename sums`: Recalculates/updates `sums.md5` files.
+- `musicrename check`: Audits the library for misconfigurations (e.g.,
+  detecting embedded artwork, missing tags, or naming inconsistencies).
 - `musicrename lyrics`: (Future) Fetches and embeds lyrics.
 
 ### 4.2 Workflow Execution
