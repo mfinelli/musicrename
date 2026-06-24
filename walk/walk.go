@@ -1,5 +1,5 @@
 /*
- * Copyright © 2020-2026 Mario Finelli
+ * Copyright © 2019-2026 Mario Finelli
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,10 +15,37 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-package main
+package walk
 
-import "github.com/mfinelli/musicrename/cmd"
+import (
+	"os"
 
-func main() {
-	cmd.Execute()
+	"github.com/charmbracelet/log"
+)
+
+const ARTIST_MAXLENGTH = 60
+const ALBUM_MAXLENGTH = 80
+const SONG_MAXLENGTH = 100
+
+func WalkAndProcessDirectory(dryrun bool, cwd string) error {
+	//fileCount := 0
+	//dirCount := 0
+
+	artists, err := os.ReadDir(cwd)
+	if err != nil {
+		return err
+	}
+
+	for _, artist := range artists {
+		if artist.IsDir() {
+			err = walkAndParseArtist(dryrun, cwd, artist.Name())
+			if err != nil {
+				return err
+			}
+		} else {
+			log.Info("Skipping non-artist-directory", "file", artist.Name())
+		}
+	}
+
+	return nil
 }

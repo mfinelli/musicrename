@@ -1,30 +1,46 @@
+/*
+ * Copyright © 2020-2026 Mario Finelli
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package util
 
 import (
-	"golang.org/x/text/runes"
-	"golang.org/x/text/transform"
-	"golang.org/x/text/unicode/norm"
 	"regexp"
-	"unicode"
+	"strings"
+
+	"github.com/alexsergivan/transliterator"
 )
 
-func Sanitize(str string) string {
-	return unrecognized(whitespace(translit(str)))
+func SanitizePathSegment(str string) (string, error) {
+	t := unrecognized(whitespace(translit(str)))
+	return t, nil
 }
 
 func translit(str string) string {
-	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
-	s, _, _ := transform.String(t, str)
-	return s
+	t := transliterator.NewTransliterator(nil)
+	return t.Transliterate(str, "en")
 }
 
 func whitespace(str string) string {
 	// consolidate whitespace
-	re := regexp.MustCompile("(\\s+)")
-	return re.ReplaceAllString(str, " ")
+	re := regexp.MustCompile(`(\s+)`)
+	return strings.TrimSpace(re.ReplaceAllString(str, " "))
 }
 
 func unrecognized(str string) string {
-	re := regexp.MustCompile("([^0-9A-Za-z,& \\-\\(\\)\\[\\]\\.])")
+	re := regexp.MustCompile(`([^0-9A-Za-z,& \-\(\)\[\]\.])`)
 	return re.ReplaceAllString(str, "")
 }
