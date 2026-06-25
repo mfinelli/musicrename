@@ -56,16 +56,20 @@ All strings used in folder and filenames (Artist, Album, Title) must pass
 through this sequence:
 
 1. **Manual Overrides:** Hardcoded replacements for a small set of known edge
-   cases (e.g., `AC/DC` → `acdc`, `P!nk` → `pink`). **Overrides return the final
-   sanitized string immediately, skipping all subsequent steps.**
+   cases (e.g., `AC/DC` -> `acdc`, `P!nk` -> `pink`). **Overrides return the
+   final sanitized string immediately, skipping all subsequent steps.**
 2. **Transliteration:** Convert Unicode characters to ASCII via
    `github.com/alexsergivan/transliterator`.
 3. **Casing:** Convert all characters to lowercase.
-4. **Regex Strip:** Keep only `a-z`, `0-9`, and space. All other characters are
+4. **Non-standard Whitespace:** Convert tabs, newlines, and other whitespace
+   variants to a regular space. This runs before the regex strip so that word
+   boundaries in badly-tagged files are preserved (e.g., `"Dark\tSide"` ->
+   `"dark side"`, not `"darkside"`).
+5. **Regex Strip:** Keep only `a-z`, `0-9`, and space. All other characters are
    removed.
-5. **Space Normalisation:** Collapse runs of multiple spaces into a single
+6. **Space Normalisation:** Collapse runs of multiple spaces into a single
    space, then trim leading and trailing spaces.
-6. **Truncation:**
+7. **Truncation:**
       - **Artist:** Max 60 characters.
       - **Album:** Max 60 characters.
       - **Files (Tracks/Art/Extras):** Max 40 characters (applied to the base
@@ -155,14 +159,14 @@ intended workflow for a full library update is:
       - Identify "unknown" files (files that don't fit known categories) and log
         a warning.
 2. **Analysis Phase:**
-      - Read tags → Apply Sanitization Pipeline → Determine destination path.
+      - Read tags -> Apply Sanitization Pipeline -> Determine destination path.
 3. **Validation Phase:**
       - Calculate necessary directory creations.
       - Verify if `oldPath == newPath` (case-insensitive) to skip no-op moves.
       - Detect sanitization collisions (two source files resolving to the same
         destination path). On collision: skip both files and emit an error.
 4. **Execution Phase** _(skipped if `--dry-run` is passed)_:
-      - Create folders → Move files.
+      - Create folders -> Move files.
       - Use `os.Rename` where source and destination are on the same filesystem.
       - Fall back to copy-then-delete when `os.Rename` returns a cross-device
         error (`syscall.EXDEV`).
@@ -191,8 +195,8 @@ Example findings:
 
 ### Key Dependencies
 
-| Package                                  | Purpose                         |
-| ---------------------------------------- | ------------------------------- |
-| `github.com/alexsergivan/transliterator` | Unicode → ASCII transliteration |
-| `github.com/dhowden/tag`                 | Cross-format metadata reading   |
-| `github.com/spf13/cobra`                 | CLI command management          |
+| Package                                  | Purpose                          |
+| ---------------------------------------- | -------------------------------- |
+| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration |
+| `github.com/dhowden/tag`                 | Cross-format metadata reading    |
+| `github.com/spf13/cobra`                 | CLI command management           |

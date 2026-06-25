@@ -61,6 +61,20 @@ func TestCleanString(t *testing.T) {
 			expected: "motley crue",
 		},
 		{
+			// ß transliterates to "ss", not "s".
+			name:     "Ligature - sharp s",
+			input:    "Straße",
+			kind:     AlbumOverride,
+			expected: "strasse",
+		},
+		{
+			// æ -> "ae", œ -> "oe".
+			name:     "Ligatures - ae and oe",
+			input:    "Æsop Œuvre",
+			kind:     ArtistOverride,
+			expected: "aesop oeuvre",
+		},
+		{
 			name:     "Regex Stripping of Special Characters",
 			input:    "Hello World!!! (2023 Edition)",
 			kind:     TrackOverride,
@@ -73,6 +87,21 @@ func TestCleanString(t *testing.T) {
 			expected: "too many spaces",
 		},
 		{
+			// Non-standard whitespace is converted to spaces before
+			// stripping, preserving word boundaries.
+			name:     "Tab converted to space preserving word boundary",
+			input:    "Dark\tSide",
+			kind:     AlbumOverride,
+			expected: "dark side",
+		},
+		{
+			// Newlines and other non-space whitespace follow the same rule.
+			name:     "Newline converted to space preserving word boundary",
+			input:    "line\none",
+			kind:     TrackOverride,
+			expected: "line one",
+		},
+		{
 			name:     "Alphanumeric preservation",
 			input:    "123-Artist-456!",
 			kind:     ArtistOverride,
@@ -83,6 +112,21 @@ func TestCleanString(t *testing.T) {
 			input:    "  L'Âme  Sœur  (Feat. Artist!)  ",
 			kind:     TrackOverride,
 			expected: "lame soeur feat artist",
+		},
+		{
+			// Verifies that the caller must handle an empty return value.
+			// Stripping-only input produces no usable output.
+			name:     "All characters stripped produces empty string",
+			input:    "!!!",
+			kind:     ArtistOverride,
+			expected: "",
+		},
+		{
+			// Whitespace-only input collapses and trims to empty.
+			name:     "Whitespace-only input produces empty string",
+			input:    "   ",
+			kind:     AlbumOverride,
+			expected: "",
 		},
 	}
 
@@ -125,6 +169,29 @@ func TestTruncate(t *testing.T) {
 			limit:    0,
 			expected: "",
 		},
+		{
+			// Negative limits should not panic; treat as zero.
+			name:     "Negative limit returns empty string",
+			input:    "something",
+			limit:    -1,
+			expected: "",
+		},
+		{
+			// ac⁄dc contains a 3-byte UTF-8 fraction slash (U+2044).
+			// Byte length is 7; rune length is 5. Truncating at 4 runes
+			// must not cut mid-sequence or return the wrong length.
+			name:     "Multi-byte rune string truncated by rune count",
+			input:    "ac⁄dc",
+			limit:    4,
+			expected: "ac⁄d",
+		},
+		{
+			// Truncating right before the multi-byte rune.
+			name:     "Multi-byte rune string truncated before multi-byte rune",
+			input:    "ac⁄dc",
+			limit:    2,
+			expected: "ac",
+		},
 	}
 
 	for _, test := range tests {
@@ -144,25 +211,38 @@ func TestTruncateWithOffset(t *testing.T) {
 		expected string
 	}{
 		{
+			// artwork = 7 chars; effective limit = 40 - 7 - 1 (slash) = 32.
 			name:     "Standard offset truncation",
-			input:    "very_long_filename_that_should_be_cut",
-			dirName:  "artwork", // 7 chars
-			maxLimit: 40,        // effective limit: 33
-			expected: "very_long_filename_that_should_be",
+			input:    "very long filename that should be cut",
+			dirName:  "artwork",
+			maxLimit: 40,
+			expected: "very long filename that should b",
 		},
 		{
+			// extras = 6 chars; effective limit = 40 - 6 - 1 = 33.
+			// "short file" is 10 chars, well within limit.
 			name:     "No truncation needed with offset",
-			input:    "short_file",
-			dirName:  "extras", // 6 chars
-			maxLimit: 40,       // effective limit: 34
-			expected: "short_file",
+			input:    "short file",
+			dirName:  "extras",
+			maxLimit: 40,
+			expected: "short file",
 		},
 		{
+			// Directory name longer than maxLimit; limit clamps to zero.
 			name:     "Extreme offset resulting in zero limit",
-			input:    "some_file",
-			dirName:  "this_directory_name_is_actually_longer_than_forty",
+			input:    "some file",
+			dirName:  "this directory name is actually longer than forty",
 			maxLimit: 40,
 			expected: "",
+		},
+		{
+			// scans = 5 chars; effective limit = 40 - 5 - 1 = 34.
+			// Verifies the -1 slash offset is applied for all directories.
+			name:     "Slash offset applied for scans directory",
+			input:    "this is a filename that is exactly 35 ch",
+			dirName:  "scans",
+			maxLimit: 40,
+			expected: "this is a filename that is exactly",
 		},
 	}
 
@@ -210,6 +290,15 @@ func TestGetFirstLetterPath(t *testing.T) {
 			artist:   "",
 			expected: "",
 			wantErr:  true,
+		},
+		{
+			// ångström starts with 'å' (U+00E5), a 2-byte UTF-8 rune.
+			// Byte-indexing would read 0xC3 and misidentify the first
+			// character; rune-decoding must be used instead.
+			name:     "Artist starting with multi-byte Unicode letter",
+			artist:   "ångström",
+			expected: "å/ångström",
+			wantErr:  false,
 		},
 	}
 
