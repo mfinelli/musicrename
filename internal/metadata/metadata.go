@@ -18,6 +18,7 @@
 package metadata
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,7 +103,7 @@ func handleSubDir(album *Album, root, dirName string) {
 
 	for _, f := range files {
 		fullPath := filepath.Join(subPath, f.Name())
-		ext := strings.ToLower(filepath.Ext(fullPath))
+		// ext := strings.ToLower(filepath.Ext(fullPath))
 
 		switch strings.ToLower(dirName) {
 		case "artwork":
@@ -115,4 +116,29 @@ func handleSubDir(album *Album, root, dirName string) {
 			album.Assets[CatUnknown] = append(album.Assets[CatUnknown], fullPath)
 		}
 	}
+}
+
+// ProcessLibrary finds albums, reads their tags, and resolves album-level metadata
+func ProcessLibrary(root string) ([]*Album, error) {
+	albums, err := ScanLibrary(root)
+	if err != nil {
+		return nil, err
+	}
+
+	reader := NewReader()
+
+	for _, album := range albums {
+		for _, track := range album.Tracks {
+			if err := reader.ReadTrack(track); err != nil {
+				// We log a warning but continue processing other tracks
+				fmt.Printf("Warning: could not read tags for %s: %v\n", track.Path, err)
+			}
+		}
+
+		// After reading all tracks, we can resolve the Album Artist if needed
+		// (This would be used by the rename logic in the next phase)
+		_ = album.ResolveAlbumArtist()
+	}
+
+	return albums, nil
 }
