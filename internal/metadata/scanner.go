@@ -25,10 +25,21 @@ import (
 )
 
 var (
+	// audioExts is the set of file extensions treated as audio tracks.
 	audioExts = map[string]bool{".flac": true, ".mp3": true, ".m4a": true}
-	textExts  = map[string]bool{".log": true, ".cue": true, ".m3u": true, ".m3u8": true, ".txt": true}
+
+	// textExts is the set of file extensions treated as plain-text metadata
+	// files that live at the album root (e.g. ripping logs, cue sheets).
+	textExts = map[string]bool{".log": true, ".cue": true, ".m3u": true, ".m3u8": true, ".txt": true}
+
+	// imageExts is the set of file extensions recognised as image files.
+	// Whether a specific image is primary art or supplementary artwork is
+	// determined by its filename, not just its extension.
 	imageExts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true}
-	scanExts  = map[string]bool{".tiff": true, ".tif": true}
+
+	// scanExts is the set of file extensions treated as high-resolution scans,
+	// typically stored in the scans/ subdirectory.
+	scanExts = map[string]bool{".tiff": true, ".tif": true}
 )
 
 // categorizeRootFile determines the category of a file at the album root level.
@@ -79,6 +90,11 @@ func ScanLibrary(root string) ([]*Album, error) {
 	return albums, err
 }
 
+// processDirectory inspects path and returns an Album populated with the files
+// it contains. Subdirectories named artwork, scans, and extras are descended
+// into and their contents categorised accordingly; all other subdirectories are
+// treated as unknown. The second return value reports whether any audio files
+// were found (directories without audio are not considered album roots).
 func processDirectory(path string) (*Album, bool) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -108,6 +124,10 @@ func processDirectory(path string) (*Album, bool) {
 	return album, hasAudio
 }
 
+// handleSubDir classifies the immediate files inside a known album
+// subdirectory (artwork/, scans/, extras/) and appends their absolute paths to
+// album.Assets under the appropriate category. Nested subdirectories are
+// silently skipped; only regular files are processed.
 func handleSubDir(album *Album, root, dirName string) {
 	subPath := filepath.Join(root, dirName)
 	files, err := os.ReadDir(subPath)

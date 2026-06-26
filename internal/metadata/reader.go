@@ -28,6 +28,9 @@ import (
 // Reader handles the extraction of metadata from audio files.
 type Reader struct{}
 
+// NewReader returns a Reader ready for use. Reader holds no configuration
+// state; the constructor exists for consistency and to allow future extension
+// without breaking call sites.
 func NewReader() *Reader {
 	return &Reader{}
 }
