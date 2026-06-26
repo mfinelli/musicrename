@@ -29,6 +29,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/executor"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
 )
@@ -94,13 +95,81 @@ func runRename(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("planning moves: %w", err)
 	}
 
+	out := cmd.OutOrStdout()
+
 	if dryRun {
-		printDryRun(cmd.OutOrStdout(), plan)
+		printDryRun(out, plan)
 		return nil
 	}
 
-	// TODO: implement execution phase (Phase 4).
-	return fmt.Errorf("rename execution is not yet implemented; use --dry-run to preview changes")
+	// Phase 1: print a condensed album-level summary so the user can see
+	// what will be touched before the executor runs.
+	printRunPlan(out, plan)
+
+	execWarnings, err := executor.Execute(plan, absRoot)
+	if err != nil {
+		return fmt.Errorf("executing moves: %w", err)
+	}
+
+	// Phase 2: surface all warnings (planner + executor) and the summary line.
+	printRunSummary(out, plan, execWarnings)
+	return nil
+}
+
+// printRunPlan writes a condensed album-level overview to out before execution
+// begins. It shows artists and albums with file counts but omits per-file
+// detail, giving the user a sense of scope without the full dry-run verbosity.
+func printRunPlan(out io.Writer, plan *planner.Plan) {
+	fmt.Fprintln(out, renameHeaderStyle.Render("Renaming library..."))
+	fmt.Fprintln(out)
+
+	if len(plan.Albums) == 0 {
+		fmt.Fprintln(out, "No music files found.")
+		return
+	}
+
+	groups := renameGroupByArtist(plan.Albums)
+	for _, g := range groups {
+		fmt.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
+		for _, ap := range g.albums {
+			count := len(ap.Moves)
+			fileLabel := "files"
+			if count == 1 {
+				fileLabel = "file"
+			}
+			fmt.Fprintln(out, "  "+
+				renameAlbumStyle.Render(ap.AlbumName)+
+				"  "+
+				renameSourceStyle.Render(fmt.Sprintf("· %d %s", count, fileLabel)),
+			)
+		}
+		fmt.Fprintln(out)
+	}
+}
+
+// printRunSummary writes all warnings (planner-phase and executor-phase
+// combined) followed by the summary line to out. It is called after Execute
+// returns and uses the same summary format as printDryRun for consistency.
+func printRunSummary(out io.Writer, plan *planner.Plan, execWarnings []string) {
+	// Combine planner warnings (missing tags, unknown files) with any
+	// executor warnings (race conditions) so the user sees everything in
+	// one block.
+	var allWarnings []string
+	for _, ap := range plan.Albums {
+		allWarnings = append(allWarnings, ap.Warnings...)
+	}
+	allWarnings = append(allWarnings, execWarnings...)
+
+	if len(allWarnings) > 0 {
+		fmt.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
+		for _, w := range allWarnings {
+			fmt.Fprintln(out, "   "+renameWarningStyle.Render(w))
+		}
+		fmt.Fprintln(out)
+	}
+
+	moves, noOps := renameCounts(plan)
+	printSummaryLine(out, len(plan.Albums), moves, noOps, len(allWarnings))
 }
 
 // printDryRun writes the complete dry-run plan to out, grouped by artist then
@@ -167,26 +236,34 @@ func printDryRun(out io.Writer, plan *planner.Plan) {
 		fmt.Fprintln(out)
 	}
 
-	// Summary counts.
-	totalMoves := 0
-	totalNoOps := 0
+	moves, noOps := renameCounts(plan)
+	printSummaryLine(out, len(plan.Albums), moves, noOps, len(allWarnings))
+}
+
+// renameCounts returns the number of real moves and no-op moves in the plan.
+func renameCounts(plan *planner.Plan) (moves, noOps int) {
 	for _, ap := range plan.Albums {
 		for _, op := range ap.Moves {
 			if op.IsNoOp {
-				totalNoOps++
+				noOps++
 			} else {
-				totalMoves++
+				moves++
 			}
 		}
 	}
+	return
+}
 
+// printSummaryLine renders the rule and the summary line that appears at the
+// bottom of both dry-run and live-run output.
+func printSummaryLine(out io.Writer, albums, moves, noOps, warnings int) {
 	noOpLabel := "no-ops"
-	if totalNoOps == 1 {
+	if noOps == 1 {
 		noOpLabel = "no-op"
 	}
 	summaryText := fmt.Sprintf(
 		"%d albums · %d moves · %d %s · %d warnings",
-		len(plan.Albums), totalMoves, totalNoOps, noOpLabel, len(allWarnings),
+		albums, moves, noOps, noOpLabel, warnings,
 	)
 	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
 	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
