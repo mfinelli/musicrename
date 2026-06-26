@@ -10,7 +10,7 @@ jobs:
   main:
     runs-on: ubuntu-latest
     steps:
-      - run: sudo apt-get install -y libtag2
+      - run: sudo apt-get install -y libtag1-dev  # NOTE: libtag-dev on 26.04
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
