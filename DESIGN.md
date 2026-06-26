@@ -159,12 +159,13 @@ for verification.
 
 The tool uses a command-based structure (via `spf13/cobra`):
 
-| Command              | Description                                                           |
-| -------------------- | --------------------------------------------------------------------- |
-| `musicrename rename` | Scans metadata, sanitizes, and moves files.                           |
-| `musicrename sums`   | Generates/updates `sums.md5` for the given album directory.           |
-| `musicrename check`  | Audits the library for misconfigurations; exits non-zero on findings. |
-| `musicrename lyrics` | _(Future)_ Fetches and embeds lyrics.                                 |
+| Command               | Description                                                           |
+| --------------------- | --------------------------------------------------------------------- |
+| `musicrename rename`  | Scans metadata, sanitizes, and moves files.                           |
+| `musicrename sums`    | Generates/updates `sums.md5` for the given album directory.           |
+| `musicrename check`   | Audits the library for misconfigurations; exits non-zero on findings. |
+| `musicrename inspect` | Displays detected and sanitized metadata for a single audio file.     |
+| `musicrename lyrics`  | _(Future)_ Fetches and embeds lyrics.                                 |
 
 **Note on command independence:** `rename` does **not** generate `sums.md5`. The
 intended workflow for a full library update is:
@@ -221,6 +222,41 @@ Example findings:
 - Missing ReplayGain tags
 - Track naming inconsistencies vs. current spec
 - Files in unexpected locations
+
+### 4.4 `inspect` Command
+
+Reads a single audio file and prints its detected metadata alongside the
+sanitized values that `rename` would use. Accepts `.flac`, `.mp3`, and `.m4a`
+files only; exits with an error for any other input. Shell argument completion
+is restricted to those three extensions.
+
+Output format:
+
+```
+File:         01 back in black.flac  (FLAC)
+
+Title:        Back In Black
+              ↳ back in black
+Artist:       AC/DC
+              ↳ ac⁄dc  [manual override]
+Album Artist: AC/DC
+              ↳ ac⁄dc  [manual override]
+Album:        Back In Black
+              ↳ back in black
+
+Year:         1980  (DATE: "1980-07-25")
+Track:        1
+Disc:         —
+```
+
+- The `↳` line is always shown for non-empty fields (lowercasing alone means the
+  sanitized form almost always differs from the raw tag value).
+- The `↳` line and `[manual override]` marker are rendered in dim text.
+- **Year:** if the `DATE` tag contains a full ISO-8601 date or year-month value,
+  the raw tag is shown in parentheses next to the extracted year. If the tag is
+  already a bare four-digit year the parenthetical is omitted.
+- Absent fields display `—`; no sanitized line is shown for absent fields.
+- `inspect` is read-only and makes no filesystem changes.
 
 ## 5. Implementation Notes (Go)
 

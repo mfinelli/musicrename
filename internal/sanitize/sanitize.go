@@ -44,6 +44,17 @@ const (
 	TrackOverride
 )
 
+// Result holds the output of the sanitization pipeline together with metadata
+// about how it was produced. Use CleanStringResult to obtain a Result.
+type Result struct {
+	// Value is the sanitized string.
+	Value string
+	// ManualOverride reports whether the result came from a hardcoded manual
+	// override rather than the standard pipeline. When true, transliteration,
+	// lowercasing, regex stripping, and truncation were all skipped.
+	ManualOverride bool
+}
+
 var (
 	// regexStrip removes any character that is not a lowercase letter,
 	// number, or space.
@@ -95,9 +106,17 @@ var manualOverrides = map[string]map[OverrideType]string{
 // which can happen when all characters are stripped (e.g., input "!!!"). An
 // empty result should be treated as a warning condition.
 func CleanString(input string, kind OverrideType) string {
+	return CleanStringResult(input, kind).Value
+}
+
+// CleanStringResult runs the same pipeline as CleanString and returns a Result
+// that additionally reports whether a manual override was applied. Use this
+// instead of CleanString when the caller needs to distinguish override results
+// from pipeline results (e.g. for display or auditing purposes).
+func CleanStringResult(input string, kind OverrideType) Result {
 	if typeMap, ok := manualOverrides[input]; ok {
 		if replacement, exists := typeMap[kind]; exists {
-			return replacement
+			return Result{Value: replacement, ManualOverride: true}
 		}
 	}
 
@@ -108,7 +127,7 @@ func CleanString(input string, kind OverrideType) string {
 	input = regexSpaces.ReplaceAllString(input, " ")
 	input = strings.TrimSpace(input)
 
-	return input
+	return Result{Value: input}
 }
 
 // Truncate cuts a string down to the specified character (rune) limit. If the

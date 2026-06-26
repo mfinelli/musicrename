@@ -23,6 +23,47 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestCleanStringResult(t *testing.T) {
+	t.Run("manual override sets ManualOverride true and skips pipeline", func(t *testing.T) {
+		result := CleanStringResult("AC/DC", ArtistOverride)
+		assert.True(t, result.ManualOverride)
+		assert.Equal(t, "ac⁄dc", result.Value)
+	})
+
+	t.Run("manual override for wrong context falls through to pipeline", func(t *testing.T) {
+		// AC/DC has an override for ArtistOverride only; AlbumOverride should
+		// run the standard pipeline instead.
+		result := CleanStringResult("AC/DC", AlbumOverride)
+		assert.False(t, result.ManualOverride)
+		assert.Equal(t, "acdc", result.Value)
+	})
+
+	t.Run("standard pipeline sets ManualOverride false", func(t *testing.T) {
+		result := CleanStringResult("Beyoncé", ArtistOverride)
+		assert.False(t, result.ManualOverride)
+		assert.Equal(t, "beyonce", result.Value)
+	})
+
+	t.Run("CleanString and CleanStringResult produce identical values", func(t *testing.T) {
+		inputs := []struct {
+			s    string
+			kind OverrideType
+		}{
+			{"AC/DC", ArtistOverride},
+			{"P!nk", ArtistOverride},
+			{"Dangerously In Love", AlbumOverride},
+			{"Crazy In Love", TrackOverride},
+		}
+		for _, tc := range inputs {
+			assert.Equal(t,
+				CleanString(tc.s, tc.kind),
+				CleanStringResult(tc.s, tc.kind).Value,
+				"mismatch for %q kind=%d", tc.s, tc.kind,
+			)
+		}
+	})
+}
+
 func TestCleanString(t *testing.T) {
 	tests := []struct {
 		name     string
