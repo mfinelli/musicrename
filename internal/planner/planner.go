@@ -170,7 +170,10 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		SourceDir:   album.RootPath,
 		DestDir:     fullAlbumDir,
 		Moves:       []MoveOperation{},
-		Warnings:    []string{},
+		// Seed with any warnings already collected during the scan phase
+		// (e.g. unreadable tracks from ProcessLibrary) so all warnings for
+		// this album surface together in the display layer.
+		Warnings: append([]string{}, album.Warnings...),
 	}
 
 	if len(album.Tracks) > 0 && rawYear == "" {

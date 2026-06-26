@@ -300,7 +300,7 @@ func TestProcessLibrary(t *testing.T) {
 		assert.Equal(t, "The Artist", albums[0].ResolvedArtist)
 	})
 
-	t.Run("unreadable track is skipped but album still returned", func(t *testing.T) {
+	t.Run("unreadable track warning is captured in album.Warnings", func(t *testing.T) {
 		root := t.TempDir()
 		makeAudioFile(t, root, "01 good.flac", map[string]string{
 			"TITLE": "Good Track", "ARTIST": "Good Artist",
@@ -325,6 +325,11 @@ func TestProcessLibrary(t *testing.T) {
 		}
 		require.NotNil(t, good, "good track should have its tags populated")
 		assert.Equal(t, "Good Artist", good.Artist)
+
+		// The unreadable track must produce a warning captured on the album
+		// rather than printed to stdout.
+		require.Len(t, albums[0].Warnings, 1)
+		assert.Contains(t, albums[0].Warnings[0], "02 bad.flac")
 	})
 
 	t.Run("multiple nested albums are all processed", func(t *testing.T) {

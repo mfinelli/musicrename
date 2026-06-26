@@ -158,9 +158,13 @@ func handleSubDir(album *Album, root, dirName string) {
 
 // ProcessLibrary finds albums, reads their tags, and resolves album-level
 // metadata. After this call, each Album's ResolvedArtist field is populated.
-// Albums for which no artist can be determined are retained in the returned
-// slice with an empty ResolvedArtist and a warning logged; the planner is
-// responsible for skipping or erroring on them.
+// Non-fatal issues (unreadable tracks, unresolvable artists) are appended to
+// Album.Warnings rather than printed, so the caller can surface them alongside
+// the plan rather than interleaved with scan progress.
+//
+// Note: if ResolvedArtist is empty the album is still returned. The planner
+// will error on it and its warnings will not reach the display layer; the
+// planner's error message is sufficient in that case.
 func ProcessLibrary(root string) ([]*Album, error) {
 	albums, err := ScanLibrary(root)
 	if err != nil {
@@ -172,13 +176,15 @@ func ProcessLibrary(root string) ([]*Album, error) {
 	for _, album := range albums {
 		for _, track := range album.Tracks {
 			if err := reader.ReadTrack(track); err != nil {
-				fmt.Printf("Warning: could not read tags for %s: %v\n", track.Path, err)
+				album.Warnings = append(album.Warnings,
+					fmt.Sprintf("could not read tags for %s: %v", track.Path, err))
 			}
 		}
 
 		album.ResolvedArtist = album.ResolveAlbumArtist()
 		if album.ResolvedArtist == "" {
-			fmt.Printf("Warning: could not resolve artist for album at %s; it will be skipped\n", album.RootPath)
+			album.Warnings = append(album.Warnings,
+				fmt.Sprintf("could not resolve artist for album at %s; it will be skipped", album.RootPath))
 		}
 	}
 

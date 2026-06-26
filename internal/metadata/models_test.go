@@ -36,4 +36,7 @@ func TestNewAlbum(t *testing.T) {
 	// Assets must be initialised so callers can index without a nil check.
 	assert.NotNil(t, album.Assets)
 	assert.Empty(t, album.Assets)
+
+	assert.NotNil(t, album.Warnings)
+	assert.Empty(t, album.Warnings)
 }

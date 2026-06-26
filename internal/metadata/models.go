@@ -107,6 +107,12 @@ type Album struct {
 	// could be determined from any track; callers that require an artist
 	// (e.g. the planner) should treat this as an error condition.
 	ResolvedArtist string
+
+	// Warnings holds non-fatal issues discovered during scanning and tag
+	// reading (e.g. unreadable tracks). The planner seeds its own warning
+	// list from this field so that all warnings surface together in the
+	// display layer rather than being printed immediately by ProcessLibrary.
+	Warnings []string
 }
 
 // NewAlbum returns an Album rooted at path with all internal maps and slices
@@ -116,5 +122,6 @@ func NewAlbum(path string) *Album {
 		RootPath: path,
 		Tracks:   make([]*Track, 0),
 		Assets:   make(map[FileCategory][]string),
+		Warnings: make([]string, 0),
 	}
 }
