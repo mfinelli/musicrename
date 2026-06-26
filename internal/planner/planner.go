@@ -34,6 +34,7 @@ package planner
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mfinelli/musicrename/internal/metadata"
@@ -126,6 +127,18 @@ func (p *planner) PlanLibrary(albums []*metadata.Album) (*Plan, error) {
 	}
 
 	return globalPlan, nil
+}
+
+// assetCategoryOrder defines the canonical iteration order for asset
+// categories. A fixed order ensures that dry-run output and move lists are
+// stable across runs (ranging over a map is non-deterministic in Go).
+var assetCategoryOrder = []metadata.FileCategory{
+	metadata.CatPrimaryArt,
+	metadata.CatRootText,
+	metadata.CatArtwork,
+	metadata.CatScan,
+	metadata.CatExtras,
+	metadata.CatUnknown,
 }
 
 // planAlbum computes the target path for every file in album and returns an
@@ -234,6 +247,11 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 			fmt.Sprintf("missing YEAR tag for album at %s", album.RootPath))
 	}
 
+	if len(album.Tracks) > 0 && rawAlbum == "" {
+		albumPlan.Warnings = append(albumPlan.Warnings,
+			fmt.Sprintf("missing ALBUM tag for album at %s", album.RootPath))
+	}
+
 	// 4. Plan audio file moves.
 	for _, track := range album.Tracks {
 		// TITLE fallback: when the tag is absent, use the original filename
@@ -279,8 +297,20 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 
 	// 5. Plan asset moves (artwork, scans, extras, root text files).
 	// Unknown files are left in place; a warning is emitted by the command layer.
-	for cat, paths := range album.Assets {
-		for _, oldPath := range paths {
+	// Iterate in a fixed category order (assetCategoryOrder) so that move
+	// lists and dry-run output are stable across runs.
+	for _, cat := range assetCategoryOrder {
+		paths, ok := album.Assets[cat]
+		if !ok {
+			continue
+		}
+
+		// Sort paths within each category for additional stability.
+		sortedPaths := make([]string, len(paths))
+		copy(sortedPaths, paths)
+		sort.Strings(sortedPaths)
+
+		for _, oldPath := range sortedPaths {
 			// Always lowercase the extension for filesystem consistency.
 			ext := strings.ToLower(filepath.Ext(oldPath))
 			rawStem := strings.TrimSuffix(filepath.Base(oldPath), filepath.Ext(oldPath))
@@ -351,6 +381,9 @@ func (p *planner) createMoveOp(oldPath, newPath string, globalDests map[string]s
 		return MoveOperation{OldPath: oldPath, NewPath: newPath, IsNoOp: true}, nil
 	}
 
+	// Paths reaching this point have been through the sanitization pipeline
+	// and are ASCII-only, so EqualFold behaves identically to a simple
+	// case-insensitive byte comparison with no Unicode surprises.
 	if strings.EqualFold(oldPath, newPath) {
 		return MoveOperation{OldPath: oldPath, NewPath: newPath, IsCaseOnly: true}, nil
 	}
