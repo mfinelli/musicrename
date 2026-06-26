@@ -59,9 +59,10 @@ All strings used in folder and filenames (Artist, Album, Title) must pass
 through this sequence:
 
 1. **Manual Overrides:** Hardcoded replacements for a small set of known edge
-   cases (e.g., `AC/DC` -> `acdc`, `P!nk` -> `pink`). **Overrides return the
-   final sanitized string immediately, skipping all subsequent steps including
-   truncation.** The override value is used exactly as written.
+   cases (e.g., `AC/DC` -> `ac⁄dc` (U+2044 fraction slash), `P!nk` -> `pink`).
+   **Overrides return the final sanitized string immediately, skipping all
+   subsequent steps including truncation.** The override value is used exactly
+   as written.
 2. **Transliteration:** Convert Unicode characters to ASCII via
    `github.com/alexsergivan/transliterator`.
 3. **Casing:** Convert all characters to lowercase.
@@ -161,13 +162,13 @@ for verification.
 
 The tool uses a command-based structure (via `spf13/cobra`):
 
-| Command               | Description                                                           |
-| --------------------- | --------------------------------------------------------------------- |
-| `musicrename rename`  | Scans metadata, sanitizes, and moves files.                           |
-| `musicrename sums`    | Generates/updates `sums.md5` for the given album directory.           |
-| `musicrename check`   | Audits the library for misconfigurations; exits non-zero on findings. |
-| `musicrename inspect` | Displays detected and sanitized metadata for a single audio file.     |
-| `musicrename lyrics`  | _(Future)_ Fetches and embeds lyrics.                                 |
+| Command                             | Description                                                                                                                                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `musicrename rename [library-root]` | Scans metadata, sanitizes, and moves files. Accepts an optional path argument (default: current directory). Use `--dry-run` to preview all planned moves without touching the filesystem. |
+| `musicrename sums`                  | Generates/updates `sums.md5` for the given album directory.                                                                                                                               |
+| `musicrename check`                 | Audits the library for misconfigurations; exits non-zero on findings.                                                                                                                     |
+| `musicrename inspect`               | Displays detected and sanitized metadata for a single audio file.                                                                                                                         |
+| `musicrename lyrics`                | _(Future)_ Fetches and embeds lyrics.                                                                                                                                                     |
 
 **Note on command independence:** `rename` does **not** generate `sums.md5`. The
 intended workflow for a full library update is:
@@ -189,7 +190,13 @@ intended workflow for a full library update is:
 
 3. **Validation Phase:**
       - Calculate necessary directory creations.
-      - Verify if `oldPath == newPath` (case-insensitive) to skip no-op moves.
+      - Classify each planned move:
+           - **No-op** (`oldPath == newPath` exactly): file is already in the
+             correct location; no filesystem change required.
+           - **Case-only** (`oldPath` and `newPath` differ only in case): a real
+             rename is required, but must go via an intermediate temp path to
+             avoid a silent no-op on case-insensitive filesystems (macOS default
+             HFS+).
       - Detect sanitization collisions (two source files resolving to the same
         destination path). On the first collision detected: abort the entire run
         with an error.
@@ -279,11 +286,18 @@ Disc:         —
   each album and stores the result in `Album.ResolvedArtist`. Callers (the
   planner, `inspect`, `check`) read this field directly and do not need to
   invoke `ResolveAlbumArtist()` themselves.
+- **Warning collection:** Non-fatal issues are collected rather than printed
+  immediately. `ProcessLibrary` appends scan-phase warnings (unreadable tracks,
+  unresolvable artists) to `Album.Warnings`. The planner seeds
+  `AlbumPlan.Warnings` from this field and then appends its own planning-phase
+  warnings (missing tags, unknown files). The display layer (e.g. `--dry-run`
+  output) surfaces all warnings grouped together at the top of the output.
 
 ### Key Dependencies
 
 | Package                                  | Purpose                                                                                   |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                          |
+| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename --dry-run`)                           |
 | `github.com/deluan/go-taglib`            | Cross-format metadata reading (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
 | `github.com/spf13/cobra`                 | CLI command management                                                                    |
