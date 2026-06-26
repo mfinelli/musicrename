@@ -15,6 +15,22 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Package executor performs the filesystem changes described by a
+// [planner.Plan]. It is the only package in musicrename that makes real,
+// permanent changes to the filesystem; all path computation and validation is
+// performed upstream by [planner].
+//
+// The primary entry point is [Execute], which:
+//   - Creates destination directories (including artwork/, scans/, and extras/
+//     subdirectories) as needed.
+//   - Moves each file described in the plan, using a two-step intermediate
+//     rename for case-only changes and a copy-then-delete fallback for
+//     cross-device moves.
+//   - Cleans up empty source directories after all moves, bubbling upward
+//     toward (but never removing) the library root.
+//
+// Execute is called only when the user has not passed --dry-run; the decision
+// to invoke it is made by the command layer, not here.
 package executor
 
 import (
