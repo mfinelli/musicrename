@@ -30,6 +30,9 @@ directories: `/[First Letter of Artist]/[Artist]/[Year] [Album Name]/`
 
 - The first-letter bucket is a single character: `a`–`z` for artists whose name
   begins with a letter, or `0` for all others (digits, symbols, etc.).
+- Because artist names pass through the full sanitization pipeline before
+  bucketing, only lowercase letters and digits are possible first characters by
+  the time the bucket is determined.
 - If the `YEAR` tag is absent, the year prefix is omitted entirely:
   `/[First Letter of Artist]/[Artist]/[Album Name]/`
 
@@ -57,7 +60,8 @@ through this sequence:
 
 1. **Manual Overrides:** Hardcoded replacements for a small set of known edge
    cases (e.g., `AC/DC` -> `acdc`, `P!nk` -> `pink`). **Overrides return the
-   final sanitized string immediately, skipping all subsequent steps.**
+   final sanitized string immediately, skipping all subsequent steps including
+   truncation.** The override value is used exactly as written.
 2. **Transliteration:** Convert Unicode characters to ASCII via
    `github.com/alexsergivan/transliterator`.
 3. **Casing:** Convert all characters to lowercase.
@@ -87,7 +91,12 @@ through this sequence:
 
 #### Tag Reading
 
-- **Source of Truth:** Internal tags (FLAC/Vorbis Comments, ID3, M4A atoms).
+- **Source of Truth:** Internal tags (FLAC/Vorbis Comments, ID3, M4A atoms),
+  read via `github.com/deluan/go-taglib`, which normalizes tag names across
+  formats. `TRACKNUMBER` is expected to be a single integer (not `track/total`
+  form); the library is curator-managed.
+- **Album Grouping:** Each source folder is treated as one album. Files are not
+  grouped globally by tag values.
 - **Compilation Handling:** Use the `ALBUMARTIST` tag for the directory
   structure. If `ALBUMARTIST` is absent, fall back to the `ARTIST` tag of the
   track with the lowest `TRACKNUMBER` value on that album.
@@ -106,6 +115,12 @@ The tool emits a warning for each missing tag and falls back as follows:
 Year values are used verbatim with no validity check. The library is
 curator-managed, so malformed values (e.g. `0000`) are considered a data entry
 issue to fix at the source, not something the tool guards against.
+
+#### Disc Number Handling
+
+If **any** track in an album has a `DISCNUMBER` tag, **all** tracks must have
+one. If the tag is missing on even one track, the entire album is skipped with
+an error. In practice this is unlikely since metadata is edited per-album.
 
 #### Track Naming Pattern
 
@@ -126,11 +141,14 @@ for verification.
 - **Format:** Standard `md5sum` output.
      - Binary files (audio/images): `hash *filename` (asterisk prefix on name).
      - Text files (`.log`, `.cue`, `.m3u`, `.m3u8`, `.txt`): `hash  filename`
-       (space prefix on name).
+       (two-space prefix on name).
 - **Paths:** Filenames in `sums.md5` are relative to the album root (e.g.,
   `artwork/cover.jpg`, `01 track one.flac`).
 - **Detection:** Text vs. binary classification is based on a predefined list of
-  known text extensions.
+  known text extensions (no magic-byte inspection).
+- **Exclusion:** `sums.md5` itself is never included in the checksum file.
+- **Scope:** The `sums` command operates on a single album root directory (not
+  the whole library). Running it against the library root is not supported.
 
 ## 4. Architecture
 
@@ -141,7 +159,7 @@ The tool uses a command-based structure (via `spf13/cobra`):
 | Command              | Description                                                           |
 | -------------------- | --------------------------------------------------------------------- |
 | `musicrename rename` | Scans metadata, sanitizes, and moves files.                           |
-| `musicrename sums`   | Generates/updates `sums.md5` for each album directory.                |
+| `musicrename sums`   | Generates/updates `sums.md5` for the given album directory.           |
 | `musicrename check`  | Audits the library for misconfigurations; exits non-zero on findings. |
 | `musicrename lyrics` | _(Future)_ Fetches and embeds lyrics.                                 |
 
@@ -158,18 +176,36 @@ intended workflow for a full library update is:
       - Recursively locate music files.
       - Identify "unknown" files (files that don't fit known categories) and log
         a warning.
+
 2. **Analysis Phase:**
       - Read tags -> Apply Sanitization Pipeline -> Determine destination path.
+
 3. **Validation Phase:**
       - Calculate necessary directory creations.
       - Verify if `oldPath == newPath` (case-insensitive) to skip no-op moves.
       - Detect sanitization collisions (two source files resolving to the same
         destination path). On collision: skip both files and emit an error.
+      - **Overwrite safety:** Check all planned destination paths against the
+        filesystem. If any destination file already exists, **abort the entire
+        run** and list every conflict. The run is all-or-nothing; no files are
+        moved until the pre-flight check passes cleanly.
+
 4. **Execution Phase** _(skipped if `--dry-run` is passed)_:
       - Create folders -> Move files.
       - Use `os.Rename` where source and destination are on the same filesystem.
       - Fall back to copy-then-delete when `os.Rename` returns a cross-device
         error (`syscall.EXDEV`).
+      - **Case-only renames:** When the source and destination differ only in
+        case (e.g. `Beatles` -> `beatles`), rename via an intermediate temp path
+        to avoid silent no-ops on case-insensitive filesystems (macOS default).
+      - **Race condition:** If a destination file materializes between the
+        pre-flight check and the actual move, skip that file with a warning
+        rather than aborting the run.
+      - **Empty directory cleanup:** After all moves, attempt to remove any
+        source directories that were touched and are now empty. This is
+        best-effort: failures are logged but do not affect exit status. Only
+        directories that the tool moved files out of are candidates; no other
+        directories are touched.
 
 ### 4.3 `check` Command
 
@@ -187,16 +223,20 @@ Example findings:
 
 - **Filesystem moves:** `os.Rename` for same-device moves; copy-then-delete
   fallback for cross-device (`syscall.EXDEV`).
+- **Case-only renames:** Rename to a temp path first, then to the final
+  destination, to handle case-insensitive filesystems correctly.
 - **MD5 generation:** Shell out to `md5sum`; do not reimplement.
 - **Concurrency:** Worker pool for tag reading. MD5 generation delegates to
   `md5sum` which handles its own I/O.
 - **Manual overrides:** Hardcoded in the binary (small, stable set; no config
   file).
+- **Primary target:** Linux (case-sensitive filesystem). macOS is supported but
+  is a secondary target.
 
 ### Key Dependencies
 
-| Package                                  | Purpose                          |
-| ---------------------------------------- | -------------------------------- |
-| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration |
-| `github.com/dhowden/tag`                 | Cross-format metadata reading    |
-| `github.com/spf13/cobra`                 | CLI command management           |
+| Package                                  | Purpose                                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                          |
+| `github.com/deluan/go-taglib`            | Cross-format metadata reading (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
+| `github.com/spf13/cobra`                 | CLI command management                                                                    |
