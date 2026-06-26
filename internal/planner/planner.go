@@ -15,6 +15,20 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Package planner converts a slice of scanned and tag-read [metadata.Album]
+// values into a [Plan]: a structured description of every filesystem move
+// needed to bring the library into its target state. No filesystem changes are
+// made here; the package is purely computational.
+//
+// The typical call sequence is:
+//
+//	albums, _ := metadata.ProcessLibrary(root)
+//	p := planner.New(root)
+//	plan, _ := p.PlanLibrary(albums)
+//
+// The returned Plan groups moves by album and carries any non-fatal warnings
+// (missing tags, unknown files) alongside the moves so the caller can display
+// everything together rather than interleaved with processing output.
 package planner
 
 import (
@@ -28,16 +42,28 @@ import (
 
 // MoveOperation describes the intended movement of a single file.
 type MoveOperation struct {
-	OldPath    string
-	NewPath    string
+	// OldPath is the absolute path of the file in its current location.
+	OldPath string
+	// NewPath is the absolute path of the file in its intended location.
+	NewPath string
+	// IsCaseOnly is true when OldPath and NewPath differ only in
+	// capitalisation. The executor must rename via a temporary intermediate
+	// path to avoid a silent no-op on case-insensitive filesystems (e.g.
+	// the macOS default HFS+).
 	IsCaseOnly bool
-	IsNoOp     bool
+	// IsNoOp is true when OldPath and NewPath are identical; the file is
+	// already in the correct location and no filesystem change is required.
+	IsNoOp bool
 }
 
 // AlbumPlan groups all moves associated with a single album.
 type AlbumPlan struct {
+	// AlbumArtist is the sanitized and truncated album-level artist name as
+	// it appears in the directory hierarchy (e.g. "beyonce").
 	AlbumArtist string
-	AlbumName   string
+	// AlbumName is the sanitized album folder name, including the year
+	// prefix when the YEAR tag is present (e.g. "[2003] dangerously in love").
+	AlbumName string
 	// SourceDir is the absolute path of the source album directory (i.e.
 	// album.RootPath). It is used by the display layer to show the source
 	// location once per album rather than repeating it on every move line.
@@ -46,27 +72,46 @@ type AlbumPlan struct {
 	// callers to compute file-relative paths (e.g. for display) without
 	// re-deriving the directory from the move operations.
 	DestDir string
-	Moves   []MoveOperation
+	// Moves contains one entry per file that needs to be moved (or confirmed
+	// as a no-op) within this album, including audio tracks and all assets.
+	Moves []MoveOperation
 	// Warnings holds non-fatal issues discovered while planning this album
-	// (missing tags, unknown files). They are collected here rather than
-	// printed immediately so the caller can display them together.
+	// (missing tags, unknown files). They are seeded from the scan-phase
+	// warnings on the source Album so that all warnings for the album surface
+	// together in the display layer.
 	Warnings []string
 }
 
-// Plan is the final target state for the entire library.
+// Plan is the complete target state for the entire library. It is the primary
+// output of [planner.PlanLibrary] and contains one [AlbumPlan] per discovered
+// album.
 type Plan struct {
+	// Albums contains one entry per source album directory, in the order
+	// they were processed by PlanLibrary.
 	Albums []AlbumPlan
 }
 
+// planner holds the library root path and constructs all destination paths
+// relative to it. Use [New] to create an instance.
 type planner struct {
+	// libraryRoot is the absolute path to the top of the target library
+	// hierarchy (e.g. /home/user/Music). All destination paths are rooted
+	// here.
 	libraryRoot string
 }
 
+// New returns a planner that will place all files under libraryRoot.
+// libraryRoot should be an absolute path; callers should resolve it with
+// filepath.Abs before calling New.
 func New(libraryRoot string) *planner {
 	return &planner{libraryRoot: libraryRoot}
 }
 
-// PlanLibrary converts a slice of processed albums into a global Move Plan.
+// PlanLibrary converts a slice of processed albums into a Plan covering the
+// entire library. It iterates albums in order and delegates per-album path
+// generation to planAlbum, passing a shared destination map so that
+// cross-album collisions (two albums resolving to the same file path) are
+// detected globally. The first collision or validation error aborts the run.
 func (p *planner) PlanLibrary(albums []*metadata.Album) (*Plan, error) {
 	globalPlan := &Plan{}
 	// Track destination paths to detect collisions globally.
@@ -83,6 +128,14 @@ func (p *planner) PlanLibrary(albums []*metadata.Album) (*Plan, error) {
 	return globalPlan, nil
 }
 
+// planAlbum computes the target path for every file in album and returns an
+// AlbumPlan describing the required moves. globalDests is a map shared across
+// all albums in the run; it is updated by each call to createMoveOp so that
+// cross-album destination collisions are detected.
+//
+// planAlbum returns an error on the first collision or hard validation failure
+// (e.g. inconsistent DISCNUMBER tags, unresolvable artist). Non-fatal issues
+// such as missing tags are appended to AlbumPlan.Warnings instead.
 func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string) (*AlbumPlan, error) {
 	// 1. Resolve Album-Level Metadata
 	// ResolvedArtist is populated by ProcessLibrary; an empty value means
@@ -277,6 +330,11 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 	return albumPlan, nil
 }
 
+// createMoveOp registers newPath in globalDests and returns a MoveOperation
+// describing the relationship between oldPath and newPath. It fails fast with
+// an error if newPath is already claimed by a different source file
+// (collision). IsNoOp is set when the paths are identical; IsCaseOnly is set
+// when they differ only in case.
 func (p *planner) createMoveOp(oldPath, newPath string, globalDests map[string]string) (MoveOperation, error) {
 	// Collision detection: fail fast if two source files resolve to the same
 	// destination. In practice this should never happen with a well-tagged
