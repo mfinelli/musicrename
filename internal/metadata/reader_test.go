@@ -23,6 +23,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewReader(t *testing.T) {
+	// NewReader has no configurable state; this test confirms the constructor
+	// returns a non-nil value and that two calls produce independent instances.
+	r1 := NewReader()
+	r2 := NewReader()
+	assert.NotNil(t, r1)
+	assert.NotNil(t, r2)
+	assert.NotSame(t, r1, r2)
+}
+
 func TestResolveAlbumArtist(t *testing.T) {
 	tests := []struct {
 		name     string
