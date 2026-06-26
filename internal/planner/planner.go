@@ -38,7 +38,15 @@ type MoveOperation struct {
 type AlbumPlan struct {
 	AlbumArtist string
 	AlbumName   string
-	Moves       []MoveOperation
+	// DestDir is the absolute path of the target album directory. It allows
+	// callers to compute file-relative paths (e.g. for display) without
+	// re-deriving the directory from the move operations.
+	DestDir string
+	Moves   []MoveOperation
+	// Warnings holds non-fatal issues discovered while planning this album
+	// (missing tags, unknown files). They are collected here rather than
+	// printed immediately so the caller can display them together.
+	Warnings []string
 }
 
 // Plan is the final target state for the entire library.
@@ -155,17 +163,25 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 	albumPlan := &AlbumPlan{
 		AlbumArtist: truncArtist,
 		AlbumName:   albumFolderName,
+		DestDir:     fullAlbumDir,
 		Moves:       []MoveOperation{},
+		Warnings:    []string{},
+	}
+
+	if len(album.Tracks) > 0 && rawYear == "" {
+		albumPlan.Warnings = append(albumPlan.Warnings,
+			fmt.Sprintf("missing YEAR tag for album at %s", album.RootPath))
 	}
 
 	// 4. Plan audio file moves.
 	for _, track := range album.Tracks {
 		// TITLE fallback: when the tag is absent, use the original filename
-		// stem so the file is still placed (with a warning from the command
-		// layer) rather than dropped.
+		// stem so the file is still placed rather than dropped.
 		title := track.Title
 		if title == "" {
 			title = strings.TrimSuffix(filepath.Base(track.Path), filepath.Ext(track.Path))
+			albumPlan.Warnings = append(albumPlan.Warnings,
+				fmt.Sprintf("missing TITLE tag for %s (using filename stem)", track.Path))
 		}
 
 		sanTitle := sanitize.CleanStringResult(title, sanitize.TrackOverride)
@@ -175,11 +191,13 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		ext := strings.ToLower(filepath.Ext(track.Path))
 
 		// A nil TrackNumber means the tag was absent; use 0 as the formatted
-		// value so the file sorts before track 1. The command layer emits a
-		// warning for these.
+		// value so the file sorts before track 1.
 		trackNum := 0
 		if track.TrackNumber != nil {
 			trackNum = *track.TrackNumber
+		} else {
+			albumPlan.Warnings = append(albumPlan.Warnings,
+				fmt.Sprintf("missing TRACKNUMBER tag for %s", track.Path))
 		}
 		trackNumStr := fmt.Sprintf("%0*d", padding, trackNum)
 
@@ -234,8 +252,9 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 				newPath = filepath.Join(fullAlbumDir, truncStem+ext)
 
 			case metadata.CatUnknown:
-				// Leave unknown files in place. The command layer is responsible
-				// for emitting a warning about each one.
+				// Leave unknown files in place and record a warning.
+				albumPlan.Warnings = append(albumPlan.Warnings,
+					fmt.Sprintf("unknown file left in place: %s", oldPath))
 				continue
 			}
 

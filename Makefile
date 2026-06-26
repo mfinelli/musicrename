@@ -1,9 +1,7 @@
 GO := go
 
-SOURCES := $(wildcard *.go)
-SOURCES += $(wildcard cmd/*.go)
-SOURCES += $(wildcard util/*.go)
-SOURCES += $(wildcard walk/*.go)
+SOURCES := $(wildcard *.go cmd/*.go internal/metadata/*.go \
+	   internal/planner/*.go internal/sanitize/*.go)
 
 all: mr
 

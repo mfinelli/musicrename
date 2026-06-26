@@ -596,3 +596,134 @@ func TestPlanLibrary_MultipleAlbums(t *testing.T) {
 		assert.Contains(t, opB.NewPath, "2pac")
 	})
 }
+
+func TestPlanLibrary_DestDir(t *testing.T) {
+	t.Run("DestDir is set to the computed album directory", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src/beyonce", "Beyoncé", []*metadata.Track{
+			{Path: "/src/beyonce/01.flac", Title: "Track", Album: "Lemonade", Year: "2016", TrackNumber: new(1)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+		require.Len(t, plan.Albums, 1)
+
+		assert.Equal(t,
+			filepath.Join(lib, "b", "beyonce", "[2016] lemonade"),
+			plan.Albums[0].DestDir,
+		)
+	})
+
+	t.Run("DestDir allows correct relative path computation for subdirectory assets", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/01.flac", Title: "Track", Album: "Album", Year: "2000", TrackNumber: new(1)},
+		}, map[metadata.FileCategory][]string{
+			metadata.CatArtwork: {"/src/cover.jpg"},
+		})
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		ap := plan.Albums[0]
+		op := findMove(&ap, "/src/cover.jpg")
+		require.NotNil(t, op)
+
+		rel, err := filepath.Rel(ap.DestDir, op.NewPath)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join("artwork", "cover.jpg"), rel)
+	})
+}
+
+func TestPlanLibrary_Warnings(t *testing.T) {
+	t.Run("well-tagged album produces no warnings", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/01.flac", Title: "Track", Album: "Album", Year: "2000", TrackNumber: new(1)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+		assert.Empty(t, plan.Albums[0].Warnings)
+	})
+
+	t.Run("missing YEAR tag produces a warning", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/01.flac", Title: "Track", Album: "Album", Year: "", TrackNumber: new(1)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		warnings := plan.Albums[0].Warnings
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "YEAR")
+	})
+
+	t.Run("missing TITLE tag produces a warning and uses filename stem", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/03 original name.flac", Title: "", Album: "Album", Year: "2000", TrackNumber: new(3)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		warnings := plan.Albums[0].Warnings
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "TITLE")
+		assert.Contains(t, warnings[0], "/src/03 original name.flac")
+
+		// Filename stem should still be used to produce a valid destination.
+		op := findMove(&plan.Albums[0], "/src/03 original name.flac")
+		require.NotNil(t, op)
+		assert.True(t, strings.HasSuffix(op.NewPath, "03 03 original name.flac"))
+	})
+
+	t.Run("missing TRACKNUMBER tag produces a warning", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/t.flac", Title: "Track", Album: "Album", Year: "2000", TrackNumber: nil},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		warnings := plan.Albums[0].Warnings
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "TRACKNUMBER")
+		assert.Contains(t, warnings[0], "/src/t.flac")
+	})
+
+	t.Run("unknown file produces a warning", func(t *testing.T) {
+		lib := t.TempDir()
+		unknownPath := "/src/mystery.exe"
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/01.flac", Title: "Track", Album: "Album", Year: "2000", TrackNumber: new(1)},
+		}, map[metadata.FileCategory][]string{
+			metadata.CatUnknown: {unknownPath},
+		})
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		warnings := plan.Albums[0].Warnings
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], unknownPath)
+	})
+
+	t.Run("multiple missing tags produce one warning each", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			// Missing TITLE and TRACKNUMBER on same track.
+			{Path: "/src/t.flac", Title: "", Album: "Album", Year: "2000", TrackNumber: nil},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		warnings := plan.Albums[0].Warnings
+		assert.Len(t, warnings, 2)
+	})
+}

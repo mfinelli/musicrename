@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"go.senan.xyz/taglib"
 
@@ -32,6 +33,10 @@ import (
 // inspectLabelWidth is the column at which tag values begin. It is wide enough
 // to accommodate the longest label ("Album Artist:") plus one space.
 const inspectLabelWidth = 14
+
+// inspectFaintStyle renders text in a dim/faint style for the sanitized value
+// lines shown beneath each raw tag field.
+var inspectFaintStyle = lipgloss.NewStyle().Faint(true)
 
 var inspectCmd = &cobra.Command{
 	Use:   "inspect <file>",
@@ -155,9 +160,9 @@ func inspectPrintSanitized(out io.Writer, result sanitize.Result) {
 	fmt.Fprintln(out, indent+inspectDim(line))
 }
 
-// inspectDim wraps s in ANSI dim escape codes.
+// inspectDim renders s in a faint/dim style using lipgloss.
 func inspectDim(s string) string {
-	return "\033[2m" + s + "\033[0m"
+	return inspectFaintStyle.Render(s)
 }
 
 // inspectDash returns s unchanged, or "—" if s is empty.
