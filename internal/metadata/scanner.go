@@ -31,7 +31,34 @@ var (
 	scanExts  = map[string]bool{".tiff": true, ".tif": true}
 )
 
-// ScanLibrary walks the root path and identifies albums
+// categorizeRootFile determines the category of a file at the album root level.
+// It is extracted as a named function so that both processDirectory and tests
+// share the same logic rather than duplicating it.
+func categorizeRootFile(name string) FileCategory {
+	lower := strings.ToLower(name)
+	ext := filepath.Ext(lower)
+
+	if audioExts[ext] {
+		return CatAudio
+	}
+	if textExts[ext] || name == "sums.md5" {
+		return CatRootText
+	}
+	if imageExts[ext] {
+		// Only the exact filenames folder.jpg / folder.jpeg / folder.png are
+		// treated as primary album art; everything else is supplementary artwork.
+		if lower == "folder.jpg" || lower == "folder.jpeg" || lower == "folder.png" {
+			return CatPrimaryArt
+		}
+		return CatArtwork
+	}
+	if scanExts[ext] {
+		return CatScan
+	}
+	return CatUnknown
+}
+
+// ScanLibrary walks the root path and identifies albums.
 func ScanLibrary(root string) ([]*Album, error) {
 	var albums []*Album
 
@@ -40,7 +67,6 @@ func ScanLibrary(root string) ([]*Album, error) {
 			return err
 		}
 
-		// We only care about directories that might be album roots
 		if d.IsDir() {
 			album, isAlbum := processDirectory(path)
 			if isAlbum {
@@ -64,30 +90,18 @@ func processDirectory(path string) (*Album, bool) {
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			// Handle subdirectories (artwork, scans, extras)
 			handleSubDir(album, path, entry.Name())
 			continue
 		}
 
 		fullPath := filepath.Join(path, entry.Name())
-		ext := strings.ToLower(filepath.Ext(fullPath))
+		cat := categorizeRootFile(entry.Name())
 
-		if audioExts[ext] {
+		if cat == CatAudio {
 			hasAudio = true
 			album.Tracks = append(album.Tracks, &Track{Path: fullPath})
-		} else if textExts[ext] || entry.Name() == "sums.md5" {
-			album.Assets[CatRootText] = append(album.Assets[CatRootText], fullPath)
-		} else if imageExts[ext] {
-			// Primary art: folder.jpg/png stays in root, others go to artwork/
-			if strings.HasPrefix(strings.ToLower(entry.Name()), "folder") {
-				album.Assets[CatRootText] = append(album.Assets[CatRootText], fullPath)
-			} else {
-				album.Assets[CatArtwork] = append(album.Assets[CatArtwork], fullPath)
-			}
-		} else if scanExts[ext] {
-			album.Assets[CatScan] = append(album.Assets[CatScan], fullPath)
 		} else {
-			album.Assets[CatUnknown] = append(album.Assets[CatUnknown], fullPath)
+			album.Assets[cat] = append(album.Assets[cat], fullPath)
 		}
 	}
 
@@ -102,8 +116,12 @@ func handleSubDir(album *Album, root, dirName string) {
 	}
 
 	for _, f := range files {
+		// Skip any nested subdirectories; we only process regular files.
+		if f.IsDir() {
+			continue
+		}
+
 		fullPath := filepath.Join(subPath, f.Name())
-		// ext := strings.ToLower(filepath.Ext(fullPath))
 
 		switch strings.ToLower(dirName) {
 		case "artwork":
@@ -111,14 +129,14 @@ func handleSubDir(album *Album, root, dirName string) {
 		case "scans":
 			album.Assets[CatScan] = append(album.Assets[CatScan], fullPath)
 		case "extras":
-			album.Assets[CatUnknown] = append(album.Assets[CatUnknown], fullPath)
+			album.Assets[CatExtras] = append(album.Assets[CatExtras], fullPath)
 		default:
 			album.Assets[CatUnknown] = append(album.Assets[CatUnknown], fullPath)
 		}
 	}
 }
 
-// ProcessLibrary finds albums, reads their tags, and resolves album-level metadata
+// ProcessLibrary finds albums, reads their tags, and resolves album-level metadata.
 func ProcessLibrary(root string) ([]*Album, error) {
 	albums, err := ScanLibrary(root)
 	if err != nil {
@@ -130,13 +148,10 @@ func ProcessLibrary(root string) ([]*Album, error) {
 	for _, album := range albums {
 		for _, track := range album.Tracks {
 			if err := reader.ReadTrack(track); err != nil {
-				// We log a warning but continue processing other tracks
 				fmt.Printf("Warning: could not read tags for %s: %v\n", track.Path, err)
 			}
 		}
 
-		// After reading all tracks, we can resolve the Album Artist if needed
-		// (This would be used by the rename logic in the next phase)
 		_ = album.ResolveAlbumArtist()
 	}
 

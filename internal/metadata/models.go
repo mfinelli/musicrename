@@ -17,18 +17,20 @@
 
 package metadata
 
-// FileCategory defines the type of file encountered
+// FileCategory defines the type of file encountered during library scanning.
 type FileCategory string
 
 const (
-	CatAudio    FileCategory = "Audio"
-	CatRootText FileCategory = "RootText"
-	CatArtwork  FileCategory = "Artwork"
-	CatScan     FileCategory = "Scan"
-	CatUnknown  FileCategory = "Unknown"
+	CatAudio      FileCategory = "Audio"
+	CatRootText   FileCategory = "RootText"   // .log, .cue, .m3u, .m3u8, .txt, sums.md5
+	CatPrimaryArt FileCategory = "PrimaryArt" // folder.jpg / folder.jpeg / folder.png
+	CatArtwork    FileCategory = "Artwork"    // other images at root or in artwork/
+	CatScan       FileCategory = "Scan"       // .tiff / .tif, typically in scans/
+	CatExtras     FileCategory = "Extras"     // files in extras/
+	CatUnknown    FileCategory = "Unknown"    // anything that doesn't fit the above
 )
 
-// Track represents a single audio file and its extracted metadata
+// Track represents a single audio file and its extracted metadata.
 type Track struct {
 	Path        string
 	Artist      string
@@ -40,11 +42,11 @@ type Track struct {
 	DiscNumber  int
 }
 
-// Album represents a directory containing a collection of music and assets
+// Album represents a directory containing a collection of music and assets.
 type Album struct {
 	RootPath string
 	Tracks   []*Track
-	Assets   map[FileCategory][]string // Maps category to list of file paths
+	Assets   map[FileCategory][]string // maps category to list of absolute file paths
 }
 
 func NewAlbum(path string) *Album {

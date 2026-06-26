@@ -25,29 +25,28 @@ import (
 	"go.senan.xyz/taglib"
 )
 
-// Reader handles the extraction of metadata from audio files
+// Reader handles the extraction of metadata from audio files.
 type Reader struct{}
 
 func NewReader() *Reader {
 	return &Reader{}
 }
 
-// ReadTrack extracts metadata from a single file and populates a Track object
+// ReadTrack extracts metadata from a single file and populates a Track object.
 func (r *Reader) ReadTrack(t *Track) error {
-	// Use OpenReadOnly as established
 	file, err := taglib.OpenReadOnly(t.Path)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
-	// The WASM implementation returns a map of all tags
+	// The library uses a WASM implementation that returns a map of all tags.
 	tags := file.Tags()
 	if tags == nil {
 		return fmt.Errorf("no tags found in file")
 	}
 
-	// Helper to get the first value of a tag if it exists
+	// Helper to get the first value of a tag if it exists.
 	getFirst := func(key string) string {
 		if vals, ok := tags[key]; ok && len(vals) > 0 {
 			return vals[0]
@@ -55,14 +54,13 @@ func (r *Reader) ReadTrack(t *Track) error {
 		return ""
 	}
 
-	// Map the standardized constants from the library to our struct
 	t.Title = getFirst(taglib.Title)
 	t.Artist = getFirst(taglib.Artist)
 	t.Album = getFirst(taglib.Album)
-	t.Year = getFirst(taglib.Date) // Use Date for Year
+	t.Year = getFirst(taglib.Date)
 	t.AlbumArtist = getFirst(taglib.AlbumArtist)
 
-	// Track Number: comes as a string in the map, needs conversion to int
+	// TrackNumber and DiscNumber are stored as strings in the tag map.
 	trackStr := getFirst(taglib.TrackNumber)
 	if trackStr != "" {
 		if val, err := strconv.Atoi(trackStr); err == nil {
@@ -70,7 +68,6 @@ func (r *Reader) ReadTrack(t *Track) error {
 		}
 	}
 
-	// Disc Number: comes as a string in the map, needs conversion to int
 	discStr := getFirst(taglib.DiscNumber)
 	if discStr != "" {
 		if val, err := strconv.Atoi(discStr); err == nil {
@@ -81,36 +78,48 @@ func (r *Reader) ReadTrack(t *Track) error {
 	return nil
 }
 
-// ResolveAlbumArtist implements the fallback logic for the album's primary artist
+// ResolveAlbumArtist returns the album-level artist using the following precedence:
+//  1. The AlbumArtist tag from any track (all tracks share the same value when present).
+//  2. The Artist tag of the track with the lowest positive TrackNumber. If that
+//     track has an empty Artist, the next lowest-numbered track with a non-empty
+//     Artist is used instead.
+//  3. If no track has a positive TrackNumber, the Artist of the first track in
+//     slice order that has a non-empty Artist is returned as a last resort.
+//
+// The method never mutates the album's Tracks slice.
 func (a *Album) ResolveAlbumArtist() string {
 	if len(a.Tracks) == 0 {
 		return ""
 	}
 
-	// 1. Check if any track has an AlbumArtist set
-	// We check all tracks because some might be missing it while others have it
+	// 1. Any track with an AlbumArtist tag wins immediately.
 	for _, t := range a.Tracks {
 		if t.AlbumArtist != "" {
 			return t.AlbumArtist
 		}
 	}
 
-	// 2. Fallback: Artist of the track with the lowest track number
-	// We need to sort tracks by number first to be sure
-	sort.Slice(a.Tracks, func(i, j int) bool {
-		return a.Tracks[i].TrackNumber < a.Tracks[j].TrackNumber
+	// 2. Sort a copy by TrackNumber so the original slice order is preserved.
+	// SliceStable ensures that tracks with equal numbers (including all-zero)
+	// keep their original relative order, making the result deterministic.
+	sorted := make([]*Track, len(a.Tracks))
+	copy(sorted, a.Tracks)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].TrackNumber < sorted[j].TrackNumber
 	})
 
-	// Find the first track that actually has a track number and an artist
-	for _, t := range a.Tracks {
+	for _, t := range sorted {
 		if t.TrackNumber > 0 && t.Artist != "" {
 			return t.Artist
 		}
 	}
 
-	// 3. Last resort: Just return the artist of the first track in the slice
-	if len(a.Tracks) > 0 && a.Tracks[0].Artist != "" {
-		return a.Tracks[0].Artist
+	// 3. No track has a positive TrackNumber. Fall back to the first track in
+	// the original slice order that has any Artist set.
+	for _, t := range a.Tracks {
+		if t.Artist != "" {
+			return t.Artist
+		}
 	}
 
 	return ""

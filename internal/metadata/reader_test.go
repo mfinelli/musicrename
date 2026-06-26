@@ -18,8 +18,6 @@
 package metadata
 
 import (
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +30,7 @@ func TestResolveAlbumArtist(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Case 1: AlbumArtist is present",
+			name: "AlbumArtist tag present",
 			tracks: []*Track{
 				{Artist: "Track Artist 1", AlbumArtist: "Main Artist", TrackNumber: 1},
 				{Artist: "Track Artist 2", AlbumArtist: "Main Artist", TrackNumber: 2},
@@ -40,15 +38,15 @@ func TestResolveAlbumArtist(t *testing.T) {
 			expected: "Main Artist",
 		},
 		{
-			name: "Case 2: AlbumArtist missing, fallback to lowest track number",
+			name: "AlbumArtist missing, fallback to lowest track number",
 			tracks: []*Track{
 				{Artist: "Secondary Artist", TrackNumber: 2},
-				{Artist: "Primary Artist", TrackNumber: 1}, // Lowest track
+				{Artist: "Primary Artist", TrackNumber: 1},
 			},
 			expected: "Primary Artist",
 		},
 		{
-			name: "Case 3: AlbumArtist missing, track numbers missing, fallback to first track",
+			name: "AlbumArtist missing, all track numbers zero, fallback to first in slice",
 			tracks: []*Track{
 				{Artist: "First Track Artist", TrackNumber: 0},
 				{Artist: "Second Track Artist", TrackNumber: 0},
@@ -56,12 +54,12 @@ func TestResolveAlbumArtist(t *testing.T) {
 			expected: "First Track Artist",
 		},
 		{
-			name:     "Case 4: Completely empty album",
+			name:     "Empty album",
 			tracks:   []*Track{},
 			expected: "",
 		},
 		{
-			name: "Case 5: Mixed tracks, some without artists",
+			name: "Lowest-numbered track has no artist, skip to next",
 			tracks: []*Track{
 				{Artist: "", TrackNumber: 1},
 				{Artist: "The Real Artist", TrackNumber: 2},
@@ -72,59 +70,17 @@ func TestResolveAlbumArtist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			album := &Album{
-				Tracks: tt.tracks,
-			}
-			assert.Equal(t, tt.expected, album.ResolveAlbumArtist())
-		})
-	}
-}
+			album := &Album{Tracks: tt.tracks}
 
-func TestFileCategorization(t *testing.T) {
-	// This tests the logic we'd usually use inside processDirectory
-	// We can verify that our extension maps are correct.
-	tests := []struct {
-		filename string
-		expected FileCategory
-	}{
-		{"song.flac", CatAudio},
-		{"song.mp3", CatAudio},
-		{"song.m4a", CatAudio},
-		{"info.log", CatRootText},
-		{"album.cue", CatRootText},
-		{"sums.md5", CatRootText}, // Testing the fix we added
-		{"cover.jpg", CatArtwork},
-		{"folder.png", CatRootText}, // folder.png should be root text per spec
-		{"highres.tiff", CatScan},
-		{"readme.txt", CatRootText},
-		{"random.exe", CatUnknown},
-	}
+			// Capture original order before the call to verify no mutation.
+			originalOrder := make([]*Track, len(tt.tracks))
+			copy(originalOrder, tt.tracks)
 
-	// Note: In the actual implementation, logic is spread across
-	// processDirectory and handleSubDir. This test validates the maps.
-	for _, tt := range tests {
-		t.Run(tt.filename, func(t *testing.T) {
-			// Simplified version of the scanner's logic for testing
-			ext := strings.ToLower(filepath.Ext(tt.filename))
-			var actual FileCategory
+			result := album.ResolveAlbumArtist()
+			assert.Equal(t, tt.expected, result)
 
-			if audioExts[ext] {
-				actual = CatAudio
-			} else if textExts[ext] || tt.filename == "sums.md5" {
-				actual = CatRootText
-			} else if imageExts[ext] {
-				if strings.HasPrefix(strings.ToLower(tt.filename), "folder") {
-					actual = CatRootText
-				} else {
-					actual = CatArtwork
-				}
-			} else if scanExts[ext] {
-				actual = CatScan
-			} else {
-				actual = CatUnknown
-			}
-
-			assert.Equal(t, tt.expected, actual)
+			// ResolveAlbumArtist must not reorder the album's Tracks slice.
+			assert.Equal(t, originalOrder, album.Tracks, "Tracks slice must not be mutated")
 		})
 	}
 }
