@@ -67,9 +67,11 @@ type Track struct {
 	// Album is the value of the ALBUM tag.
 	Album string
 
-	// Year is the value of the DATE tag, used verbatim as the year prefix in
-	// album directory names. Empty string if the tag is absent; no validity
-	// check is applied (malformed values such as "0000" are passed through).
+	// Year is the four-character year component extracted from the DATE tag.
+	// MusicBrainz and other taggers often store a full ISO-8601 date
+	// (e.g. "2003-01-14" or "2003-01"); only the year portion is retained.
+	// Empty string if the tag is absent. No validity check is applied
+	// (malformed values such as "0000" are passed through as-is).
 	Year string
 
 	// Title is the value of the TITLE tag. Falls back to the original filename

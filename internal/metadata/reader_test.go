@@ -108,6 +108,28 @@ func TestReadTrack(t *testing.T) {
 		assert.Equal(t, 1, track.DiscNumber)
 	})
 
+	t.Run("full ISO-8601 date is trimmed to year", func(t *testing.T) {
+		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":  "Dated Track",
+			"ARTIST": "Test Artist",
+			"DATE":   "2003-01-14",
+		})
+		track := &Track{Path: path}
+		require.NoError(t, r.ReadTrack(track))
+		assert.Equal(t, "2003", track.Year)
+	})
+
+	t.Run("year-month date is trimmed to year", func(t *testing.T) {
+		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":  "Dated Track",
+			"ARTIST": "Test Artist",
+			"DATE":   "2003-01",
+		})
+		track := &Track{Path: path}
+		require.NoError(t, r.ReadTrack(track))
+		assert.Equal(t, "2003", track.Year)
+	})
+
 	t.Run("absent optional tags leave zero values", func(t *testing.T) {
 		// Only TITLE and ARTIST set; everything else should remain at zero.
 		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{

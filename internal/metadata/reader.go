@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"go.senan.xyz/taglib"
 )
@@ -60,8 +61,14 @@ func (r *Reader) ReadTrack(t *Track) error {
 	t.Title = getFirst(taglib.Title)
 	t.Artist = getFirst(taglib.Artist)
 	t.Album = getFirst(taglib.Album)
-	t.Year = getFirst(taglib.Date)
 	t.AlbumArtist = getFirst(taglib.AlbumArtist)
+
+	// MusicBrainz commonly stores full ISO-8601 dates in the DATE tag
+	// (e.g. "2003-01-14" or "2003-01"). Extract only the four-character year
+	// component for use in directory names; the rest is discarded.
+	if raw := getFirst(taglib.Date); raw != "" {
+		t.Year = strings.SplitN(raw, "-", 2)[0]
+	}
 
 	// TrackNumber and DiscNumber are stored as strings in the tag map.
 	trackStr := getFirst(taglib.TrackNumber)

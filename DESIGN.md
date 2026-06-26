@@ -112,9 +112,12 @@ The tool emits a warning for each missing tag and falls back as follows:
 | `TRACKNUMBER`                | Sort the file alphabetically among its untracked peers       | Warning  |
 | `ARTIST` _and_ `ALBUMARTIST` | Skip the file; cannot construct a valid path                 | Error    |
 
-Year values are used verbatim with no validity check. The library is
-curator-managed, so malformed values (e.g. `0000`) are considered a data entry
-issue to fix at the source, not something the tool guards against.
+The `DATE` tag may contain a full ISO-8601 date (e.g. `2003-01-14`) or a
+year-month value (e.g. `2003-01`), as is common with MusicBrainz-sourced tags.
+Only the four-character year component is extracted and used as the folder
+prefix; the rest is discarded. No validity check is applied on the extracted
+year; malformed values (e.g. `0000`) are considered a data entry issue to fix
+at the source, not something the tool guards against.
 
 #### Disc Number Handling
 
