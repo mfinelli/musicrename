@@ -38,6 +38,10 @@ type MoveOperation struct {
 type AlbumPlan struct {
 	AlbumArtist string
 	AlbumName   string
+	// SourceDir is the absolute path of the source album directory (i.e.
+	// album.RootPath). It is used by the display layer to show the source
+	// location once per album rather than repeating it on every move line.
+	SourceDir string
 	// DestDir is the absolute path of the target album directory. It allows
 	// callers to compute file-relative paths (e.g. for display) without
 	// re-deriving the directory from the move operations.
@@ -163,6 +167,7 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 	albumPlan := &AlbumPlan{
 		AlbumArtist: truncArtist,
 		AlbumName:   albumFolderName,
+		SourceDir:   album.RootPath,
 		DestDir:     fullAlbumDir,
 		Moves:       []MoveOperation{},
 		Warnings:    []string{},

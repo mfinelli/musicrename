@@ -614,6 +614,19 @@ func TestPlanLibrary_DestDir(t *testing.T) {
 		)
 	})
 
+	t.Run("SourceDir is set to the album root path", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src/beyonce", "Beyoncé", []*metadata.Track{
+			{Path: "/src/beyonce/01.flac", Title: "Track", Album: "Lemonade", Year: "2016", TrackNumber: new(1)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+		require.Len(t, plan.Albums, 1)
+
+		assert.Equal(t, "/src/beyonce", plan.Albums[0].SourceDir)
+	})
+
 	t.Run("DestDir allows correct relative path computation for subdirectory assets", func(t *testing.T) {
 		lib := t.TempDir()
 		album := makeAlbum("/src", "Artist", []*metadata.Track{
