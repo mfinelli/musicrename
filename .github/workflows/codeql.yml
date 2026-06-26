@@ -17,6 +17,7 @@ jobs:
       security-events: write
 
     steps:
+      - run: sudo apt-get install -y libtag2
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
@@ -24,6 +25,5 @@ jobs:
       - uses: github/codeql-action/init@v4
         with:
           languages: go
-
       - uses: github/codeql-action/autobuild@v4
       - uses: github/codeql-action/analyze@v4

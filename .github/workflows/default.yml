@@ -10,6 +10,7 @@ jobs:
   main:
     runs-on: ubuntu-latest
     steps:
+      - run: sudo apt-get install -y libtag2
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
