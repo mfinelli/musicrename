@@ -156,7 +156,11 @@ func handleSubDir(album *Album, root, dirName string) {
 	}
 }
 
-// ProcessLibrary finds albums, reads their tags, and resolves album-level metadata.
+// ProcessLibrary finds albums, reads their tags, and resolves album-level
+// metadata. After this call, each Album's ResolvedArtist field is populated.
+// Albums for which no artist can be determined are retained in the returned
+// slice with an empty ResolvedArtist and a warning logged; the planner is
+// responsible for skipping or erroring on them.
 func ProcessLibrary(root string) ([]*Album, error) {
 	albums, err := ScanLibrary(root)
 	if err != nil {
@@ -172,7 +176,10 @@ func ProcessLibrary(root string) ([]*Album, error) {
 			}
 		}
 
-		_ = album.ResolveAlbumArtist()
+		album.ResolvedArtist = album.ResolveAlbumArtist()
+		if album.ResolvedArtist == "" {
+			fmt.Printf("Warning: could not resolve artist for album at %s; it will be skipped\n", album.RootPath)
+		}
 	}
 
 	return albums, nil

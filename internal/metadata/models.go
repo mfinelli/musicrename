@@ -74,13 +74,14 @@ type Track struct {
 	// (malformed values such as "0000" are passed through as-is).
 	Year string
 
-	// Title is the value of the TITLE tag. Falls back to the original filename
-	// stem (passed through the sanitization pipeline) when the tag is absent.
+	// Title is the value of the TITLE tag. Empty string if the tag is absent;
+	// the planner is responsible for applying the filename-stem fallback.
 	Title string
 
-	// TrackNumber is the TRACKNUMBER tag parsed as a positive integer.
-	// Zero means the tag was absent or could not be parsed.
-	TrackNumber int
+	// TrackNumber is the TRACKNUMBER tag parsed as a non-negative integer.
+	// Nil means the tag was absent or could not be parsed. Zero is a valid
+	// value representing a hidden track (e.g. a pre-gap track on a CD).
+	TrackNumber *int
 
 	// DiscNumber is the DISCNUMBER tag parsed as a positive integer.
 	// Zero means the tag was absent or could not be parsed.
@@ -100,6 +101,12 @@ type Album struct {
 	// present in the map when at least one file of that category was found.
 	// All paths are absolute.
 	Assets map[FileCategory][]string
+
+	// ResolvedArtist is the canonical album-level artist name, populated by
+	// ProcessLibrary via ResolveAlbumArtist. Empty string means no artist
+	// could be determined from any track; callers that require an artist
+	// (e.g. the planner) should treat this as an error condition.
+	ResolvedArtist string
 }
 
 // NewAlbum returns an Album rooted at path with all internal maps and slices

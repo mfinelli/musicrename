@@ -104,7 +104,8 @@ func TestReadTrack(t *testing.T) {
 		assert.Equal(t, "Album Artist", track.AlbumArtist)
 		assert.Equal(t, "Test Album", track.Album)
 		assert.Equal(t, "2003", track.Year)
-		assert.Equal(t, 3, track.TrackNumber)
+		require.NotNil(t, track.TrackNumber)
+		assert.Equal(t, 3, *track.TrackNumber)
 		assert.Equal(t, 1, track.DiscNumber)
 	})
 
@@ -143,7 +144,7 @@ func TestReadTrack(t *testing.T) {
 		assert.Empty(t, track.AlbumArtist)
 		assert.Empty(t, track.Album)
 		assert.Empty(t, track.Year)
-		assert.Zero(t, track.TrackNumber)
+		assert.Nil(t, track.TrackNumber) // nil means tag was absent
 		assert.Zero(t, track.DiscNumber)
 	})
 
@@ -190,24 +191,27 @@ func TestResolveAlbumArtist(t *testing.T) {
 		{
 			name: "AlbumArtist tag present",
 			tracks: []*Track{
-				{Artist: "Track Artist 1", AlbumArtist: "Main Artist", TrackNumber: 1},
-				{Artist: "Track Artist 2", AlbumArtist: "Main Artist", TrackNumber: 2},
+				{Artist: "Track Artist 1", AlbumArtist: "Main Artist", TrackNumber: new(1)},
+				{Artist: "Track Artist 2", AlbumArtist: "Main Artist", TrackNumber: new(2)},
 			},
 			expected: "Main Artist",
 		},
 		{
 			name: "AlbumArtist missing, fallback to lowest track number",
 			tracks: []*Track{
-				{Artist: "Secondary Artist", TrackNumber: 2},
-				{Artist: "Primary Artist", TrackNumber: 1},
+				{Artist: "Secondary Artist", TrackNumber: new(2)},
+				{Artist: "Primary Artist", TrackNumber: new(1)},
 			},
 			expected: "Primary Artist",
 		},
 		{
+			// All tracks carry TrackNumber=0 (hidden/pre-gap tracks). None
+			// qualify for the positive-track-number path so resolution falls
+			// back to the first track in slice order.
 			name: "AlbumArtist missing, all track numbers zero, fallback to first in slice",
 			tracks: []*Track{
-				{Artist: "First Track Artist", TrackNumber: 0},
-				{Artist: "Second Track Artist", TrackNumber: 0},
+				{Artist: "First Track Artist", TrackNumber: new(0)},
+				{Artist: "Second Track Artist", TrackNumber: new(0)},
 			},
 			expected: "First Track Artist",
 		},
@@ -219,10 +223,20 @@ func TestResolveAlbumArtist(t *testing.T) {
 		{
 			name: "Lowest-numbered track has no artist, skip to next",
 			tracks: []*Track{
-				{Artist: "", TrackNumber: 1},
-				{Artist: "The Real Artist", TrackNumber: 2},
+				{Artist: "", TrackNumber: new(1)},
+				{Artist: "The Real Artist", TrackNumber: new(2)},
 			},
 			expected: "The Real Artist",
+		},
+		{
+			// nil TrackNumber (tag absent) is treated the same as 0 for sort
+			// purposes and is skipped during the positive-track-number pass.
+			name: "Tracks with nil TrackNumber fall back to slice order",
+			tracks: []*Track{
+				{Artist: "First Artist", TrackNumber: nil},
+				{Artist: "Second Artist", TrackNumber: nil},
+			},
+			expected: "First Artist",
 		},
 	}
 
@@ -268,7 +282,7 @@ func TestProcessLibrary(t *testing.T) {
 			assert.Equal(t, "Test Album", tr.Album)
 			assert.Equal(t, "2003", tr.Year)
 			assert.NotEmpty(t, tr.Title)
-			assert.NotZero(t, tr.TrackNumber)
+			assert.NotNil(t, tr.TrackNumber) // tag was present
 		}
 	})
 
@@ -282,7 +296,8 @@ func TestProcessLibrary(t *testing.T) {
 		albums, err := ProcessLibrary(root)
 		require.NoError(t, err)
 		require.Len(t, albums, 1)
-		assert.Equal(t, "The Artist", albums[0].ResolveAlbumArtist())
+		// ResolvedArtist is populated by ProcessLibrary via ResolveAlbumArtist.
+		assert.Equal(t, "The Artist", albums[0].ResolvedArtist)
 	})
 
 	t.Run("unreadable track is skipped but album still returned", func(t *testing.T) {

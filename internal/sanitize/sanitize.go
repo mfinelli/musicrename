@@ -146,15 +146,23 @@ func Truncate(name string, limit int) string {
 	return string(runes[:limit])
 }
 
-// TruncateWithOffset calculates a dynamic truncation limit based on the length
-// of a directory name and subtracts an additional character to account for the
-// path separator (/). This ensures the full relative path length (e.g.,
-// "artwork/filename.flac") stays within maxLimit characters in sums.md5.
+// TruncateWithOffset calculates a dynamic truncation limit based on the rune
+// length of a directory name and subtracts an additional character to account
+// for the path separator (/). This ensures the full relative path length
+// (e.g., "artwork/filename.flac") stays within maxLimit characters in
+// sums.md5.
 //
-// maxLimit: The total allowable length for the full relative path segment.
+// maxLimit: The base character limit for filenames (e.g. 40).
 // dirName: The name of the parent directory (e.g., "artwork", "scans").
+//
+// The effective limit for the filename stem is: maxLimit - len(dirName) - 1.
+// For example, with maxLimit=40 and dirName="artwork" (7 runes), the stem
+// may be at most 32 characters.
+//
+// Note: dirName is measured in runes for consistency with Truncate, though in
+// practice all subdirectory names ("artwork", "scans", "extras") are ASCII.
 func TruncateWithOffset(name string, dirName string, maxLimit int) string {
-	limit := maxLimit - len(dirName) - 1 // -1 for the path separator
+	limit := maxLimit - utf8.RuneCountInString(dirName) - 1
 	if limit < 0 {
 		limit = 0
 	}

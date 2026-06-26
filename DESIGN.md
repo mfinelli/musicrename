@@ -38,8 +38,8 @@ directories: `/[First Letter of Artist]/[Artist]/[Year] [Album Name]/`
 
 **Examples:**
 
-- `b/beyonce/2003 dangerously in love/`
-- `0/2pac/1996 all eyez on me/`
+- `b/beyonce/[2003] dangerously in love/`
+- `0/2pac/[1996] all eyez on me/`
 - `b/beyonce/lemonade/` _(year tag missing)_
 
 **Album Folder Contents:**
@@ -94,7 +94,9 @@ through this sequence:
 - **Source of Truth:** Internal tags (FLAC/Vorbis Comments, ID3, M4A atoms),
   read via `github.com/deluan/go-taglib`, which normalizes tag names across
   formats. `TRACKNUMBER` is expected to be a single integer (not `track/total`
-  form); the library is curator-managed.
+  form); the library is curator-managed. A `TRACKNUMBER` value of `0` is valid
+  and represents a pre-gap or hidden track; it is stored distinctly from an
+  absent tag.
 - **Album Grouping:** Each source folder is treated as one album. Files are not
   grouped globally by tag values.
 - **Compilation Handling:** Use the `ALBUMARTIST` tag for the directory
@@ -116,8 +118,8 @@ The `DATE` tag may contain a full ISO-8601 date (e.g. `2003-01-14`) or a
 year-month value (e.g. `2003-01`), as is common with MusicBrainz-sourced tags.
 Only the four-character year component is extracted and used as the folder
 prefix; the rest is discarded. No validity check is applied on the extracted
-year; malformed values (e.g. `0000`) are considered a data entry issue to fix
-at the source, not something the tool guards against.
+year; malformed values (e.g. `0000`) are considered a data entry issue to fix at
+the source, not something the tool guards against.
 
 #### Disc Number Handling
 
@@ -178,8 +180,9 @@ intended workflow for a full library update is:
 
 1. **Scan Phase:**
       - Recursively locate music files.
-      - Identify "unknown" files (files that don't fit known categories) and log
-        a warning.
+      - Identify "unknown" files (files that don't fit known categories), log a
+        warning, and leave them in place. Unknown files are never moved by the
+        tool.
 
 2. **Analysis Phase:**
       - Read tags -> Apply Sanitization Pipeline -> Determine destination path.
@@ -188,7 +191,8 @@ intended workflow for a full library update is:
       - Calculate necessary directory creations.
       - Verify if `oldPath == newPath` (case-insensitive) to skip no-op moves.
       - Detect sanitization collisions (two source files resolving to the same
-        destination path). On collision: skip both files and emit an error.
+        destination path). On the first collision detected: abort the entire run
+        with an error.
       - **Overwrite safety:** Check all planned destination paths against the
         filesystem. If any destination file already exists, **abort the entire
         run** and list every conflict. The run is all-or-nothing; no files are
@@ -271,6 +275,10 @@ Disc:         —
   file).
 - **Primary target:** Linux (case-sensitive filesystem). macOS is supported but
   is a secondary target.
+- **Album artist resolution:** `ProcessLibrary` calls `ResolveAlbumArtist()` on
+  each album and stores the result in `Album.ResolvedArtist`. Callers (the
+  planner, `inspect`, `check`) read this field directly and do not need to
+  invoke `ResolveAlbumArtist()` themselves.
 
 ### Key Dependencies
 

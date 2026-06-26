@@ -70,11 +70,12 @@ func (r *Reader) ReadTrack(t *Track) error {
 		t.Year = strings.SplitN(raw, "-", 2)[0]
 	}
 
-	// TrackNumber and DiscNumber are stored as strings in the tag map.
+	// TrackNumber is a pointer to distinguish "absent" (nil) from the valid
+	// value zero, which represents a hidden/pre-gap track.
 	trackStr := getFirst(taglib.TrackNumber)
 	if trackStr != "" {
 		if val, err := strconv.Atoi(trackStr); err == nil {
-			t.TrackNumber = val
+			t.TrackNumber = &val
 		}
 	}
 
@@ -90,9 +91,10 @@ func (r *Reader) ReadTrack(t *Track) error {
 
 // ResolveAlbumArtist returns the album-level artist using the following precedence:
 //  1. The AlbumArtist tag from any track (all tracks share the same value when present).
-//  2. The Artist tag of the track with the lowest positive TrackNumber. If that
-//     track has an empty Artist, the next lowest-numbered track with a non-empty
-//     Artist is used instead.
+//  2. The Artist tag of the track with the lowest positive TrackNumber. Tracks
+//     with a nil TrackNumber (tag absent) or a zero TrackNumber (hidden track)
+//     are skipped at this step. If the lowest-numbered track has an empty
+//     Artist, the next lowest-numbered track with a non-empty Artist is used.
 //  3. If no track has a positive TrackNumber, the Artist of the first track in
 //     slice order that has a non-empty Artist is returned as a last resort.
 //
@@ -110,16 +112,24 @@ func (a *Album) ResolveAlbumArtist() string {
 	}
 
 	// 2. Sort a copy by TrackNumber so the original slice order is preserved.
-	// SliceStable ensures that tracks with equal numbers (including all-zero)
-	// keep their original relative order, making the result deterministic.
+	// Nil (absent) and zero (hidden track) both sort before positive track
+	// numbers and are skipped in the loop below. SliceStable ensures that
+	// tracks with equal numbers keep their original relative order.
 	sorted := make([]*Track, len(a.Tracks))
 	copy(sorted, a.Tracks)
 	sort.SliceStable(sorted, func(i, j int) bool {
-		return sorted[i].TrackNumber < sorted[j].TrackNumber
+		ni, nj := 0, 0
+		if sorted[i].TrackNumber != nil {
+			ni = *sorted[i].TrackNumber
+		}
+		if sorted[j].TrackNumber != nil {
+			nj = *sorted[j].TrackNumber
+		}
+		return ni < nj
 	})
 
 	for _, t := range sorted {
-		if t.TrackNumber > 0 && t.Artist != "" {
+		if t.TrackNumber != nil && *t.TrackNumber > 0 && t.Artist != "" {
 			return t.Artist
 		}
 	}
