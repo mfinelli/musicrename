@@ -101,6 +101,15 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	trackNum := getFirst(taglib.TrackNumber)
 	discNum := getFirst(taglib.DiscNumber)
 
+	var syncedLyrics, unsyncedLyrics string
+	switch ext {
+	case ".flac":
+		syncedLyrics = getFirst(taglib.Lyrics)
+		unsyncedLyrics = getFirst("UNSYNCEDLYRICS")
+	default: // .mp3, .m4a: plain text is stored in the LYRICS tag
+		unsyncedLyrics = getFirst(taglib.Lyrics)
+	}
+
 	// Extract the four-character year from a potentially full ISO-8601 date.
 	year := ""
 	if rawDate != "" {
@@ -143,6 +152,12 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	inspectPrintField(out, "Year", yearDisplay)
 	inspectPrintField(out, "Track", inspectDash(trackNum))
 	inspectPrintField(out, "Disc", inspectDash(discNum))
+	fmt.Fprintln(out)
+
+	if ext == ".flac" {
+		inspectPrintField(out, "Synced", inspectLyricsPreview(syncedLyrics))
+	}
+	inspectPrintField(out, "Unsynced", inspectLyricsPreview(unsyncedLyrics))
 
 	return nil
 }
@@ -189,4 +204,25 @@ func inspectDash(s string) string {
 		return "—"
 	}
 	return s
+}
+
+// inspectLyricsPreview returns a truncated first content line from a lyrics
+// string, or "—" if the string is empty. Up to 50 runes of the first
+// non-empty line are shown; longer lines are suffixed with "…".
+func inspectLyricsPreview(s string) string {
+	if s == "" {
+		return "—"
+	}
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		runes := []rune(line)
+		if len(runes) > 50 {
+			return string(runes[:50]) + "…"
+		}
+		return line
+	}
+	return "—"
 }
