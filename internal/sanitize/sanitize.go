@@ -162,10 +162,7 @@ func Truncate(name string, limit int) string {
 // Note: dirName is measured in runes for consistency with Truncate, though in
 // practice all subdirectory names ("artwork", "scans", "extras") are ASCII.
 func TruncateWithOffset(name string, dirName string, maxLimit int) string {
-	limit := maxLimit - utf8.RuneCountInString(dirName) - 1
-	if limit < 0 {
-		limit = 0
-	}
+	limit := max(maxLimit-utf8.RuneCountInString(dirName)-1, 0)
 	return Truncate(name, limit)
 }
 
