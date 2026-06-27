@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -30,13 +32,16 @@ import (
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
 
-// inspectLabelWidth is the column at which tag values begin. It is wide enough
-// to accommodate the longest label ("Album Artist:") plus one space.
+// inspectLabelWidth is the column at which tag values begin, measured in
+// runes. Wide enough for "Album Artist:" (12 chars) plus one space.
 const inspectLabelWidth = 14
 
-// inspectFaintStyle renders text in a dim/faint style for the sanitized value
-// lines shown beneath each raw tag field.
-var inspectFaintStyle = lipgloss.NewStyle().Faint(true)
+// Lipgloss styles for inspect output.
+var (
+	inspectFaintStyle    = lipgloss.NewStyle().Faint(true)
+	inspectBoldStyle     = lipgloss.NewStyle().Bold(true)
+	inspectFilenameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6")) // cyan, matches renameAlbumStyle
+)
 
 var inspectCmd = &cobra.Command{
 	Use:   "inspect <file>",
@@ -110,22 +115,30 @@ func runInspect(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 
-	// header
-	formatLabel := strings.ToUpper(strings.TrimPrefix(ext, "."))
-	inspectPrintField(out, "File", fmt.Sprintf("%s  (%s)", filepath.Base(path), formatLabel))
+	// Header.
+	fmt.Fprintln(out, renameHeaderStyle.Render("Inspecting..."))
 	fmt.Fprintln(out)
 
-	// text metadata
+	// File line: cyan filename + faint format badge, indented.
+	formatLabel := strings.ToUpper(strings.TrimPrefix(ext, "."))
+	fmt.Fprintln(out,
+		"  "+
+			inspectFilenameStyle.Render(filepath.Base(path))+
+			"  "+
+			inspectFaintStyle.Render(formatLabel),
+	)
+	fmt.Fprintln(out)
+
+	// Metadata fields, indented two spaces.
 	inspectPrintTagField(out, "Title", title, cleanTitle)
 	inspectPrintTagField(out, "Artist", artist, cleanArtist)
 	inspectPrintTagField(out, "Album Artist", albumArtist, cleanAlbumArtist)
 	inspectPrintTagField(out, "Album", album, cleanAlbum)
 	fmt.Fprintln(out)
 
-	// other metadata
 	yearDisplay := inspectDash(year)
 	if rawDate != "" && rawDate != year {
-		yearDisplay = fmt.Sprintf("%s  (DATE: %q)", year, rawDate)
+		yearDisplay = fmt.Sprintf("%s  %s", year, inspectFaintStyle.Render("(DATE: "+strconv.Quote(rawDate)+")"))
 	}
 	inspectPrintField(out, "Year", yearDisplay)
 	inspectPrintField(out, "Track", inspectDash(trackNum))
@@ -134,8 +147,8 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// inspectPrintTagField prints a raw tag value and, when the value is non-empty,
-// a dim second line showing its sanitized equivalent.
+// inspectPrintTagField prints a bold label + raw value line and, when the
+// value is non-empty, a faint sanitized line beneath it.
 func inspectPrintTagField(out io.Writer, label, raw string, clean sanitize.Result) {
 	inspectPrintField(out, label, inspectDash(raw))
 	if raw != "" {
@@ -143,26 +156,31 @@ func inspectPrintTagField(out io.Writer, label, raw string, clean sanitize.Resul
 	}
 }
 
-// inspectPrintField writes a single label+value line, padding the label to
-// inspectLabelWidth so values align across all fields.
+// inspectPrintField writes "  Label:  value" with the label in bold. Because
+// lipgloss bold adds ANSI escape bytes that are not counted by %-*s, padding
+// is computed from the unstyled label length and applied manually.
 func inspectPrintField(out io.Writer, label, value string) {
-	fmt.Fprintf(out, "%-*s%s\n", inspectLabelWidth, label+":", value)
+	styled := inspectBoldStyle.Render(label + ":")
+	// Pad based on rune count of the plain label + colon so that ANSI bytes
+	// in the styled version don't throw off the column alignment.
+	plainWidth := utf8.RuneCountInString(label + ":")
+	pad := ""
+	if inspectLabelWidth > plainWidth {
+		pad = strings.Repeat(" ", inspectLabelWidth-plainWidth)
+	}
+	fmt.Fprintf(out, "  %s%s%s\n", styled, pad, value)
 }
 
-// inspectPrintSanitized writes the dim "↳ value  [manual override]" line that
-// appears beneath each text metadata field.
+// inspectPrintSanitized writes the faint "↳ value  [manual override]" line
+// beneath each text metadata field, aligned to the value column.
 func inspectPrintSanitized(out io.Writer, result sanitize.Result) {
-	indent := strings.Repeat(" ", inspectLabelWidth)
+	// Indent by 2 (global indent) + inspectLabelWidth to align with values.
+	indent := strings.Repeat(" ", 2+inspectLabelWidth)
 	line := "↳ " + result.Value
 	if result.ManualOverride {
 		line += "  [manual override]"
 	}
-	fmt.Fprintln(out, indent+inspectDim(line))
-}
-
-// inspectDim renders s in a faint/dim style using lipgloss.
-func inspectDim(s string) string {
-	return inspectFaintStyle.Render(s)
+	fmt.Fprintln(out, indent+inspectFaintStyle.Render(line))
 }
 
 // inspectDash returns s unchanged, or "—" if s is empty.
