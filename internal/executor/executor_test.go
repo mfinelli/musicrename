@@ -57,7 +57,7 @@ func TestExecute_BasicMoves(t *testing.T) {
 			}},
 		}
 
-		warnings, err := Execute(plan, root)
+		warnings, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assert.Empty(t, warnings)
 		assert.FileExists(t, dst)
@@ -82,7 +82,7 @@ func TestExecute_BasicMoves(t *testing.T) {
 			}},
 		}
 
-		warnings, err := Execute(plan, root)
+		warnings, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assert.Empty(t, warnings)
 		assert.FileExists(t, file)
@@ -110,7 +110,7 @@ func TestExecute_BasicMoves(t *testing.T) {
 			}},
 		}
 
-		warnings, err := Execute(plan, root)
+		warnings, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assert.Empty(t, warnings)
 		assert.FileExists(t, dst)
@@ -134,7 +134,7 @@ func TestExecute_BasicMoves(t *testing.T) {
 			}},
 		}
 
-		warnings, err := Execute(plan, root)
+		warnings, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assert.Empty(t, warnings)
 		assert.FileExists(t, dst)
@@ -158,7 +158,7 @@ func TestExecute_RaceCondition(t *testing.T) {
 			}},
 		}
 
-		warnings, err := Execute(plan, root)
+		warnings, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		require.Len(t, warnings, 1)
 		assert.Contains(t, warnings[0], dst)
@@ -187,7 +187,7 @@ func TestExecute_EmptyDirCleanup(t *testing.T) {
 			}},
 		}
 
-		_, err := Execute(plan, root)
+		_, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assertGone(t, srcDir)
 	})
@@ -208,7 +208,7 @@ func TestExecute_EmptyDirCleanup(t *testing.T) {
 			}},
 		}
 
-		_, err := Execute(plan, root)
+		_, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assertGone(t, srcDir)
 		assertGone(t, srcParent)
@@ -232,7 +232,7 @@ func TestExecute_EmptyDirCleanup(t *testing.T) {
 			}},
 		}
 
-		_, err := Execute(plan, root)
+		_, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assert.DirExists(t, srcDir)
 		assert.FileExists(t, leftover)
@@ -253,7 +253,7 @@ func TestExecute_EmptyDirCleanup(t *testing.T) {
 			}},
 		}
 
-		_, err := Execute(plan, root)
+		_, err := Execute(plan, root, nil)
 		require.NoError(t, err)
 		assert.DirExists(t, root)
 	})

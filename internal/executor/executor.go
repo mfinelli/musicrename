@@ -48,9 +48,11 @@ import (
 // Execute performs the filesystem changes defined in the Plan.
 // libraryRoot is used as the stopping point for empty-directory cleanup;
 // it must be the same value passed to planner.New.
+// progress is an optional callback invoked after each successful non-no-op
+// move; pass nil if progress reporting is not needed.
 // It returns a slice of warnings (e.g., race conditions) and a final error
 // if the process must abort.
-func Execute(plan *planner.Plan, libraryRoot string) ([]string, error) {
+func Execute(plan *planner.Plan, libraryRoot string, progress func(planner.MoveOperation)) ([]string, error) {
 	var warnings []string
 	touchedDirs := make(map[string]struct{})
 
@@ -101,6 +103,10 @@ func Execute(plan *planner.Plan, libraryRoot string) ([]string, error) {
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to move %s to %s: %w", op.OldPath, op.NewPath, err)
+			}
+
+			if progress != nil {
+				progress(op)
 			}
 		}
 	}

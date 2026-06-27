@@ -20,6 +20,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/executor"
@@ -106,9 +108,27 @@ func runRename(cmd *cobra.Command, args []string) error {
 	// what will be touched before the executor runs.
 	printRunPlan(out, plan)
 
-	execWarnings, err := executor.Execute(plan, absRoot)
+	// On an interactive terminal, print a \r progress line for each move so
+	// the user has live feedback during execution. On a non-TTY (redirected
+	// output, CI) the callback is nil and no progress is written.
+	var progress func(planner.MoveOperation)
+	if isatty.IsTerminal(os.Stdout.Fd()) {
+		progress = func(op planner.MoveOperation) {
+			// \r\033[K: carriage return + erase to end of line, so each
+			// filename overwrites the previous one cleanly regardless of length.
+			fmt.Fprintf(out, "\r\033[K  → %s", filepath.Base(op.NewPath))
+		}
+	}
+
+	execWarnings, err := executor.Execute(plan, absRoot, progress)
 	if err != nil {
 		return fmt.Errorf("executing moves: %w", err)
+	}
+
+	// Clear the progress line before printing the summary so it doesn't
+	// leave a stale filename on screen.
+	if progress != nil {
+		fmt.Fprint(out, "\r\033[K")
 	}
 
 	// Phase 2: surface all warnings (planner + executor) and the summary line.
