@@ -25,13 +25,22 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "mr",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "Normalize and organize a local music library",
+	Long: `musicrename is a CLI tool for normalizing a local music library into a
+consistent, sanitized directory hierarchy based on internal metadata tags.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+Files are organized as:
+  [first letter]/[artist]/[year] [album]/[track] [title].ext
+
+Artist, album, and title strings are transliterated to ASCII, lowercased, and
+stripped of non-alphanumeric characters before use.
+
+Intended workflow:
+  mr rename   # move files into place
+  mr lyrics   # fetch and embed lyrics
+  mr check    # audit the result
+  mr sums     # generate md5 checksums`,
+	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
 }
 
 func Execute() {
