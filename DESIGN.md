@@ -12,11 +12,10 @@ a strict, predictable, and sanitized hierarchy based on internal metadata tags.
   feel.
 - **Sanitization:** Remove non-ASCII characters and illegal filesystem
   characters.
-- **Platform Target:** Linux and macOS. Windows is not supported (no native
-  `md5sum`). On macOS, `md5sum` must be available (e.g. via Homebrew:
-  `brew install md5sha1sum`).
+- **Platform Target:** Linux and macOS. Windows is not supported.
 - **Integrity:** Generate `sums.md5` files for every album to track file
-  integrity via the system `md5sum` command.
+  integrity. Output is compatible with the system `md5sum` command for
+  verification.
 - **Auditing:** Ability to scan for library "misconfigurations" or unwanted
   attributes.
 - **Safety:** Provide a `--dry-run` mode to preview all filesystem changes.
@@ -140,21 +139,29 @@ an error. In practice this is unlikely since metadata is edited per-album.
 
 ### 3.4 MD5 Sum Generation
 
-The tool generates a `sums.md5` file in each album root by shelling out to the
-system `md5sum` command. This keeps the output fully compatible with `md5sum -c`
-for verification.
+The tool generates a `sums.md5` file in each album root by computing MD5 digests
+directly via Go's `crypto/md5` package. No external tool is required to produce
+the file; the output is formatted to be fully compatible with `md5sum -c` for
+verification on any system that has `md5sum` installed.
 
 - **Format:** Standard `md5sum` output.
      - Binary files (audio/images): `hash *filename` (asterisk prefix on name).
      - Text files (`.log`, `.cue`, `.m3u`, `.m3u8`, `.txt`): `hash  filename`
        (two-space prefix on name).
 - **Paths:** Filenames in `sums.md5` are relative to the album root (e.g.,
-  `artwork/cover.jpg`, `01 track one.flac`).
+  `artwork/cover.jpg`, `01 track one.flac`). Files are listed in sorted order
+  for a stable, diffable output across runs.
 - **Detection:** Text vs. binary classification is based on a predefined list of
   known text extensions (no magic-byte inspection).
 - **Exclusion:** `sums.md5` itself is never included in the checksum file.
-- **Scope:** The `sums` command operates on a single album root directory (not
-  the whole library). Running it against the library root is not supported.
+- **Scope:** The `sums` command auto-detects its operating mode by checking
+  whether the target directory directly contains audio files:
+     - **Single-album mode:** The target directory contains audio files. An
+       existing `sums.md5` is always an error unless `--force` is passed.
+     - **Library mode:** The target directory contains no audio files directly.
+       All album directories within it are processed recursively. Albums that
+       already have a `sums.md5` are silently skipped; `--force` regenerates
+       them all.
 
 ## 4. Architecture
 
@@ -162,13 +169,13 @@ for verification.
 
 The tool uses a command-based structure (via `spf13/cobra`):
 
-| Command                             | Description                                                                                                                                                                               |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `musicrename rename [library-root]` | Scans metadata, sanitizes, and moves files. Accepts an optional path argument (default: current directory). Use `--dry-run` to preview all planned moves without touching the filesystem. |
-| `musicrename sums`                  | Generates/updates `sums.md5` for the given album directory.                                                                                                                               |
-| `musicrename check`                 | Audits the library for misconfigurations; exits non-zero on findings.                                                                                                                     |
-| `musicrename inspect`               | Displays detected and sanitized metadata for a single audio file.                                                                                                                         |
-| `musicrename lyrics`                | _(Future)_ Fetches and embeds lyrics.                                                                                                                                                     |
+| Command                             | Description                                                                                                                                                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `musicrename rename [library-root]` | Scans metadata, sanitizes, and moves files. Accepts an optional path argument (default: current directory). Use `--dry-run` to preview all planned moves without touching the filesystem.                                            |
+| `musicrename sums [path]`           | Generates `sums.md5` for an album or library. Auto-detects mode: single-album if the path directly contains audio files, library otherwise. Defaults to the current directory. Use `--force` to overwrite existing `sums.md5` files. |
+| `musicrename check`                 | Audits the library for misconfigurations; exits non-zero on findings.                                                                                                                                                                |
+| `musicrename inspect`               | Displays detected and sanitized metadata for a single audio file.                                                                                                                                                                    |
+| `musicrename lyrics`                | _(Future)_ Fetches and embeds lyrics.                                                                                                                                                                                                |
 
 **Note on command independence:** `rename` does **not** generate `sums.md5`. The
 intended workflow for a full library update is:
@@ -217,10 +224,12 @@ intended workflow for a full library update is:
         pre-flight check and the actual move, skip that file with a warning
         rather than aborting the run.
       - **Empty directory cleanup:** After all moves, attempt to remove any
-        source directories that were touched and are now empty. This is
-        best-effort: failures are logged but do not affect exit status. Only
-        directories that the tool moved files out of are candidates; no other
-        directories are touched.
+        source directories that were touched and are now empty, bubbling upward
+        until a non-empty directory or the library root is reached. This is
+        best-effort: failures are logged but do not affect exit status.
+      - **Progress feedback:** On an interactive TTY, the current filename is
+        printed with `\r` so each update overwrites the previous line. On
+        non-TTY output (pipes, CI) no progress is written.
 
 ### 4.3 `check` Command
 
@@ -274,10 +283,14 @@ Disc:         —
 - **Filesystem moves:** `os.Rename` for same-device moves; copy-then-delete
   fallback for cross-device (`syscall.EXDEV`).
 - **Case-only renames:** Rename to a temp path first, then to the final
-  destination, to handle case-insensitive filesystems correctly.
-- **MD5 generation:** Shell out to `md5sum`; do not reimplement.
-- **Concurrency:** Worker pool for tag reading. MD5 generation delegates to
-  `md5sum` which handles its own I/O.
+  destination, to handle case-insensitive filesystems correctly. The temp path
+  uses a `UnixNano`-suffixed name in the same parent directory to guarantee it
+  stays on the same filesystem and avoid collisions.
+- **MD5 generation:** Computed via Go's `crypto/md5` package; no external tool
+  required. Output is formatted to be compatible with `md5sum -c` for
+  verification.
+- **Concurrency:** Worker pool for tag reading. MD5 generation is sequential,
+  with per-file progress reported via a callback.
 - **Manual overrides:** Hardcoded in the binary (small, stable set; no config
   file).
 - **Primary target:** Linux (case-sensitive filesystem). macOS is supported but
@@ -292,12 +305,18 @@ Disc:         —
   `AlbumPlan.Warnings` from this field and then appends its own planning-phase
   warnings (missing tags, unknown files). The display layer (e.g. `--dry-run`
   output) surfaces all warnings grouped together at the top of the output.
+- **Progress feedback:** Both `rename` and `sums` accept an optional
+  `func`-typed progress callback. The command layer passes a TTY-gated closure
+  that writes `\r`-overwriting lines; passing `nil` disables all progress output
+  (used in tests and non-TTY contexts). TTY detection uses
+  `github.com/mattn/go-isatty`.
 
 ### Key Dependencies
 
 | Package                                  | Purpose                                                                                   |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                          |
-| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename --dry-run`)                           |
+| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`)                             |
 | `github.com/deluan/go-taglib`            | Cross-format metadata reading (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
+| `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`)                                      |
 | `github.com/spf13/cobra`                 | CLI command management                                                                    |
