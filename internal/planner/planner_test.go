@@ -60,6 +60,75 @@ func TestNew(t *testing.T) {
 	assert.NotNil(t, p)
 }
 
+func TestPlanAlbum(t *testing.T) {
+	t.Run("produces same result as PlanLibrary for a single album", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src/beyonce", "Beyoncé", []*metadata.Track{
+			{
+				Path:        "/src/beyonce/01 crazy in love.flac",
+				Title:       "Crazy In Love",
+				Album:       "Dangerously In Love",
+				Year:        "2003",
+				TrackNumber: new(1),
+			},
+		}, nil)
+
+		viaLibrary, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+		require.Len(t, viaLibrary.Albums, 1)
+
+		viaAlbum, err := PlanAlbum(lib, album)
+		require.NoError(t, err)
+
+		// Both routes must agree on the album-level fields and moves.
+		assert.Equal(t, viaLibrary.Albums[0].AlbumArtist, viaAlbum.AlbumArtist)
+		assert.Equal(t, viaLibrary.Albums[0].AlbumName, viaAlbum.AlbumName)
+		assert.Equal(t, viaLibrary.Albums[0].DestDir, viaAlbum.DestDir)
+		assert.Equal(t, viaLibrary.Albums[0].SourceDir, viaAlbum.SourceDir)
+		require.Len(t, viaAlbum.Moves, len(viaLibrary.Albums[0].Moves))
+		assert.Equal(t, viaLibrary.Albums[0].Moves[0].NewPath, viaAlbum.Moves[0].NewPath)
+	})
+
+	t.Run("does not detect cross-call collisions", func(t *testing.T) {
+		// Two albums that resolve to the same destination would error in
+		// PlanLibrary (shared destMap) but must each succeed independently in
+		// PlanAlbum (fresh destMap per call).
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/01.flac", Title: "Track", Album: "Album", Year: "2000", TrackNumber: new(1)},
+		}, nil)
+
+		_, err := PlanAlbum(lib, album)
+		require.NoError(t, err)
+
+		// A second independent call for the same album must also succeed.
+		_, err = PlanAlbum(lib, album)
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates error for missing artist", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "", []*metadata.Track{
+			{Path: "/src/01.flac", Title: "T", Album: "A", Year: "2000", TrackNumber: new(1)},
+		}, nil)
+
+		_, err := PlanAlbum(lib, album)
+		assert.Error(t, err)
+	})
+
+	t.Run("propagates error for inconsistent DISCNUMBER", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/t1.flac", Title: "One", Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 1},
+			{Path: "/src/t2.flac", Title: "Two", Album: "A", Year: "2000", TrackNumber: new(2), DiscNumber: 0},
+		}, nil)
+
+		_, err := PlanAlbum(lib, album)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "DISCNUMBER")
+	})
+}
+
 func TestPlanLibrary_PathGeneration(t *testing.T) {
 	t.Run("standard path with year and letter bucket", func(t *testing.T) {
 		lib := t.TempDir()

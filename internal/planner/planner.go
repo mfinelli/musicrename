@@ -101,6 +101,15 @@ type planner struct {
 	libraryRoot string
 }
 
+// PlanAlbum computes the target path for every file in a single album and
+// returns an AlbumPlan describing the required moves. Unlike PlanLibrary,
+// cross-album collision detection is not performed: a fresh destination map
+// is created for each call so that callers such as the checker can plan
+// albums independently without one album's results affecting another.
+func PlanAlbum(libraryRoot string, album *metadata.Album) (*AlbumPlan, error) {
+	return New(libraryRoot).planAlbum(album, make(map[string]string))
+}
+
 // New returns a planner that will place all files under libraryRoot.
 // libraryRoot should be an absolute path; callers should resolve it with
 // filepath.Abs before calling New.
