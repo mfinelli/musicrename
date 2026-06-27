@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mfinelli/musicrename/internal/hasher"
 )
 
 var (
@@ -52,7 +54,7 @@ func categorizeRootFile(name string) FileCategory {
 	if audioExts[ext] {
 		return CatAudio
 	}
-	if textExts[ext] || name == "sums.md5" {
+	if textExts[ext] || name == hasher.SumsFilename {
 		return CatRootText
 	}
 	if imageExts[ext] {
