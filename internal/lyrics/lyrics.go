@@ -24,7 +24,9 @@
 //
 // All LRC timestamps are normalised to [mm:ss.xx] / [hh:mm:ss.xx] format
 // (two-digit centiseconds) before embedding, matching the behaviour of the
-// --standardize force.xx flag from the previous Python workflow.
+// --standardize force.xx flag from the previous Python workflow. LRC metadata
+// header tags and comment lines are stripped so only the lyric content is
+// embedded.
 //
 // Lyrics are fetched from the LRCLIB public API using a four-step strategy
 // that progressively relaxes the duration constraint before falling back to a
@@ -39,90 +41,57 @@
 package lyrics
 
 import (
-	"fmt"
-	"regexp"
-	"strconv"
+	"context"
 	"time"
 )
 
-var (
-	// timestampRe matches LRC timestamps inside either [...] or <...> brackets.
-	// It handles optional hours (hh:), required minutes and seconds (mm:ss),
-	// and an optional fractional component of 2 or 3 digits (.xx or .xxx).
-	//
-	// LRC metadata tags such as [ar:Artist] or [al:Album] are intentionally
-	// excluded because their inner content starts with letters, not digits.
-	timestampRe = regexp.MustCompile(`([\[<])((?:\d{1,2}:)?\d{1,3}:\d{1,2}(?:\.\d{1,3})?)([\]>])`)
+// LyricStatus represents the outcome for a single track after processing.
+type LyricStatus uint8
 
-	// splitRe decomposes a raw timestamp string into its named groups:
-	// optional hours, minutes, seconds, and optional fractional digits.
-	splitRe = regexp.MustCompile(`^(?:(\d{1,2}):)?(\d{1,3}):(\d{1,2})(?:\.(\d{1,3}))?$`)
+const (
+	// StatusEmbedded means lyrics were found and written to the file's tags.
+	StatusEmbedded LyricStatus = iota
+	// StatusSkipped means the file already had lyrics and --force was not set.
+	StatusSkipped
+	// StatusNotFound means LRCLIB returned no result after all fetch steps.
+	StatusNotFound
+	// StatusFailed means an error occurred during fetching or tag writing.
+	StatusFailed
 )
 
-// standardizeLRC normalises all LRC timestamps in lrc to [mm:ss.xx] or
-// [hh:mm:ss.xx] format (two-digit centiseconds). Timestamps inside word-by-word
-// <...> brackets are normalised in the same way. Overflow values such as
-// 75 seconds are corrected via duration arithmetic. LRC metadata header tags
-// (e.g. [ar:Artist]) are left untouched because they do not match the digit-
-// only timestamp pattern.
-//
-// This function replicates the behaviour of the Python lyrict tool's
-// --standardize force.xx mode that was used in the previous workflow.
-func standardizeLRC(lrc string) string {
-	return timestampRe.ReplaceAllStringFunc(lrc, func(match string) string {
-		open := match[0]
-		close := match[len(match)-1]
-		inner := match[1 : len(match)-1]
-		return string(open) + normalizeTimestamp(inner) + string(close)
-	})
+// TrackInfo contains the metadata needed to fetch and embed lyrics for a
+// single audio file. The command layer builds these from metadata.Track plus
+// a taglib properties read for the duration.
+type TrackInfo struct {
+	Path     string
+	Title    string
+	Artist   string
+	Album    string
+	Duration time.Duration
 }
 
-// normalizeTimestamp parses a single raw timestamp string (without surrounding
-// brackets) and returns it normalised to mm:ss.xx or hh:mm:ss.xx. If the
-// timestamp cannot be parsed it is returned unchanged.
-func normalizeTimestamp(ts string) string {
-	m := splitRe.FindStringSubmatch(ts)
-	if m == nil {
-		return ts
-	}
+// Summary holds aggregate counts from a Fetch run, suitable for the
+// end-of-run summary line printed by the cobra command.
+type Summary struct {
+	Embedded int
+	Skipped  int // already had lyrics; --force not set
+	NotFound int // no result from LRCLIB after all fetch steps
+	Failed   int // error during fetch or tag write
+}
 
-	// m[1] = optional hours, m[2] = minutes, m[3] = seconds, m[4] = fractional.
-	var hours, minutes, seconds int
-	if m[1] != "" {
-		hours, _ = strconv.Atoi(m[1])
-	}
-	minutes, _ = strconv.Atoi(m[2])
-	seconds, _ = strconv.Atoi(m[3])
-
-	// Convert the fractional field to milliseconds by left-padding to three
-	// digits, so that ".5" → 500 ms and ".12" → 120 ms. This matches the
-	// ljust(3, '0') behaviour of the Python lyrict --standardize force.xx mode.
-	var ms int
-	if m[4] != "" {
-		padded := m[4]
-		for len(padded) < 3 {
-			padded += "0"
-		}
-		ms, _ = strconv.Atoi(padded[:3])
-	}
-
-	// Accumulate into a single Duration so that Go handles any overflow
-	// (e.g. 75 seconds → 1 minute 15 seconds) transparently.
-	total := time.Duration(hours)*time.Hour +
-		time.Duration(minutes)*time.Minute +
-		time.Duration(seconds)*time.Second +
-		time.Duration(ms)*time.Millisecond
-
-	h := int(total / time.Hour)
-	total -= time.Duration(h) * time.Hour
-	min := int(total / time.Minute)
-	total -= time.Duration(min) * time.Minute
-	sec := int(total / time.Second)
-	total -= time.Duration(sec) * time.Second
-	cs := int(total.Milliseconds()) / 10 // centiseconds 0–99
-
-	if h > 0 {
-		return fmt.Sprintf("%02d:%02d:%02d.%02d", h, min, sec, cs)
-	}
-	return fmt.Sprintf("%02d:%02d.%02d", min, sec, cs)
+// Fetch fetches and embeds lyrics for each track. It is the primary entry
+// point for the lyrics package.
+//
+// For each track the four-step LRCLIB fetch strategy is attempted. Existing
+// lyrics tags are left untouched unless force is true, in which case they are
+// always overwritten.
+//
+// progress, if non-nil, is called after each track is processed. The command
+// layer passes a TTY-gated closure for live terminal feedback; nil disables
+// all progress output.
+//
+// TODO: implement
+func Fetch(_ context.Context, _ []TrackInfo, _ bool, _ func(string, LyricStatus)) (Summary, error) {
+	_ = newLrclibClient()
+	return Summary{}, nil
 }

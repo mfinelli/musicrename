@@ -385,10 +385,16 @@ failed tracks.
 - **LRCLIB client:** A small HTTP client wrapping the LRCLIB public API
   (`https://lrclib.net/api`). Implements the four-step fetch sequence above.
   Rate-limited via `golang.org/x/time/rate` token bucket at 5 req/s.
-- **Timestamp standardization:** Applied to all LRC text before embedding.
-  Normalizes all timestamps to `[mm:ss.xx]` or `[hh:mm:ss.xx]` (2-digit
-  centiseconds). Invalid or atypical timestamps (e.g. seconds > 59) are
-  corrected via duration arithmetic.
+- **Timestamp standardization:** Applied to all LRC text before embedding via a
+  four-step pipeline: (1) parse and remember any `[offset:±N]` tag; (2) strip
+  all LRC metadata header lines (`ti`, `ar`, `al`, `au`, `lr`, `length`, `by`,
+  `offset`, `re`, `tool`, `ve`) and comment lines (`#`); (3) normalize all
+  timestamps to `[mm:ss.xx]` / `[hh:mm:ss.xx]` (2-digit centiseconds), applying
+  the offset so the embedded result is self-contained; (4) strip any whitespace
+  between the closing `]` of a line-level timestamp and the lyric text, as
+  required by the LRC spec. Overflow values (e.g. seconds > 59) are corrected
+  via duration arithmetic. Negative results from a large negative offset are
+  clamped to `[00:00.00]`.
 - **Tag writing:** All tag writes use go-taglib's `WriteTags` with the
   normalized `LYRICS` / `UNSYNCEDLYRICS` keys. No additional dependencies
   required beyond go-taglib.
