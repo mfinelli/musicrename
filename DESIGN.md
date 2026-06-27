@@ -172,15 +172,15 @@ The tool uses a command-based structure (via `spf13/cobra`):
 | `musicrename rename [library-root]` | Scans metadata, sanitizes, and moves files. Accepts an optional path argument (default: current directory). Use `--dry-run` to preview all planned moves without touching the filesystem.                                            |
 | `musicrename sums [path]`           | Generates `sums.md5` for an album or library. Auto-detects mode: single-album if the path directly contains audio files, library otherwise. Defaults to the current directory. Use `--force` to overwrite existing `sums.md5` files. |
 | `musicrename check [path]`          | Audits an album or library for misconfigurations; exits non-zero on findings. Auto-detects mode from the path argument (see §4.3). Defaults to the current directory.                                                                |
+| `musicrename lyrics [path]`         | Fetches lyrics from LRCLIB and embeds them into audio file tags. Auto-detects mode from the path argument (see §4.5). Defaults to the current directory. Use `--force` to re-fetch and overwrite existing lyrics.                    |
 | `musicrename inspect`               | Displays detected and sanitized metadata for a single audio file.                                                                                                                                                                    |
-| `musicrename lyrics`                | _(Future)_ Fetches and embeds lyrics.                                                                                                                                                                                                |
 
 **Note on command independence:** `rename` does **not** generate `sums.md5`. The
 intended workflow for a full library update is:
 
 1. `musicrename rename`
 2. `musicrename check` _(audit the result before generating checksums)_
-3. `musicrename lyrics` _(once implemented)_
+3. `musicrename lyrics`
 4. `musicrename sums`
 
 ### 4.2 `rename` Workflow
@@ -324,6 +324,84 @@ Disc:         —
 - Absent fields display `—`; no sanitized line is shown for absent fields.
 - `inspect` is read-only and makes no filesystem changes.
 
+### 4.5 `lyrics` Command
+
+Fetches lyrics from LRCLIB and embeds them into audio file tags. Operates on a
+single file, an album directory, or a library root using the same auto-detection
+logic as `sums` and `check`. Defaults to the current directory if no path
+argument is given.
+
+#### Operating Modes
+
+- **Track mode:** The path is a single audio file. Only that file is processed.
+- **Album mode:** The path is a directory that directly contains audio files.
+  All audio files in that directory are processed.
+- **Library mode:** The path is a directory with no audio files directly inside.
+  All album directories within it are processed recursively.
+
+#### Fetch Strategy
+
+For each track, LRCLIB is queried using title, artist, album, and duration. The
+following sequence is attempted in order, stopping at the first hit:
+
+1. Exact match via `/get` (title + artist + album + duration)
+2. `/get` with duration relaxed to ±1 second
+3. `/get` with duration relaxed to ±2 seconds
+4. Fuzzy search via `/search` (title + artist + album, no duration constraint)
+
+If none of the above returns a result, the track is skipped and noted in the
+summary. In the worst case this is 4 requests per track, but steps 2–4 are only
+reached on a miss, so the common case is a single request.
+
+All requests are rate-limited client-side to 5 requests/second as a courtesy to
+the free public API.
+
+#### Embedding Behaviour
+
+Synced (LRC) and unsynced lyrics are handled independently per format:
+
+| Format | Synced lyrics                                                            | Unsynced lyrics                                          |
+| ------ | ------------------------------------------------------------------------ | -------------------------------------------------------- |
+| FLAC   | Embedded in `LYRICS` (LRC text, timestamps standardized to `[mm:ss.xx]`) | Embedded in `UNSYNCEDLYRICS`                             |
+| MP3    | Not embedded                                                             | Embedded in `USLT` via go-taglib normalized `LYRICS` key |
+| M4A    | Not embedded                                                             | Embedded in `©lyr` via go-taglib normalized `LYRICS` key |
+
+For MP3 and M4A, if only synced lyrics are available from LRCLIB (no plain
+text), the track is skipped (timestamps are never stripped and embedded as
+unsynced).
+
+Existing lyrics tags are never overwritten unless `--force` is passed. `--force`
+re-fetches and overwrites all lyrics tags for every track regardless of current
+state.
+
+#### Summary Output
+
+Follows the same style as `sums` and `rename`: a summary line at the end
+reporting counts of embedded, skipped (already have lyrics), not found, and
+failed tracks.
+
+#### Implementation Notes (`internal/lyrics`)
+
+- **LRCLIB client:** A small HTTP client wrapping the LRCLIB public API
+  (`https://lrclib.net/api`). Implements the four-step fetch sequence above.
+  Rate-limited via `golang.org/x/time/rate` token bucket at 5 req/s.
+- **Timestamp standardization:** Applied to all LRC text before embedding.
+  Normalizes all timestamps to `[mm:ss.xx]` or `[hh:mm:ss.xx]` (2-digit
+  centiseconds). Invalid or atypical timestamps (e.g. seconds > 59) are
+  corrected via duration arithmetic.
+- **Tag writing:** All tag writes use go-taglib's `WriteTags` with the
+  normalized `LYRICS` / `UNSYNCEDLYRICS` keys. No additional dependencies
+  required beyond go-taglib.
+- **Skip logic:** A track is considered to already have lyrics if the relevant
+  tag(s) for its format are non-empty. `--force` bypasses this check and
+  overwrites both tags.
+- **Progress callback:** `Fetch` (the primary entry point) accepts an optional
+  `func(path string, status LyricStatus)` callback, called after each track is
+  processed. The cobra command layer passes a TTY-gated closure for live
+  terminal feedback, including cases where multiple LRCLIB requests are made for
+  a single track. `nil` disables all progress output, consistent with
+  `hasher.Hash`.
+
 ## 5. Implementation Notes (Go)
 
 - **Filesystem moves:** `os.Rename` for same-device moves; copy-then-delete
@@ -335,8 +413,8 @@ Disc:         —
 - **MD5 generation:** Computed via Go's `crypto/md5` package; no external tool
   required. Output is formatted to be compatible with `md5sum -c` for
   verification.
-- **Concurrency:** Worker pool for tag reading. MD5 generation is sequential,
-  with per-file progress reported via a callback.
+- **Concurrency:** Worker pool for tag reading. MD5 generation and lyrics
+  fetching are sequential, with per-file progress reported via a callback.
 - **Manual overrides:** Hardcoded in the binary (small, stable set; no config
   file).
 - **Primary target:** Linux (case-sensitive filesystem). macOS is supported but
@@ -351,7 +429,7 @@ Disc:         —
   `AlbumPlan.Warnings` from this field and then appends its own planning-phase
   warnings (missing tags, unknown files). The display layer (e.g. `--dry-run`
   output) surfaces all warnings grouped together at the top of the output.
-- **Progress feedback:** Both `rename` and `sums` accept an optional
+- **Progress feedback:** `rename`, `sums`, and `lyrics` accept an optional
   `func`-typed progress callback. The command layer passes a TTY-gated closure
   that writes `\r`-overwriting lines; passing `nil` disables all progress output
   (used in tests and non-TTY contexts). TTY detection uses
@@ -370,10 +448,11 @@ Disc:         —
 
 ### Key Dependencies
 
-| Package                                  | Purpose                                                                                   |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                          |
-| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`)                    |
-| `github.com/deluan/go-taglib`            | Cross-format metadata reading (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
-| `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`)                                      |
-| `github.com/spf13/cobra`                 | CLI command management                                                                    |
+| Package                                  | Purpose                                                                                               |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                                      |
+| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`, `lyrics`)                      |
+| `github.com/deluan/go-taglib`            | Cross-format metadata reading and writing (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
+| `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`, `lyrics`)                                        |
+| `github.com/spf13/cobra`                 | CLI command management                                                                                |
+| `golang.org/x/time/rate`                 | Token bucket rate limiter for LRCLIB requests (`lyrics`)                                              |
