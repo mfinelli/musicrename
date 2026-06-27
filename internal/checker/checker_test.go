@@ -721,4 +721,51 @@ func TestCheckTrack(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, dir, ar.AlbumPath)
 	})
+
+	t.Run("mismatched filename produces warning", func(t *testing.T) {
+		// "01 Hells Bells.flac" should be "01 hells bells.flac" after sanitization.
+		path := makeAudioFile(t, t.TempDir(), "01 Hells Bells.flac", map[string]string{
+			"TITLE":                 "Hells Bells",
+			"ARTIST":                "AC/DC",
+			"ALBUMARTIST":           "AC/DC",
+			"ALBUM":                 "Back in Black",
+			"DATE":                  "1980",
+			"TRACKNUMBER":           "1",
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+		})
+		ar, err := CheckTrack(path)
+		require.NoError(t, err)
+		w := findWarning(ar, "filename does not match spec")
+		require.NotNil(t, w)
+		assert.Contains(t, w.Message, "01 hells bells.flac")
+	})
+
+	t.Run("correct filename produces no filename warning", func(t *testing.T) {
+		path := makeAudioFile(t, t.TempDir(), "01 track.flac", map[string]string{
+			"TITLE":                 "Track",
+			"ARTIST":                "Artist",
+			"ALBUMARTIST":           "Artist",
+			"ALBUM":                 "Album",
+			"DATE":                  "2000",
+			"TRACKNUMBER":           "1",
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+		})
+		ar, err := CheckTrack(path)
+		require.NoError(t, err)
+		assert.Nil(t, findWarning(ar, "filename does not match spec"))
+	})
+
+	t.Run("missing artist skips filename check without panicking", func(t *testing.T) {
+		path := makeAudioFile(t, t.TempDir(), "BAD NAME.flac", map[string]string{
+			"TITLE": "Track",
+			// No ARTIST or ALBUMARTIST (can't plan, should skip silently).
+		})
+		ar, err := CheckTrack(path)
+		require.NoError(t, err)
+		// Missing-artist warning present, but no filename conformance warning.
+		assert.NotNil(t, findWarning(ar, "ARTIST"))
+		assert.Nil(t, findWarning(ar, "filename does not match spec"))
+	})
 }

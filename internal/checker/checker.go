@@ -146,6 +146,7 @@ func CheckTrack(filePath string) (*AlbumResult, error) {
 	ar := &AlbumResult{AlbumPath: filepath.Dir(filePath)}
 	checkTrackTags(track, ar)
 	checkTrackAudio(track, ar)
+	checkTrackFilename(track, ar)
 	return ar, nil
 }
 
@@ -238,6 +239,56 @@ func checkTrackAudio(track *metadata.Track, ar *AlbumResult) {
 			Path:    track.Path,
 			Message: fmt.Sprintf("embedded artwork detected (%d image(s))", len(props.Images)),
 		})
+	}
+}
+
+// checkTrackFilename warns when the file's current basename does not match
+// what the rename planner would produce from its tags. This check runs in
+// track mode where no library root is available, so only the filename
+// component (not the full path) is compared.
+//
+// A synthetic library root is passed to PlanAlbum so that expected paths can
+// be computed; only the resulting basename is inspected, so the root value
+// does not affect the outcome.
+func checkTrackFilename(track *metadata.Track, ar *AlbumResult) {
+	// Resolve artist the same way ProcessLibrary does: prefer AlbumArtist,
+	// fall back to Artist. If neither is set the missing-artist warning from
+	// checkTrackTags already covers the problem; skip silently here.
+	resolvedArtist := track.AlbumArtist
+	if resolvedArtist == "" {
+		resolvedArtist = track.Artist
+	}
+	if resolvedArtist == "" {
+		return
+	}
+
+	albumDir := filepath.Dir(track.Path)
+	album := metadata.NewAlbum(albumDir)
+	album.ResolvedArtist = resolvedArtist
+	album.Tracks = []*metadata.Track{track}
+
+	// Any non-empty root works; we only compare basenames below.
+	syntheticRoot := filepath.Dir(albumDir)
+	albumPlan, err := planner.PlanAlbum(syntheticRoot, album)
+	if err != nil {
+		// Tag issues that prevent planning are already flagged by
+		// checkTrackTags; skip silently to avoid a confusing second warning.
+		return
+	}
+
+	for _, move := range albumPlan.Moves {
+		if move.OldPath != track.Path {
+			continue
+		}
+		expectedBase := filepath.Base(move.NewPath)
+		actualBase := filepath.Base(track.Path)
+		if expectedBase != actualBase {
+			ar.Warnings = append(ar.Warnings, Warning{
+				Path:    track.Path,
+				Message: fmt.Sprintf("filename does not match spec (expected: %s)", expectedBase),
+			})
+		}
+		break
 	}
 }
 
