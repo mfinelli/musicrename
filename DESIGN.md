@@ -44,10 +44,10 @@ directories: `/[First Letter of Artist]/[Artist]/[Year] [Album Name]/`
 **Album Folder Contents:**
 
 - **Root:**
-     - Audio files (`.flac`, `.mp3`, `.m4a`)
-     - Primary Art: `folder.jpg` or `folder.png`
-     - Text files: `.log`, `.cue`, `.m3u`, `.m3u8`
-     - `sums.md5`
+  - Audio files (`.flac`, `.mp3`, `.m4a`)
+  - Primary Art: `folder.jpg` or `folder.png`
+  - Text files: `.log`, `.cue`, `.m3u`, `.m3u8`
+  - `sums.md5`
 - **`/artwork/`**: Additional image files.
 - **`/scans/`**: High-resolution scans (typically `.tiff`).
 - **`/extras/`**: All other non-audio/non-art files.
@@ -74,18 +74,18 @@ through this sequence:
 6. **Space Normalisation:** Collapse runs of multiple spaces into a single
    space, then trim leading and trailing spaces.
 7. **Truncation:**
-      - **Artist:** Max 60 characters.
-      - **Album:** Max 60 characters.
-      - **Files (Tracks/Art/Extras):** Max 40 characters (applied to the base
-        name only, before appending the extension).
-           - _Note:_ For files inside subdirectories (`artwork/`, `scans/`,
-             `extras/`), the limit is 40 characters **minus the length of the
-             subdirectory name plus one** (for the `/`) to ensure the full
-             relative path in `sums.md5` remains ≤ 80 characters.
-      - Truncation is mid-word (hard cut at the character limit); no
-        word-boundary snapping.
-      - Truncation is applied after space normalisation, so no result will start
-        or end with a space as a result of the cut.
+   - **Artist:** Max 60 characters.
+   - **Album:** Max 60 characters.
+   - **Files (Tracks/Art/Extras):** Max 40 characters (applied to the base name
+     only, before appending the extension).
+     - _Note:_ For files inside subdirectories (`artwork/`, `scans/`,
+       `extras/`), the limit is 40 characters **minus the length of the
+       subdirectory name plus one** (for the `/`) to ensure the full relative
+       path in `sums.md5` remains <= 80 characters.
+   - Truncation is mid-word (hard cut at the character limit); no word-boundary
+     snapping.
+   - Truncation is applied after space normalisation, so no result will start or
+     end with a space as a result of the cut.
 
 ### 3.3 Metadata & Naming Logic
 
@@ -131,8 +131,7 @@ an error. In practice this is unlikely since metadata is edited per-album.
 
 - **Single Disc:** `[Track#] Title.ext` (e.g., `01 track one.flac`)
 - **Multi-Disc:** `[Disc]-[Track#] Title.ext` (e.g., `1-01 track one.flac`)
-     - The disc prefix is included only if the album contains more than one
-       disc.
+  - The disc prefix is included only if the album contains more than one disc.
 - **Zero-padding:** Track numbers are zero-padded to 2 digits by default. If any
   track number on the album exceeds 99, the entire album switches to 3-digit
   padding for that album only.
@@ -145,9 +144,9 @@ the file; the output is formatted to be fully compatible with `md5sum -c` for
 verification on any system that has `md5sum` installed.
 
 - **Format:** Standard `md5sum` output.
-     - Binary files (audio/images): `hash *filename` (asterisk prefix on name).
-     - Text files (`.log`, `.cue`, `.m3u`, `.m3u8`, `.txt`): `hash  filename`
-       (two-space prefix on name).
+  - Binary files (audio/images): `hash *filename` (asterisk prefix on name).
+  - Text files (`.log`, `.cue`, `.m3u`, `.m3u8`, `.txt`): `hash  filename`
+    (two-space prefix on name).
 - **Paths:** Filenames in `sums.md5` are relative to the album root (e.g.,
   `artwork/cover.jpg`, `01 track one.flac`). Files are listed in sorted order
   for a stable, diffable output across runs.
@@ -156,12 +155,11 @@ verification on any system that has `md5sum` installed.
 - **Exclusion:** `sums.md5` itself is never included in the checksum file.
 - **Scope:** The `sums` command auto-detects its operating mode by checking
   whether the target directory directly contains audio files:
-     - **Single-album mode:** The target directory contains audio files. An
-       existing `sums.md5` is always an error unless `--force` is passed.
-     - **Library mode:** The target directory contains no audio files directly.
-       All album directories within it are processed recursively. Albums that
-       already have a `sums.md5` are silently skipped; `--force` regenerates
-       them all.
+  - **Single-album mode:** The target directory contains audio files. An
+    existing `sums.md5` is always an error unless `--force` is passed.
+  - **Library mode:** The target directory contains no audio files directly. All
+    album directories within it are processed recursively. Albums that already
+    have a `sums.md5` are silently skipped; `--force` regenerates them all.
 
 ## 4. Architecture
 
@@ -173,7 +171,7 @@ The tool uses a command-based structure (via `spf13/cobra`):
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `musicrename rename [library-root]` | Scans metadata, sanitizes, and moves files. Accepts an optional path argument (default: current directory). Use `--dry-run` to preview all planned moves without touching the filesystem.                                            |
 | `musicrename sums [path]`           | Generates `sums.md5` for an album or library. Auto-detects mode: single-album if the path directly contains audio files, library otherwise. Defaults to the current directory. Use `--force` to overwrite existing `sums.md5` files. |
-| `musicrename check`                 | Audits the library for misconfigurations; exits non-zero on findings.                                                                                                                                                                |
+| `musicrename check [path]`          | Audits an album or library for misconfigurations; exits non-zero on findings. Auto-detects mode from the path argument (see §4.3). Defaults to the current directory.                                                                |
 | `musicrename inspect`               | Displays detected and sanitized metadata for a single audio file.                                                                                                                                                                    |
 | `musicrename lyrics`                | _(Future)_ Fetches and embeds lyrics.                                                                                                                                                                                                |
 
@@ -181,67 +179,115 @@ The tool uses a command-based structure (via `spf13/cobra`):
 intended workflow for a full library update is:
 
 1. `musicrename rename`
-2. `musicrename lyrics` _(once implemented)_
-3. `musicrename sums`
+2. `musicrename check` _(audit the result before generating checksums)_
+3. `musicrename lyrics` _(once implemented)_
+4. `musicrename sums`
 
 ### 4.2 `rename` Workflow
 
 1. **Scan Phase:**
-      - Recursively locate music files.
-      - Identify "unknown" files (files that don't fit known categories), log a
-        warning, and leave them in place. Unknown files are never moved by the
-        tool.
+   - Recursively locate music files.
+   - Identify "unknown" files (files that don't fit known categories), log a
+     warning, and leave them in place. Unknown files are never moved by the
+     tool.
 
 2. **Analysis Phase:**
-      - Read tags -> Apply Sanitization Pipeline -> Determine destination path.
+   - Read tags -> Apply Sanitization Pipeline -> Determine destination path.
 
 3. **Validation Phase:**
-      - Calculate necessary directory creations.
-      - Classify each planned move:
-           - **No-op** (`oldPath == newPath` exactly): file is already in the
-             correct location; no filesystem change required.
-           - **Case-only** (`oldPath` and `newPath` differ only in case): a real
-             rename is required, but must go via an intermediate temp path to
-             avoid a silent no-op on case-insensitive filesystems (macOS default
-             HFS+).
-      - Detect sanitization collisions (two source files resolving to the same
-        destination path). On the first collision detected: abort the entire run
-        with an error.
-      - **Overwrite safety:** Check all planned destination paths against the
-        filesystem. If any destination file already exists, **abort the entire
-        run** and list every conflict. The run is all-or-nothing; no files are
-        moved until the pre-flight check passes cleanly.
+   - Calculate necessary directory creations.
+   - Classify each planned move:
+     - **No-op** (`oldPath == newPath` exactly): file is already in the correct
+       location; no filesystem change required.
+     - **Case-only** (`oldPath` and `newPath` differ only in case): a real
+       rename is required, but must go via an intermediate temp path to avoid a
+       silent no-op on case-insensitive filesystems (macOS default HFS+).
+   - Detect sanitization collisions (two source files resolving to the same
+     destination path). On the first collision detected: abort the entire run
+     with an error.
+   - **Overwrite safety:** Check all planned destination paths against the
+     filesystem. If any destination file already exists, **abort the entire
+     run** and list every conflict. The run is all-or-nothing; no files are
+     moved until the pre-flight check passes cleanly.
 
 4. **Execution Phase** _(skipped if `--dry-run` is passed)_:
-      - Create folders -> Move files.
-      - Use `os.Rename` where source and destination are on the same filesystem.
-      - Fall back to copy-then-delete when `os.Rename` returns a cross-device
-        error (`syscall.EXDEV`).
-      - **Case-only renames:** When the source and destination differ only in
-        case (e.g. `Beatles` -> `beatles`), rename via an intermediate temp path
-        to avoid silent no-ops on case-insensitive filesystems (macOS default).
-      - **Race condition:** If a destination file materializes between the
-        pre-flight check and the actual move, skip that file with a warning
-        rather than aborting the run.
-      - **Empty directory cleanup:** After all moves, attempt to remove any
-        source directories that were touched and are now empty, bubbling upward
-        until a non-empty directory or the library root is reached. This is
-        best-effort: failures are logged but do not affect exit status.
-      - **Progress feedback:** On an interactive TTY, the current filename is
-        printed with `\r` so each update overwrites the previous line. On
-        non-TTY output (pipes, CI) no progress is written.
+   - Create folders -> Move files.
+   - Use `os.Rename` where source and destination are on the same filesystem.
+   - Fall back to copy-then-delete when `os.Rename` returns a cross-device error
+     (`syscall.EXDEV`).
+   - **Case-only renames:** When the source and destination differ only in case
+     (e.g. `Beatles` -> `beatles`), rename via an intermediate temp path to
+     avoid silent no-ops on case-insensitive filesystems (macOS default).
+   - **Race condition:** If a destination file materializes between the
+     pre-flight check and the actual move, skip that file with a warning rather
+     than aborting the run.
+   - **Empty directory cleanup:** After all moves, attempt to remove any source
+     directories that were touched and are now empty, bubbling upward until a
+     non-empty directory or the library root is reached. This is best-effort:
+     failures are logged but do not affect exit status.
+   - **Progress feedback:** On an interactive TTY, the current filename is
+     printed with `\r` so each update overwrites the previous line. On non-TTY
+     output (pipes, CI) no progress is written.
 
 ### 4.3 `check` Command
 
-Emits a human-readable list of warnings/errors to stdout. Exits with a non-zero
-status code if any findings are present, enabling use in scripts.
+Audits a music library for metadata and structural issues. Emits all findings to
+stdout grouped by album and exits non-zero if any are present, enabling use in
+scripts.
 
-Example findings:
+#### Operating Modes
 
-- Embedded album artwork detected in audio files
-- Missing ReplayGain tags
-- Track naming inconsistencies vs. current spec
-- Files in unexpected locations
+The mode is auto-detected from the path argument (default: current directory):
+
+- **Track mode:** The path is an audio file (`.flac`, `.mp3`, `.m4a`). Only
+  per-track checks run; directory-level checks (artwork, `sums.md5`, unknown
+  files, path conformance) are skipped because album context is unavailable.
+- **Album mode:** The path is a directory that directly contains audio files.
+  All checks run except path conformance, which requires a library root that
+  cannot be reliably inferred from a single album path.
+- **Library mode:** The path is a directory with no audio files directly inside.
+  All checks run on every album found recursively, including path conformance.
+
+#### Complete Check List
+
+**Metadata completeness** _(track-level; all modes)_
+
+- Missing `TITLE` tag
+- Missing `TRACKNUMBER` tag
+- Missing `DATE`/year tag
+- Missing both `ARTIST` and `ALBUMARTIST` tags
+
+**Album consistency** _(album-level; album and library modes)_
+
+- Inconsistent `ALBUMARTIST` tag across tracks in the same album
+- Inconsistent `ALBUM` tag across tracks in the same album
+- Partial `DISCNUMBER` coverage (some tracks have the tag, some do not)
+- Duplicate track numbers within the same disc
+
+**Audio quality** _(track-level; all modes)_
+
+- Missing `REPLAYGAIN_TRACK_GAIN` tag
+- Missing `REPLAYGAIN_ALBUM_GAIN` tag (checked per-track; semantically
+  album-level)
+- Embedded artwork inside the audio file
+
+**Artwork** _(album-level; album and library modes)_
+
+- Missing primary artwork (`folder.jpg` or `folder.png`)
+- Multiple `folder.*` files present
+
+**Integrity** _(album-level; album and library modes)_
+
+- Missing `sums.md5` for an album
+
+**Naming / path conformance** _(album-level; library mode only)_
+
+- Album directory path does not match what `rename` would produce
+- Any file path does not match what `rename` would produce ("would rename move
+  this?")
+
+_Note: Verification of `sums.md5` checksums is out of scope. Use
+`md5sum -c sums.md5` directly for that._
 
 ### 4.4 `inspect` Command
 
@@ -310,13 +356,24 @@ Disc:         —
   that writes `\r`-overwriting lines; passing `nil` disables all progress output
   (used in tests and non-TTY contexts). TTY detection uses
   `github.com/mattn/go-isatty`.
+- **`internal/checker` second pass:** The checker opens each audio file a second
+  time via `taglib.OpenReadOnly` to read `REPLAYGAIN_TRACK_GAIN`,
+  `REPLAYGAIN_ALBUM_GAIN`, and embedded image metadata (`Properties().Images`).
+  This is a deliberate design choice: `metadata.Track` stays focused on the
+  fields needed for path planning; checker-specific audio attributes do not
+  belong in the shared data model. The WASM call is read-only and inexpensive.
+- **`planner.PlanAlbum`:** An exported single-album wrapper around the private
+  `planAlbum` function. It creates a fresh `destMap` per call so that the
+  checker can plan albums independently without cross-album collision state
+  accumulating. `rename` continues to use `PlanLibrary` with a shared `destMap`
+  for global collision detection.
 
 ### Key Dependencies
 
 | Package                                  | Purpose                                                                                   |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                          |
-| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`)                             |
+| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`)                    |
 | `github.com/deluan/go-taglib`            | Cross-format metadata reading (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
 | `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`)                                      |
 | `github.com/spf13/cobra`                 | CLI command management                                                                    |
