@@ -3,14 +3,19 @@ name: Default
 on:
   push:
     branches: [master]
+    tags: [v*]
   pull_request:
     branches: [master]
+
+permissions:
+  contents: read
 
 jobs:
   main:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - run: sudo apt-get install -y ffmpeg
+      - run: sudo apt-get install -y ffmpeg scdoc
       - run: sudo apt-get install -y libtag1-dev  # NOTE: libtag-dev on 26.04
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
@@ -18,8 +23,61 @@ jobs:
           go-version-file: go.mod
       - run: go mod download
       - run: '[[ -z $(go fmt ./...) ]]'
+      - run: make
       - run: go test -v ./...
       - run: go vet ./...
       - uses: dominikh/staticcheck-action@v1
         with:
           install-go: false
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/metadata-action@v6
+        id: docker
+        with:
+          images: |
+            mfinelli/musicrename
+            ghcr.io/mfinelli/musicrename
+          tags: type=semver,pattern={{version}}
+      - uses: docker/login-action@v4
+        if: github.event_name != 'pull_request'
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - uses: docker/login-action@v4
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: ${{ steps.docker.outputs.tags }}
+      - uses: peter-evans/dockerhub-description@v5
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: mfinelli/musicrename
+          short-description: ${{ github.event.repository.description }}
+
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [main, docker]
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ncipollo/release-action@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
