@@ -511,15 +511,35 @@ func TestCheckUnknownFiles(t *testing.T) {
 }
 
 func TestCheckNaming(t *testing.T) {
-	t.Run("skipped when libraryRoot is empty", func(t *testing.T) {
-		// Even a completely wrong path should produce no warnings when there
-		// is no library root to compute expected paths against.
+	t.Run("filename still checked when libraryRoot is empty", func(t *testing.T) {
+		// Filename warnings must appear even without a library root; only the
+		// album directory check is suppressed.
 		album := makeCheckerAlbum("/wrong/path", "Artist", []*metadata.Track{
 			{Path: "/wrong/path/BAD FILENAME.flac", Title: "Track", Album: "Album", Year: "2000", TrackNumber: new(1)},
 		}, nil)
 		ar := &AlbumResult{AlbumPath: "/wrong/path"}
 		checkNaming(album, "", ar)
-		assert.Empty(t, ar.Warnings)
+		assert.NotNil(t, findWarning(ar, "filename does not match spec"))
+		assert.Nil(t, findWarning(ar, "album directory does not match spec"))
+	})
+
+	t.Run("warning when filename does not match spec in album mode", func(t *testing.T) {
+		lib := t.TempDir()
+		albumDir := filepath.Join(lib, "a", "artist", "[2000] album")
+		require.NoError(t, os.MkdirAll(albumDir, 0o755))
+		// Correct directory, wrong filename casing.
+		trackPath := filepath.Join(albumDir, "01 Hells Bells.flac")
+
+		album := makeCheckerAlbum(albumDir, "Artist", []*metadata.Track{
+			{Path: trackPath, Title: "Hells Bells", Album: "Album", Year: "2000", TrackNumber: new(1)},
+		}, nil)
+		ar := &AlbumResult{AlbumPath: albumDir}
+		checkNaming(album, "", ar) // album mode: no library root
+		w := findWarning(ar, "filename does not match spec")
+		require.NotNil(t, w)
+		assert.Equal(t, trackPath, w.Path)
+		assert.Contains(t, w.Message, "01 hells bells.flac")
+		assert.Nil(t, findWarning(ar, "album directory does not match spec"))
 	})
 
 	t.Run("no warnings when album and files are at the correct paths", func(t *testing.T) {
@@ -661,9 +681,7 @@ func TestCheckAlbum(t *testing.T) {
 		assert.Equal(t, dir, ar.AlbumPath)
 	})
 
-	t.Run("empty libraryRoot skips path conformance check", func(t *testing.T) {
-		// Even with a badly-named directory, no naming warnings should appear
-		// when libraryRoot is empty.
+	t.Run("empty libraryRoot checks filenames but skips album directory check", func(t *testing.T) {
 		dir := t.TempDir()
 		makeAudioFile(t, dir, "BAD FILENAME.flac", map[string]string{
 			"TITLE": "Track", "ARTIST": "Artist", "TRACKNUMBER": "1", "DATE": "2000",
@@ -675,8 +693,8 @@ func TestCheckAlbum(t *testing.T) {
 
 		ar, err := CheckAlbum(dir, "")
 		require.NoError(t, err)
-		assert.Nil(t, findWarning(ar, "filename does not match spec"))
-		assert.Nil(t, findWarning(ar, "album directory"))
+		assert.NotNil(t, findWarning(ar, "filename does not match spec"))
+		assert.Nil(t, findWarning(ar, "album directory does not match spec"))
 	})
 }
 

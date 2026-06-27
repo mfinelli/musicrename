@@ -413,21 +413,29 @@ func checkUnknownFiles(album *metadata.Album, ar *AlbumResult) {
 }
 
 // checkNaming checks whether the album's current on-disk paths match the
-// paths that the planner would compute for a fully conformant library. When
-// libraryRoot is empty the check is skipped entirely because computing
-// expected paths requires a library root.
+// paths that the planner would compute for a fully conformant library.
+//
+// Filename conformance (basename only) is checked in all modes. When
+// libraryRoot is non-empty (library mode), the album directory path is
+// also checked against the full expected hierarchy. When libraryRoot is
+// empty (album mode), a synthetic root is derived from the album's parent
+// directory so that expected filenames can still be computed; the album
+// directory check is skipped because the surrounding hierarchy is unknown.
 //
 // One warning is emitted when the album directory path does not match the
-// expected destination, and one warning per file whose current path differs
-// from its expected destination. If the album directory itself is wrong, the
-// file warnings will reference correct paths within the corrected directory,
-// so the user can see both dimensions of the problem at once.
+// expected destination (library mode only), and one warning per file whose
+// current basename differs from its expected basename.
 func checkNaming(album *metadata.Album, libraryRoot string, ar *AlbumResult) {
-	if libraryRoot == "" {
-		return
+	// Determine the root to pass to the planner. In library mode the real
+	// root gives us full-path information. In album mode we synthesise one
+	// from the album's parent so filename computation still works; the
+	// resulting full paths are meaningless and are never compared directly.
+	root := libraryRoot
+	if root == "" {
+		root = filepath.Dir(album.RootPath)
 	}
 
-	albumPlan, err := planner.PlanAlbum(libraryRoot, album)
+	albumPlan, err := planner.PlanAlbum(root, album)
 	if err != nil {
 		ar.Warnings = append(ar.Warnings, Warning{
 			Path:    album.RootPath,
@@ -436,7 +444,8 @@ func checkNaming(album *metadata.Album, libraryRoot string, ar *AlbumResult) {
 		return
 	}
 
-	if album.RootPath != albumPlan.DestDir {
+	// Album directory check requires a real library root; skip in album mode.
+	if libraryRoot != "" && album.RootPath != albumPlan.DestDir {
 		ar.Warnings = append(ar.Warnings, Warning{
 			Path:    album.RootPath,
 			Message: fmt.Sprintf("album directory does not match spec (expected: %s)", albumPlan.DestDir),
@@ -444,7 +453,16 @@ func checkNaming(album *metadata.Album, libraryRoot string, ar *AlbumResult) {
 	}
 
 	for _, move := range albumPlan.Moves {
-		if !move.IsNoOp {
+		// In library mode, IsNoOp captures full-path equality and is the
+		// right signal. In album mode the synthetic root makes the full
+		// paths meaningless, so compare basenames only.
+		var wrong bool
+		if libraryRoot != "" {
+			wrong = !move.IsNoOp
+		} else {
+			wrong = filepath.Base(move.OldPath) != filepath.Base(move.NewPath)
+		}
+		if wrong {
 			ar.Warnings = append(ar.Warnings, Warning{
 				Path:    move.OldPath,
 				Message: fmt.Sprintf("filename does not match spec (expected: %s)", filepath.Base(move.NewPath)),
