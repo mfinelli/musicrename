@@ -22,9 +22,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/metadata"
 )
 
 // makeAlbum constructs a metadata.Album with ResolvedArtist already set,

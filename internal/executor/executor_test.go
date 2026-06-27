@@ -22,9 +22,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mfinelli/musicrename/internal/planner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/planner"
 )
 
 // makeFile creates a file at path with the given content, creating any
