@@ -128,7 +128,7 @@ mrr inspect "01 back in black.flac"
 - **Album artist:** uses `ALBUMARTIST` tag; falls back to the `ARTIST` tag of
   the lowest-numbered track if absent.
 - **Year:** extracted from the `DATE` tag; full ISO-8601 dates and year-month
-  values are supported — only the four-character year is used.
+  values are supported (only the four-character year is used).
 - **Disc numbers:** all-or-nothing per album. If any track has a `DISCNUMBER`
   tag, all tracks must have one or the album is skipped with an error.
 - **Track numbers:** zero-padded to two digits; switches to three digits if any

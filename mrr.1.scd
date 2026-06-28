@@ -70,7 +70,7 @@ Each album directory may contain the following:
 ## mrr rename [_path_]
 
 Reads metadata tags and moves files into the normalized hierarchy. Unknown
-files — those that don't match any recognized category — are left in place and
+files (those that don't match any recognized category) are left in place and
 reported as warnings. The *extras/* subdirectory acts as a catch-all for known
 non-audio assets and opts out of the unknown-file check.
 
