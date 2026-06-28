@@ -4,6 +4,11 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v3.0.2 — 2026-06-28
+
+Fix for tracknumber and discnumber that have both current and total separated by
+a `/`.
+
 ## v3.0.1 — 2026-06-28
 
 Change binary to `mrr` to avoid conflicts.
