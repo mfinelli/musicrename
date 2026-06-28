@@ -1,12 +1,12 @@
-mr(1) "v__VERSION__" "modctl __DATE__"
+mrr(1) "v__VERSION__" "modctl __DATE__"
 
 # NAME
 
-mr - normalize and organize a local music library
+mrr - normalize and organize a local music library
 
 # SYNOPSIS
 
-*mr* <command> [options] [_path_]
+*mrr* <command> [options] [_path_]
 
 # DESCRIPTION
 
@@ -16,10 +16,10 @@ tags are modified by *rename*.
 
 The intended workflow for a full library update is:
 
-	mr rename    # move files into the normalized structure
-	mr lyrics    # fetch and embed lyrics from LRCLIB
-	mr check     # audit for metadata and structural issues
-	mr sums      # generate md5 checksums
+	mrr rename    # move files into the normalized structure
+	mrr lyrics    # fetch and embed lyrics from LRCLIB
+	mrr check     # audit for metadata and structural issues
+	mrr sums      # generate md5 checksums
 
 All commands accept an optional _path_ argument and default to the current
 directory. Mode is auto-detected from the path: a directory containing audio
@@ -67,7 +67,7 @@ Each album directory may contain the following:
 
 # COMMANDS
 
-## mr rename [_path_]
+## mrr rename [_path_]
 
 Reads metadata tags and moves files into the normalized hierarchy. Unknown
 files — those that don't match any recognized category — are left in place and
@@ -81,7 +81,7 @@ on the filesystem, the entire run is aborted and all conflicts are reported.
 *--dry-run*
 	Preview all planned moves without touching the filesystem.
 
-## mr lyrics [_path_]
+## mrr lyrics [_path_]
 
 Fetches lyrics from LRCLIB (https://lrclib.net) and embeds them into audio
 tags. For each track, LRCLIB is queried by title, artist, album, and duration.
@@ -98,7 +98,7 @@ Existing lyrics tags are never overwritten unless *--force* is passed.
 *--force*
 	Re-fetch and overwrite existing lyrics tags.
 
-## mr check [_path_]
+## mrr check [_path_]
 
 Audits a library or album for metadata and structural issues. Emits all
 findings to stdout grouped by album and exits non-zero if any are present.
@@ -116,7 +116,7 @@ Checks include:
 
 Read-only; makes no filesystem changes.
 
-## mr sums [_path_]
+## mrr sums [_path_]
 
 Computes MD5 checksums for all files in an album and writes a *sums.md5* file
 formatted for use with *md5sum -c*. Binary files (audio, images) use an
@@ -131,7 +131,7 @@ passed.
 *--force*
 	Regenerate *sums.md5* even if one already exists.
 
-## mr inspect _file_
+## mrr inspect _file_
 
 Displays the raw tag values for a single audio file alongside the sanitized
 forms that *rename* would use for path construction. Accepts *.flac*, *.mp3*,

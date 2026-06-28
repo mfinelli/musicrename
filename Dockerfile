@@ -22,6 +22,6 @@ LABEL org.opencontainers.image.licenses=GPL-3.0-or-later
 
 RUN addgroup -S musicrename && adduser -S musicrename -G musicrename
 COPY --from=source /musicrename /usr/src/musicrename
-COPY --from=build /musicrename/mr /usr/bin/mr
+COPY --from=build /musicrename/mrr /usr/bin/mrr
 USER musicrename
-CMD ["mr"]
+CMD ["mrr"]

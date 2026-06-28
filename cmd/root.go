@@ -24,7 +24,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "mr",
+	Use:   "mrr",
 	Short: "Normalize and organize a local music library",
 	Long: `musicrename is a CLI tool for normalizing a local music library into a
 consistent, sanitized directory hierarchy based on internal metadata tags.
@@ -36,10 +36,10 @@ Artist, album, and title strings are transliterated to ASCII, lowercased, and
 stripped of non-alphanumeric characters before use.
 
 Intended workflow:
-  mr rename   # move files into place
-  mr lyrics   # fetch and embed lyrics
-  mr check    # audit the result
-  mr sums     # generate md5 checksums`,
+  mrr rename   # move files into place
+  mrr lyrics   # fetch and embed lyrics
+  mrr check    # audit the result
+  mrr sums     # generate md5 checksums`,
 	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
 	Version:           "3.0.0",
 }

@@ -58,10 +58,10 @@ Each album directory may contain:
 ## Workflow
 
 ```sh
-mr rename   # move files into the normalized structure
-mr lyrics   # fetch and embed lyrics from LRCLIB
-mr check    # audit for metadata and structural issues
-mr sums     # generate md5 checksums
+mrr rename   # move files into the normalized structure
+mrr lyrics   # fetch and embed lyrics from LRCLIB
+mrr check    # audit for metadata and structural issues
+mrr sums     # generate md5 checksums
 ```
 
 Each command accepts an optional `[path]` argument and defaults to the current
@@ -77,7 +77,7 @@ Reads metadata tags and moves files into the normalized hierarchy. Unknown files
 as warnings. Collisions or overwrite conflicts abort the run immediately.
 
 ```sh
-mr rename --dry-run ~/music
+mrr rename --dry-run ~/music
 ```
 
 ### `lyrics`
@@ -88,7 +88,7 @@ duration constraint before falling back to a fuzzy search. Synced (LRC) lyrics
 are embedded in FLAC files; unsynced lyrics are embedded in MP3 and M4A.
 
 ```sh
-mr lyrics --force ~/music/b/beyonce
+mrr lyrics --force ~/music/b/beyonce
 ```
 
 ### `check`
@@ -99,7 +99,7 @@ if any findings are present, making it suitable for use in scripts. Operates on
 a single file, album directory, or library root.
 
 ```sh
-mr check ~/music
+mrr check ~/music
 echo $?   # non-zero if findings
 ```
 
@@ -110,7 +110,7 @@ compatible with `md5sum -c`. In library mode, albums that already have a
 `sums.md5` are skipped unless `--force` is passed.
 
 ```sh
-mr sums ~/music
+mrr sums ~/music
 md5sum -c ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love/sums.md5
 ```
 
@@ -120,7 +120,7 @@ Displays raw tag values alongside the sanitized forms that `rename` would use.
 Read-only; accepts `.flac`, `.mp3`, and `.m4a` files.
 
 ```sh
-mr inspect "01 back in black.flac"
+mrr inspect "01 back in black.flac"
 ```
 
 ## Metadata Notes
