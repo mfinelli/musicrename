@@ -41,7 +41,7 @@ Intended workflow:
   mrr check    # audit the result
   mrr sums     # generate md5 checksums`,
 	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
-	Version:           "3.1.0",
+	Version:           "3.1.1",
 }
 
 func Execute() {
