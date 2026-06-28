@@ -64,6 +64,11 @@ type Track struct {
 	// precedence over Artist for directory naming. Empty string if absent.
 	AlbumArtist string
 
+	// AlbumArtistSort is the value of the ALBUMARTISTSORT tag. When present it
+	// is used to determine the first-letter bucket in place of AlbumArtist,
+	// allowing artists like "The Beatles" to file under "b". Empty string if absent.
+	AlbumArtistSort string
+
 	// Album is the value of the ALBUM tag.
 	Album string
 
@@ -107,6 +112,12 @@ type Album struct {
 	// could be determined from any track; callers that require an artist
 	// (e.g. the planner) should treat this as an error condition.
 	ResolvedArtist string
+
+	// ResolvedArtistSort is the canonical sort value used solely for first-letter
+	// bucketing, populated by ProcessLibrary. When non-empty it overrides
+	// ResolvedArtist for bucket determination. Empty string means no sort tag was
+	// found; callers should fall back to ResolvedArtist.
+	ResolvedArtistSort string
 
 	// Warnings holds non-fatal issues discovered during scanning and tag
 	// reading (e.g. unreadable tracks). The planner seeds its own warning

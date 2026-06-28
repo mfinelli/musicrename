@@ -188,6 +188,14 @@ func ProcessLibrary(root string) ([]*Album, error) {
 			album.Warnings = append(album.Warnings,
 				fmt.Sprintf("could not resolve artist for album at %s; it will be skipped", album.RootPath))
 		}
+
+		// Populate sort tag for first-letter bucketing. Any track with the tag will do
+		for _, t := range album.Tracks {
+			if t.AlbumArtistSort != "" {
+				album.ResolvedArtistSort = t.AlbumArtistSort
+				break
+			}
+		}
 	}
 
 	return albums, nil

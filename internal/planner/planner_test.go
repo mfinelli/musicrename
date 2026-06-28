@@ -278,6 +278,57 @@ func TestPlanLibrary_PathGeneration(t *testing.T) {
 		require.NotNil(t, op)
 		assert.True(t, strings.HasSuffix(op.NewPath, "01 hello world.flac"))
 	})
+
+	t.Run("ALBUMARTISTSORT determines bucket but not folder name", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src/beatles", "The Beatles", []*metadata.Track{
+			{
+				Path:        "/src/beatles/01 come together.flac",
+				Title:       "Come Together",
+				Album:       "Abbey Road",
+				Year:        "1969",
+				TrackNumber: new(1),
+			},
+		}, nil)
+		// Simulate what ProcessLibrary would set from ALBUMARTISTSORT.
+		album.ResolvedArtistSort = "Beatles, The"
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/beatles/01 come together.flac")
+		require.NotNil(t, op)
+		// Bucket from sort tag ("b"), folder name from ALBUMARTIST ("the beatles").
+		assert.Equal(t,
+			filepath.Join(lib, "b", "the beatles", "[1969] abbey road", "01 come together.flac"),
+			op.NewPath,
+		)
+	})
+
+	t.Run("absent ALBUMARTISTSORT falls back to ALBUMARTIST for bucket", func(t *testing.T) {
+		lib := t.TempDir()
+		// No ResolvedArtistSort set.
+		album := makeAlbum("/src/beatles", "The Beatles", []*metadata.Track{
+			{
+				Path:        "/src/beatles/01 come together.flac",
+				Title:       "Come Together",
+				Album:       "Abbey Road",
+				Year:        "1969",
+				TrackNumber: new(1),
+			},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/beatles/01 come together.flac")
+		require.NotNil(t, op)
+		// No sort tag: "The Beatles" sanitizes to "the beatles", first letter "t".
+		assert.Equal(t,
+			filepath.Join(lib, "t", "the beatles", "[1969] abbey road", "01 come together.flac"),
+			op.NewPath,
+		)
+	})
 }
 
 func TestPlanLibrary_TrackNumbering(t *testing.T) {

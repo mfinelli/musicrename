@@ -200,6 +200,29 @@ func TestReadTrack(t *testing.T) {
 		assert.Equal(t, 1, track.DiscNumber)
 	})
 
+	t.Run("reads ALBUMARTISTSORT tag from FLAC", func(t *testing.T) {
+		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":           "Track",
+			"ARTIST":          "The Beatles",
+			"ALBUMARTIST":     "The Beatles",
+			"ALBUMARTISTSORT": "Beatles, The",
+		})
+		track := &Track{Path: path}
+		require.NoError(t, r.ReadTrack(track))
+		assert.Equal(t, "Beatles, The", track.AlbumArtistSort)
+	})
+
+	t.Run("absent ALBUMARTISTSORT leaves empty string", func(t *testing.T) {
+		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":       "Track",
+			"ARTIST":      "Artist",
+			"ALBUMARTIST": "Artist",
+		})
+		track := &Track{Path: path}
+		require.NoError(t, r.ReadTrack(track))
+		assert.Empty(t, track.AlbumArtistSort)
+	})
+
 	t.Run("non-existent file returns an error", func(t *testing.T) {
 		track := &Track{Path: "/nonexistent/track.flac"}
 		assert.Error(t, r.ReadTrack(track))

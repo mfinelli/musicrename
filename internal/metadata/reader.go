@@ -62,6 +62,7 @@ func (r *Reader) ReadTrack(t *Track) error {
 	t.Artist = getFirst(taglib.Artist)
 	t.Album = getFirst(taglib.Album)
 	t.AlbumArtist = getFirst(taglib.AlbumArtist)
+	t.AlbumArtistSort = getFirst(taglib.AlbumArtistSort)
 
 	// MusicBrainz commonly stores full ISO-8601 dates in the DATE tag
 	// (e.g. "2003-01-14" or "2003-01"). Extract only the four-character year

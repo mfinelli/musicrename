@@ -171,9 +171,26 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 
 	// GetFirstLetterPath already includes the artist name (e.g. "b/beyonce"),
 	// so it is used directly as the path component without appending truncArtist again.
-	artistFolderPath, err := sanitize.GetFirstLetterPath(truncArtist)
-	if err != nil {
-		return nil, fmt.Errorf("artist path error: %w", err)
+	// For first-letter bucketing, prefer the ALBUMARTISTSORT tag when present.
+	// This lets "The Beatles" file under "b/the beatles/" rather than "t/".
+	// The sort tag is sanitized to extract the bucket letter; the artist folder
+	// name always comes from the regular sanitized ALBUMARTIST (truncArtist).
+	var artistFolderPath string
+	if album.ResolvedArtistSort != "" {
+		sanSort := sanitize.CleanStringResult(album.ResolvedArtistSort, sanitize.ArtistOverride)
+		truncSort := sanitize.Truncate(sanSort.Value, 60)
+		sortPath, err := sanitize.GetFirstLetterPath(truncSort)
+		if err != nil {
+			return nil, fmt.Errorf("artist sort path error: %w", err)
+		}
+		// sortPath is "b/beatles the" (take only the bucket component).
+		artistFolderPath = filepath.Join(filepath.Dir(sortPath), truncArtist)
+	} else {
+		var err error
+		artistFolderPath, err = sanitize.GetFirstLetterPath(truncArtist)
+		if err != nil {
+			return nil, fmt.Errorf("artist path error: %w", err)
+		}
 	}
 
 	// Use the first track for album-level tags (album name, year). These are
