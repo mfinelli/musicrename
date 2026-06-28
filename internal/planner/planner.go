@@ -73,6 +73,10 @@ type AlbumPlan struct {
 	// callers to compute file-relative paths (e.g. for display) without
 	// re-deriving the directory from the move operations.
 	DestDir string
+	// Bucket is the single-character first-letter directory ("a"–"z" or "0")
+	// computed from ResolvedArtistSort when present, otherwise from ResolvedArtist.
+	// It is provided for display purposes so callers do not need to re-derive it.
+	Bucket string
 	// Moves contains one entry per file that needs to be moved (or confirmed
 	// as a no-op) within this album, including audio tracks and all assets.
 	Moves []MoveOperation
@@ -261,6 +265,7 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		AlbumName:   albumFolderName,
 		SourceDir:   album.RootPath,
 		DestDir:     fullAlbumDir,
+		Bucket:      filepath.Dir(artistFolderPath),
 		Moves:       []MoveOperation{},
 		// Seed with any warnings already collected during the scan phase
 		// (e.g. unreadable tracks from ProcessLibrary) so all warnings for

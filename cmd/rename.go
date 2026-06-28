@@ -24,8 +24,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
@@ -306,7 +304,7 @@ func renameGroupByArtist(albums []planner.AlbumPlan) []artistGroup {
 		if _, ok := m[ap.AlbumArtist]; !ok {
 			m[ap.AlbumArtist] = &artistGroup{
 				artist: ap.AlbumArtist,
-				bucket: renameBucket(ap.AlbumArtist),
+				bucket: ap.Bucket,
 			}
 		}
 		m[ap.AlbumArtist].albums = append(m[ap.AlbumArtist].albums, ap)
@@ -336,19 +334,4 @@ func renameGroupByArtist(albums []planner.AlbumPlan) []artistGroup {
 	})
 
 	return groups
-}
-
-// renameBucket returns the single-character display bucket for an already-
-// sanitized artist name: "a"–"z" for letter-initial artists, "0" for all
-// others (digit-initial, empty, or manual-override values starting with a
-// non-letter rune).
-func renameBucket(artist string) string {
-	if len(artist) == 0 {
-		return "0"
-	}
-	r, _ := utf8.DecodeRuneInString(artist)
-	if unicode.IsLetter(r) {
-		return string(r)
-	}
-	return "0"
 }

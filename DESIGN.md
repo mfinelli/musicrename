@@ -28,7 +28,11 @@ Files are organized using a tiered structure to avoid overly large root
 directories: `/[First Letter of Artist]/[Artist]/[Year] [Album Name]/`
 
 - The first-letter bucket is a single character: `a`–`z` for artists whose name
-  begins with a letter, or `0` for all others (digits, symbols, etc.).
+  begins with a letter, or `0` for all others (digits, symbols, etc.). If the
+  `ALBUMARTISTSORT` tag is present, its sanitized first character determines the
+  bucket instead of `ALBUMARTIST`. This allows artists like "The Beatles" to
+  file under `b/` rather than `t/`. The artist folder name always comes from the
+  sanitized `ALBUMARTIST`; only the bucket is affected by the sort tag.
 - Because artist names pass through the full sanitization pipeline before
   bucketing, only lowercase letters and digits are possible first characters by
   the time the bucket is determined.
@@ -451,6 +455,11 @@ failed tracks.
   checker can plan albums independently without cross-album collision state
   accumulating. `rename` continues to use `PlanLibrary` with a shared `destMap`
   for global collision detection.
+- **`Album.ResolvedArtistSort`:** Populated by `ProcessLibrary` from the
+  `ALBUMARTISTSORT` tag of the first track that carries it. Read by the planner
+  for bucket determination only; never used for folder naming.
+  `AlbumPlan.Bucket` carries the resolved bucket string so the display layer
+  does not need to recompute it.
 
 ### Key Dependencies
 

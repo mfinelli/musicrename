@@ -133,6 +133,9 @@ mrr inspect "01 back in black.flac"
   tag, all tracks must have one or the album is skipped with an error.
 - **Track numbers:** zero-padded to two digits; switches to three digits if any
   track on the album exceeds 99. A value of `0` is valid (pre-gap track).
+- **Sort bucketing:** if the `ALBUMARTISTSORT` tag is present, its first
+  character determines the directory bucket (`b/` for "Beatles, The") while the
+  folder name still comes from `ALBUMARTIST` ("the beatles").
 
 ## Contributing
 
