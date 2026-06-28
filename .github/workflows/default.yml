@@ -18,7 +18,7 @@ jobs:
       - run: sudo apt-get install -y ffmpeg scdoc
       - run: sudo apt-get install -y libtag1-dev  # NOTE: libtag-dev on 26.04
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - run: go mod download
