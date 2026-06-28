@@ -4,6 +4,10 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v3.2.0 — 2026-06-28
+
+Add artist bucket overrides.
+
 ## v3.1.1 — 2026-06-28
 
 Fix presentation of artist bucket.
