@@ -329,6 +329,32 @@ func TestPlanLibrary_PathGeneration(t *testing.T) {
 			op.NewPath,
 		)
 	})
+
+	t.Run("bucket override takes precedence over ALBUMARTISTSORT", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src/dmb", "Dave Matthews Band", []*metadata.Track{
+			{
+				Path:        "/src/dmb/01 ants marching.flac",
+				Title:       "Ants Marching",
+				Album:       "Under the Table and Dreaming",
+				Year:        "1994",
+				TrackNumber: new(1),
+			},
+		}, nil)
+		// Even with a sort tag that would give "m", the override wins.
+		album.ResolvedArtistSort = "Matthews, Dave, Band"
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/dmb/01 ants marching.flac")
+		require.NotNil(t, op)
+		assert.Equal(t,
+			filepath.Join(lib, "d", "dave matthews band", "[1994] under the table and dreaming", "01 ants marching.flac"),
+			op.NewPath,
+		)
+		assert.Equal(t, "d", plan.Albums[0].Bucket)
+	})
 }
 
 func TestPlanLibrary_TrackNumbering(t *testing.T) {

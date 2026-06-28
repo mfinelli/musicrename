@@ -33,6 +33,10 @@ directories: `/[First Letter of Artist]/[Artist]/[Year] [Album Name]/`
   bucket instead of `ALBUMARTIST`. This allows artists like "The Beatles" to
   file under `b/` rather than `t/`. The artist folder name always comes from the
   sanitized `ALBUMARTIST`; only the bucket is affected by the sort tag.
+- Bucket overrides: A small hardcoded map in internal/sanitize allows specific
+  raw `ALBUMARTIST` values to be assigned a fixed bucket letter, bypassing both
+  the `ALBUMARTISTSORT` tag and the standard first-character derivation.
+  Precedence order: bucket override -> `ALBUMARTISTSORT` -> `ALBUMARTIST`.
 - Because artist names pass through the full sanitization pipeline before
   bucketing, only lowercase letters and digits are possible first characters by
   the time the bucket is determined.

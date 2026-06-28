@@ -90,6 +90,22 @@ var manualOverrides = map[string]map[OverrideType]string{
 	},
 }
 
+// bucketOverrides maps a raw ALBUMARTIST value to a hardcoded first-letter
+// bucket, bypassing both the ALBUMARTISTSORT tag and the standard first-
+// character derivation. Use this for the small set of cases where MusicBrainz
+// sort tags produce the wrong bucket for personal preference (e.g.
+// "Matthews, Dave, Band" would give "m" but "d" is wanted).
+var bucketOverrides = map[string]string{
+	"Dave Matthews Band": "d",
+}
+
+// BucketOverride returns the hardcoded bucket letter for the given raw artist
+// name, and true if one exists. Returns "", false when no override is present.
+func BucketOverride(artist string) (string, bool) {
+	b, ok := bucketOverrides[artist]
+	return b, ok
+}
+
 // CleanString transforms an input string through the sanitization pipeline:
 //  1. Manual Overrides: If a match for the given kind exists, it returns the
 //     replacement immediately, skipping all subsequent steps.

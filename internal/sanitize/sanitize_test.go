@@ -356,3 +356,17 @@ func TestGetFirstLetterPath(t *testing.T) {
 		})
 	}
 }
+
+func TestBucketOverride(t *testing.T) {
+	t.Run("returns override and true for known artist", func(t *testing.T) {
+		bucket, ok := BucketOverride("Dave Matthews Band")
+		assert.True(t, ok)
+		assert.Equal(t, "d", bucket)
+	})
+
+	t.Run("returns empty string and false for unknown artist", func(t *testing.T) {
+		bucket, ok := BucketOverride("Unknown Artist")
+		assert.False(t, ok)
+		assert.Empty(t, bucket)
+	})
+}

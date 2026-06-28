@@ -180,7 +180,12 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 	// The sort tag is sanitized to extract the bucket letter; the artist folder
 	// name always comes from the regular sanitized ALBUMARTIST (truncArtist).
 	var artistFolderPath string
-	if album.ResolvedArtistSort != "" {
+	if bucket, ok := sanitize.BucketOverride(album.ResolvedArtist); ok {
+		// Hardcoded bucket overrides take precedence over everything, including
+		// the ALBUMARTISTSORT tag. The bucket value is used as-is; it is
+		// expected to be a single lowercase letter or "0".
+		artistFolderPath = filepath.Join(bucket, truncArtist)
+	} else if album.ResolvedArtistSort != "" {
 		sanSort := sanitize.CleanStringResult(album.ResolvedArtistSort, sanitize.ArtistOverride)
 		truncSort := sanitize.Truncate(sanSort.Value, 60)
 		sortPath, err := sanitize.GetFirstLetterPath(truncSort)
