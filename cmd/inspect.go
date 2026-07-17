@@ -213,7 +213,7 @@ func inspectLyricsPreview(s string) string {
 	if s == "" {
 		return "—"
 	}
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

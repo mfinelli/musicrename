@@ -85,7 +85,7 @@ func standardizeLRC(lrc string) string {
 // parseOffset scans lrc for an [offset:±N] tag and returns its value in
 // milliseconds. Returns 0 if no offset tag is present.
 func parseOffset(lrc string) int {
-	for _, line := range strings.Split(lrc, "\n") {
+	for line := range strings.SplitSeq(lrc, "\n") {
 		if m := offsetTagRe.FindStringSubmatch(strings.TrimRight(line, "\r")); m != nil {
 			v, _ := strconv.Atoi(m[1])
 			return v
@@ -152,15 +152,11 @@ func normalizeTimestampWithOffset(ts string, offsetMs int) string {
 
 	// Accumulate into a Duration so Go handles any overflow transparently,
 	// then apply the global offset.
-	total := time.Duration(hours)*time.Hour +
-		time.Duration(minutes)*time.Minute +
-		time.Duration(seconds)*time.Second +
-		time.Duration(ms)*time.Millisecond +
-		time.Duration(offsetMs)*time.Millisecond
-
-	if total < 0 {
-		total = 0
-	}
+	total := max(time.Duration(hours)*time.Hour+
+		time.Duration(minutes)*time.Minute+
+		time.Duration(seconds)*time.Second+
+		time.Duration(ms)*time.Millisecond+
+		time.Duration(offsetMs)*time.Millisecond, 0)
 
 	h := int(total / time.Hour)
 	total -= time.Duration(h) * time.Hour
