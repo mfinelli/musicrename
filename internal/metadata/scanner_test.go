@@ -60,13 +60,16 @@ func TestCategorizeRootFile(t *testing.T) {
 		{"folder.jpg", CatPrimaryArt},
 		{"folder.jpeg", CatPrimaryArt},
 		{"folder.png", CatPrimaryArt},
+		{"folder.webp", CatPrimaryArt},
 		// These look similar but are not primary art
 		{"folder2.jpg", CatArtwork},
 		{"folderbig.png", CatArtwork},
+		{"folder2.webp", CatArtwork},
 		// Supplementary artwork
 		{"cover.jpg", CatArtwork},
 		{"back.jpeg", CatArtwork},
 		{"booklet.png", CatArtwork},
+		{"animated.webp", CatArtwork},
 		// Scans
 		{"highres.tiff", CatScan},
 		{"scan.tif", CatScan},

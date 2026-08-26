@@ -39,6 +39,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.senan.xyz/taglib"
 
@@ -370,16 +371,29 @@ func checkAlbumTags(album *metadata.Album, ar *AlbumResult) {
 }
 
 // checkArtwork warns when the album has no primary artwork file
-// (folder.jpg or folder.png) or has more than one.
+// (folder.jpg, folder.png, or folder.webp), or when there's more than one of
+// a given kind. Exactly one static image (folder.jpg/.jpeg/.png) paired with
+// exactly one animated folder.webp is a supported fallback combination and
+// does not produce a warning.
 func checkArtwork(album *metadata.Album, ar *AlbumResult) {
 	primary := album.Assets[metadata.CatPrimaryArt]
+
+	var staticCount, webpCount int
+	for _, p := range primary {
+		if strings.ToLower(filepath.Ext(p)) == ".webp" {
+			webpCount++
+		} else {
+			staticCount++
+		}
+	}
+
 	switch {
 	case len(primary) == 0:
 		ar.Warnings = append(ar.Warnings, Warning{
 			Path:    album.RootPath,
-			Message: "missing primary artwork (folder.jpg or folder.png)",
+			Message: "missing primary artwork (folder.jpg, folder.png, or folder.webp)",
 		})
-	case len(primary) > 1:
+	case staticCount > 1 || webpCount > 1:
 		ar.Warnings = append(ar.Warnings, Warning{
 			Path:    album.RootPath,
 			Message: fmt.Sprintf("multiple primary artwork files found (%d)", len(primary)),

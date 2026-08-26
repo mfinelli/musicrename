@@ -45,7 +45,7 @@ type FileCategory string
 const (
 	CatAudio      FileCategory = "Audio"      // .flac, .mp3, .m4a
 	CatRootText   FileCategory = "RootText"   // .log, .cue, .m3u, .m3u8, .txt, sums.md5
-	CatPrimaryArt FileCategory = "PrimaryArt" // folder.jpg / folder.jpeg / folder.png
+	CatPrimaryArt FileCategory = "PrimaryArt" // folder.jpg / folder.jpeg / folder.png / folder.webp
 	CatArtwork    FileCategory = "Artwork"    // other images at root or in artwork/
 	CatScan       FileCategory = "Scan"       // .tiff / .tif, typically in scans/
 	CatExtras     FileCategory = "Extras"     // files in extras/

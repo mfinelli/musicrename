@@ -53,7 +53,7 @@ directories: `/[First Letter of Artist]/[Artist]/[Year] [Album Name]/`
 
 - **Root:**
   - Audio files (`.flac`, `.mp3`, `.m4a`)
-  - Primary Art: `folder.jpg` or `folder.png`
+  - Primary Art: `folder.jpg`, `folder.png`, or `folder.webp` (animated)
   - Text files: `.log`, `.cue`, `.m3u`, `.m3u8`
   - `sums.md5`
 - **`/artwork/`**: Additional image files.
@@ -281,8 +281,9 @@ The mode is auto-detected from the path argument (default: current directory):
 
 **Artwork** _(album-level; album and library modes)_
 
-- Missing primary artwork (`folder.jpg` or `folder.png`)
-- Multiple `folder.*` files present
+- Missing primary artwork (`folder.jpg`, `folder.png`, or `folder.webp`)
+- Multiple `folder.*` files present (one static image plus one `folder.webp` is
+  allowed, as a fallback pair for players without animated-artwork support)
 
 **Integrity** _(album-level; album and library modes)_
 

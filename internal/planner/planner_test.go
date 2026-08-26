@@ -517,6 +517,23 @@ func TestPlanLibrary_Assets(t *testing.T) {
 		assert.NotContains(t, op.NewPath, "artwork")
 	})
 
+	t.Run("animated webp primary art is renamed to folder.webp", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum(src, "Artist", []*metadata.Track{
+			{Path: src + "/01.flac", Title: "T", Album: "A", Year: "2000", TrackNumber: new(1)},
+		}, map[metadata.FileCategory][]string{
+			metadata.CatPrimaryArt: {src + "/folder.webp"},
+		})
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], src+"/folder.webp")
+		require.NotNil(t, op)
+		assert.True(t, strings.HasSuffix(op.NewPath, "folder.webp"))
+		assert.NotContains(t, op.NewPath, "artwork")
+	})
+
 	t.Run("artwork goes into artwork/ with sanitized stem", func(t *testing.T) {
 		lib := t.TempDir()
 		album := makeAlbum(src, "Artist", []*metadata.Track{

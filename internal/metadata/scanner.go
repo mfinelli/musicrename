@@ -36,8 +36,9 @@ var (
 
 	// imageExts is the set of file extensions recognised as image files.
 	// Whether a specific image is primary art or supplementary artwork is
-	// determined by its filename, not just its extension.
-	imageExts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true}
+	// determined by its filename, not just its extension. .webp is included
+	// to support animated cover art.
+	imageExts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
 
 	// scanExts is the set of file extensions treated as high-resolution scans,
 	// typically stored in the scans/ subdirectory.
@@ -58,9 +59,10 @@ func categorizeRootFile(name string) FileCategory {
 		return CatRootText
 	}
 	if imageExts[ext] {
-		// Only the exact filenames folder.jpg / folder.jpeg / folder.png are
-		// treated as primary album art; everything else is supplementary artwork.
-		if lower == "folder.jpg" || lower == "folder.jpeg" || lower == "folder.png" {
+		// Only the exact filenames folder.jpg / folder.jpeg / folder.png /
+		// folder.webp are treated as primary album art; everything else is
+		// supplementary artwork.
+		if lower == "folder.jpg" || lower == "folder.jpeg" || lower == "folder.png" || lower == "folder.webp" {
 			return CatPrimaryArt
 		}
 		return CatArtwork
