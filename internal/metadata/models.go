@@ -43,13 +43,14 @@ package metadata
 type FileCategory string
 
 const (
-	CatAudio      FileCategory = "Audio"      // .flac, .mp3, .m4a
-	CatRootText   FileCategory = "RootText"   // .log, .cue, .m3u, .m3u8, .txt, sums.md5
-	CatPrimaryArt FileCategory = "PrimaryArt" // folder.jpg / folder.jpeg / folder.png / folder.webp
-	CatArtwork    FileCategory = "Artwork"    // other images at root or in artwork/
-	CatScan       FileCategory = "Scan"       // .tiff / .tif, typically in scans/
-	CatExtras     FileCategory = "Extras"     // files in extras/
-	CatUnknown    FileCategory = "Unknown"    // anything that doesn't fit the above
+	CatAudio              FileCategory = "Audio"              // .flac, .mp3, .m4a
+	CatRootText           FileCategory = "RootText"           // .log, .cue, .m3u, .m3u8, .txt, sums.md5
+	CatPrimaryArt         FileCategory = "PrimaryArt"         // folder.jpg / folder.jpeg / folder.png
+	CatPrimaryArtAnimated FileCategory = "PrimaryArtAnimated" // folder.webp / folder.mp4
+	CatArtwork            FileCategory = "Artwork"            // other images at root or in artwork/
+	CatScan               FileCategory = "Scan"               // .tiff / .tif, typically in scans/
+	CatExtras             FileCategory = "Extras"             // files in extras/
+	CatUnknown            FileCategory = "Unknown"            // anything that doesn't fit the above
 )
 
 // Track represents a single audio file and its extracted metadata.

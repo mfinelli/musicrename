@@ -34,10 +34,11 @@ var (
 	// files that live at the album root (e.g. ripping logs, cue sheets).
 	textExts = map[string]bool{".log": true, ".cue": true, ".m3u": true, ".m3u8": true, ".txt": true}
 
-	// imageExts is the set of file extensions recognised as image files.
-	// Whether a specific image is primary art or supplementary artwork is
-	// determined by its filename, not just its extension. .webp is included
-	// to support animated cover art.
+	// imageExts is the set of file extensions recognised as (static) image
+	// files. .webp is included because it's still a valid supplementary
+	// artwork format even when it isn't animated; whether a specific webp
+	// file is primary art (static or animated) is determined below by its
+	// filename, not just its extension.
 	imageExts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
 
 	// scanExts is the set of file extensions treated as high-resolution scans,
@@ -58,12 +59,20 @@ func categorizeRootFile(name string) FileCategory {
 	if textExts[ext] || name == hasher.SumsFilename {
 		return CatRootText
 	}
+	// The exact filename folder.mp4 is primary animated art; any other .mp4
+	// doesn't fit an established category and falls through to CatUnknown.
+	if lower == "folder.mp4" {
+		return CatPrimaryArtAnimated
+	}
 	if imageExts[ext] {
-		// Only the exact filenames folder.jpg / folder.jpeg / folder.png /
-		// folder.webp are treated as primary album art; everything else is
-		// supplementary artwork.
-		if lower == "folder.jpg" || lower == "folder.jpeg" || lower == "folder.png" || lower == "folder.webp" {
+		// Only the exact filenames folder.jpg / folder.jpeg / folder.png are
+		// treated as static primary album art, and folder.webp as animated
+		// primary art; everything else is supplementary artwork.
+		switch lower {
+		case "folder.jpg", "folder.jpeg", "folder.png":
 			return CatPrimaryArt
+		case "folder.webp":
+			return CatPrimaryArtAnimated
 		}
 		return CatArtwork
 	}

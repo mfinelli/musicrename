@@ -432,13 +432,13 @@ func TestCheckTrackAudio_UnreadableFile(t *testing.T) {
 func TestCheckArtwork(t *testing.T) {
 	t.Run("no primary art produces warning", func(t *testing.T) {
 		album := makeCheckerAlbum("/a", "Artist", nil, nil)
-		// No CatPrimaryArt in Assets (zero value map has no key).
+		// No CatPrimaryArt/CatPrimaryArtAnimated in Assets (zero value map has no key).
 		ar := &AlbumResult{AlbumPath: "/a"}
 		checkArtwork(album, ar)
 		assert.NotNil(t, findWarning(ar, "missing primary artwork"))
 	})
 
-	t.Run("exactly one primary art file produces no warning", func(t *testing.T) {
+	t.Run("exactly one static primary art file produces no warning", func(t *testing.T) {
 		album := makeCheckerAlbum("/a", "Artist", nil, map[metadata.FileCategory][]string{
 			metadata.CatPrimaryArt: {"/a/folder.jpg"},
 		})
@@ -449,47 +449,58 @@ func TestCheckArtwork(t *testing.T) {
 
 	t.Run("animated webp primary art produces no warning", func(t *testing.T) {
 		album := makeCheckerAlbum("/a", "Artist", nil, map[metadata.FileCategory][]string{
-			metadata.CatPrimaryArt: {"/a/folder.webp"},
+			metadata.CatPrimaryArtAnimated: {"/a/folder.webp"},
 		})
 		ar := &AlbumResult{AlbumPath: "/a"}
 		checkArtwork(album, ar)
 		assert.Empty(t, ar.Warnings)
 	})
 
-	t.Run("one static plus one webp fallback pair produces no warning", func(t *testing.T) {
+	t.Run("animated mp4 primary art produces no warning", func(t *testing.T) {
 		album := makeCheckerAlbum("/a", "Artist", nil, map[metadata.FileCategory][]string{
-			metadata.CatPrimaryArt: {"/a/folder.jpg", "/a/folder.webp"},
+			metadata.CatPrimaryArtAnimated: {"/a/folder.mp4"},
 		})
 		ar := &AlbumResult{AlbumPath: "/a"}
 		checkArtwork(album, ar)
 		assert.Empty(t, ar.Warnings)
 	})
 
-	t.Run("multiple primary art files produce warning", func(t *testing.T) {
+	t.Run("one static plus one animated fallback pair produces no warning", func(t *testing.T) {
+		album := makeCheckerAlbum("/a", "Artist", nil, map[metadata.FileCategory][]string{
+			metadata.CatPrimaryArt:         {"/a/folder.jpg"},
+			metadata.CatPrimaryArtAnimated: {"/a/folder.webp"},
+		})
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkArtwork(album, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("multiple static primary art files produce warning", func(t *testing.T) {
 		album := makeCheckerAlbum("/a", "Artist", nil, map[metadata.FileCategory][]string{
 			metadata.CatPrimaryArt: {"/a/folder.jpg", "/a/folder.png"},
 		})
 		ar := &AlbumResult{AlbumPath: "/a"}
 		checkArtwork(album, ar)
-		assert.NotNil(t, findWarning(ar, "multiple primary artwork"))
+		assert.NotNil(t, findWarning(ar, "multiple static primary artwork"))
 	})
 
-	t.Run("multiple webp files produce warning", func(t *testing.T) {
+	t.Run("multiple animated primary art files produce warning", func(t *testing.T) {
 		album := makeCheckerAlbum("/a", "Artist", nil, map[metadata.FileCategory][]string{
-			metadata.CatPrimaryArt: {"/a/folder.webp", "/a/folder2.webp"},
+			metadata.CatPrimaryArtAnimated: {"/a/folder.webp", "/a/folder.mp4"},
 		})
 		ar := &AlbumResult{AlbumPath: "/a"}
 		checkArtwork(album, ar)
-		assert.NotNil(t, findWarning(ar, "multiple primary artwork"))
+		assert.NotNil(t, findWarning(ar, "multiple animated primary artwork"))
 	})
 
-	t.Run("one static plus multiple webp files produce warning", func(t *testing.T) {
+	t.Run("one static plus multiple animated files produce warning", func(t *testing.T) {
 		album := makeCheckerAlbum("/a", "Artist", nil, map[metadata.FileCategory][]string{
-			metadata.CatPrimaryArt: {"/a/folder.jpg", "/a/folder.webp", "/a/folder2.webp"},
+			metadata.CatPrimaryArt:         {"/a/folder.jpg"},
+			metadata.CatPrimaryArtAnimated: {"/a/folder.webp", "/a/folder.mp4"},
 		})
 		ar := &AlbumResult{AlbumPath: "/a"}
 		checkArtwork(album, ar)
-		assert.NotNil(t, findWarning(ar, "multiple primary artwork"))
+		assert.NotNil(t, findWarning(ar, "multiple animated primary artwork"))
 	})
 }
 

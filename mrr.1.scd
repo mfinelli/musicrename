@@ -52,8 +52,10 @@ Each album directory may contain the following:
 :[ *Contents*
 |  \*.flac, \*.mp3, \*.m4a
 :  Audio files
-|  folder.jpg, folder.png, folder.webp
-:  Primary artwork
+|  folder.jpg, folder.png
+:  Primary artwork (static)
+|  folder.webp, folder.mp4
+:  Primary artwork (animated)
 |  \*.log, \*.cue, \*.m3u, \*.m3u8
 :  Text assets
 |  sums.md5
@@ -111,8 +113,8 @@ Checks include:
 - Missing *REPLAYGAIN_TRACK_GAIN* or *REPLAYGAIN_ALBUM_GAIN* tags
 - Embedded artwork inside audio files
 - Missing or duplicate primary artwork (*folder.jpg* / *folder.png* /
-  *folder.webp*). One static image plus one *folder.webp* is allowed as a
-  fallback pair.
+  *folder.webp* / *folder.mp4*). One static image plus one animated file is
+  allowed as a fallback pair.
 - Missing *sums.md5*
 - Path conformance: whether *rename* would move any file (library mode only)
 

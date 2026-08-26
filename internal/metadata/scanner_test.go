@@ -60,11 +60,15 @@ func TestCategorizeRootFile(t *testing.T) {
 		{"folder.jpg", CatPrimaryArt},
 		{"folder.jpeg", CatPrimaryArt},
 		{"folder.png", CatPrimaryArt},
-		{"folder.webp", CatPrimaryArt},
+		// Primary animated art
+		{"folder.webp", CatPrimaryArtAnimated},
+		{"folder.mp4", CatPrimaryArtAnimated},
 		// These look similar but are not primary art
 		{"folder2.jpg", CatArtwork},
 		{"folderbig.png", CatArtwork},
 		{"folder2.webp", CatArtwork},
+		{"folder2.mp4", CatUnknown},
+		{"folderbig.mp4", CatUnknown},
 		// Supplementary artwork
 		{"cover.jpg", CatArtwork},
 		{"back.jpeg", CatArtwork},
@@ -76,6 +80,7 @@ func TestCategorizeRootFile(t *testing.T) {
 		// Unknown
 		{"readme.exe", CatUnknown},
 		{"data.bin", CatUnknown},
+		{"video.mp4", CatUnknown},
 	}
 
 	for _, tt := range tests {

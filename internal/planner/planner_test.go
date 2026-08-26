@@ -522,7 +522,7 @@ func TestPlanLibrary_Assets(t *testing.T) {
 		album := makeAlbum(src, "Artist", []*metadata.Track{
 			{Path: src + "/01.flac", Title: "T", Album: "A", Year: "2000", TrackNumber: new(1)},
 		}, map[metadata.FileCategory][]string{
-			metadata.CatPrimaryArt: {src + "/folder.webp"},
+			metadata.CatPrimaryArtAnimated: {src + "/folder.webp"},
 		})
 
 		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
@@ -531,6 +531,23 @@ func TestPlanLibrary_Assets(t *testing.T) {
 		op := findMove(&plan.Albums[0], src+"/folder.webp")
 		require.NotNil(t, op)
 		assert.True(t, strings.HasSuffix(op.NewPath, "folder.webp"))
+		assert.NotContains(t, op.NewPath, "artwork")
+	})
+
+	t.Run("animated mp4 primary art is renamed to folder.mp4", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum(src, "Artist", []*metadata.Track{
+			{Path: src + "/01.flac", Title: "T", Album: "A", Year: "2000", TrackNumber: new(1)},
+		}, map[metadata.FileCategory][]string{
+			metadata.CatPrimaryArtAnimated: {src + "/folder.mp4"},
+		})
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], src+"/folder.mp4")
+		require.NotNil(t, op)
+		assert.True(t, strings.HasSuffix(op.NewPath, "folder.mp4"))
 		assert.NotContains(t, op.NewPath, "artwork")
 	})
 

@@ -147,6 +147,7 @@ func (p *planner) PlanLibrary(albums []*metadata.Album) (*Plan, error) {
 // stable across runs (ranging over a map is non-deterministic in Go).
 var assetCategoryOrder = []metadata.FileCategory{
 	metadata.CatPrimaryArt,
+	metadata.CatPrimaryArtAnimated,
 	metadata.CatRootText,
 	metadata.CatArtwork,
 	metadata.CatScan,
@@ -353,9 +354,10 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 
 			var newPath string
 			switch cat {
-			case metadata.CatPrimaryArt:
-				// Primary art is always renamed to folder.{ext}; no sanitization
-				// of the stem is needed because the name is hardcoded.
+			case metadata.CatPrimaryArt, metadata.CatPrimaryArtAnimated:
+				// Primary art (static or animated) is always renamed to
+				// folder.{ext}; no sanitization of the stem is needed because
+				// the name is hardcoded.
 				newPath = filepath.Join(fullAlbumDir, "folder"+ext)
 
 			case metadata.CatArtwork:
