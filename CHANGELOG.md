@@ -4,6 +4,13 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v3.3.0 — 2026-08-26
+
+Support `folder.webp` and `folder.mp4` for animated primary album artwork
+separate from static `folder.jpg`/`folder.png` art. `check` allows one static
+image plus one animated file as a fallback pair (for players without
+animated-artwork support) without warning.
+
 ## v3.2.0 — 2026-06-28
 
 Add artist bucket overrides.
