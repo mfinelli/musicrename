@@ -1,5 +1,7 @@
 set dotenv-load := false
-set ignore-comments := true
+set ignore-comments
+
+sed := if os() == "macos" { "gsed" } else { "sed" }
 
 [private]
 default:
@@ -7,9 +9,10 @@ default:
 
 # Update all versions strings to "v"
 bump v:
-    sed -i -E "s|(LABEL org\.opencontainers\.image\.version=v).*|\1{{ v }}|" \
+    {{ sed }} -i -E \
+        "s|(LABEL org\.opencontainers\.image\.version=v).*|\1{{ v }}|" \
         Dockerfile
-    sed -i -E "s|(Version:\s+\").*(\",)|\1{{ v }}\2|" cmd/root.go
+    {{ sed }} -i -E "s|(Version:\s+\").*(\",)|\1{{ v }}\2|" cmd/root.go
 
 # Formats all files (requires prettier)
 fmt:
