@@ -98,8 +98,8 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	albumArtist := getFirst(taglib.AlbumArtist)
 	album := getFirst(taglib.Album)
 	rawDate := getFirst(taglib.Date)
-	trackNum := strings.SplitN(getFirst(taglib.TrackNumber), "/", 2)[0]
-	discNum := strings.SplitN(getFirst(taglib.DiscNumber), "/", 2)[0]
+	trackNum, _, _ := strings.Cut(getFirst(taglib.TrackNumber), "/")
+	discNum, _, _ := strings.Cut(getFirst(taglib.DiscNumber), "/")
 
 	var syncedLyrics, unsyncedLyrics string
 	switch ext {

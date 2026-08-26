@@ -73,14 +73,14 @@ func (r *Reader) ReadTrack(t *Track) error {
 
 	// TrackNumber is a pointer to distinguish "absent" (nil) from the valid
 	// value zero, which represents a hidden/pre-gap track.
-	trackStr := strings.SplitN(getFirst(taglib.TrackNumber), "/", 2)[0]
+	trackStr, _, _ := strings.Cut(getFirst(taglib.TrackNumber), "/")
 	if trackStr != "" {
 		if val, err := strconv.Atoi(trackStr); err == nil {
 			t.TrackNumber = &val
 		}
 	}
 
-	discStr := strings.SplitN(getFirst(taglib.DiscNumber), "/", 2)[0]
+	discStr, _, _ := strings.Cut(getFirst(taglib.DiscNumber), "/")
 	if discStr != "" {
 		if val, err := strconv.Atoi(discStr); err == nil {
 			t.DiscNumber = val
