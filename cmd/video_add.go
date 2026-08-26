@@ -18,12 +18,11 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/video"
@@ -85,33 +84,32 @@ func runVideoAdd(cmd *cobra.Command, args []string) error {
 	album, _ := cmd.Flags().GetString("album")
 	year, _ := cmd.Flags().GetString("year")
 
-	in := cmd.InOrStdin()
-	out := cmd.OutOrStdout()
-
-	if strings.TrimSpace(artist) == "" {
-		artist, err = promptFor(in, out, "Artist")
-		if err != nil {
-			return fmt.Errorf("reading artist: %w", err)
-		}
-	}
-	if strings.TrimSpace(title) == "" {
-		title, err = promptFor(in, out, "Title")
-		if err != nil {
-			return fmt.Errorf("reading title: %w", err)
-		}
+	// add only ever prompts for the required fields (artist/title); album
+	// and year remain flag-only here, unlike "video edit" (video_edit.go,
+	// which also uses promptMissingVideoFields below) which prompts for
+	// anything not supplied.
+	values := videoFieldValues{Artist: artist, Title: title, Album: album, Year: year}
+	if err := promptMissingVideoFields(&values,
+		strings.TrimSpace(artist) == "",
+		strings.TrimSpace(title) == "",
+		false,
+		false,
+	); err != nil {
+		return fmt.Errorf("prompting: %w", err)
 	}
 
 	result, err := video.Add(absRoot, video.AddInput{
 		SourcePath: absSrc,
-		Artist:     artist,
-		Title:      title,
-		Album:      album,
-		Year:       year,
+		Artist:     values.Artist,
+		Title:      values.Title,
+		Album:      values.Album,
+		Year:       values.Year,
 	})
 	if err != nil {
 		return fmt.Errorf("add: %w", err)
 	}
 
+	out := cmd.OutOrStdout()
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "video: %s\n", result.VideoPath)
 	fmt.Fprintf(out, "nfo:   %s\n", result.NFOPath)
@@ -121,17 +119,64 @@ func runVideoAdd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// promptFor writes "label: " to out and reads a single line from in,
-// returning it with surrounding whitespace trimmed.
-func promptFor(in io.Reader, out io.Writer, label string) (string, error) {
-	fmt.Fprintf(out, "%s: ", label)
+// videoFieldValues holds the four musicvideo.nfo fields. Used both to seed
+// prompts (with the current value, for "video edit") or a blank starting
+// point (for "video add"), and to carry the final values back out. Shared
+// with video_edit.go's runVideoEdit.
+type videoFieldValues struct {
+	Artist string
+	Title  string
+	Album  string
+	Year   string
+}
 
-	scanner := bufio.NewScanner(in)
-	if !scanner.Scan() {
-		// EOF or no input available; Err is nil on plain EOF, so this is
-		// treated the same as an empty line rather than a hard error, and
-		// caught downstream by video.Add's required-field validation.
-		return "", scanner.Err()
+// promptMissingVideoFields runs a single huh form prompting only for the
+// fields the caller marks as needed (needArtist, needTitle, needAlbum,
+// needYear), pre-filled with whatever is already in *values — for "video
+// add" that's blank; for "video edit" that's the field's current value from
+// the existing nfo, so pressing enter without typing anything keeps it
+// unchanged (or, for an already-empty optional field, leaves it empty and
+// excluded from the nfo, matching Add/Edit's omitempty behavior).
+//
+// Artist and Title are validated as non-empty when prompted; Album and Year
+// accept anything, including empty. If no field is needed, this is a no-op:
+// huh is never invoked and no terminal interaction occurs, so callers that
+// supplied every field via flags never hit a TUI at all.
+func promptMissingVideoFields(values *videoFieldValues, needArtist, needTitle, needAlbum, needYear bool) error {
+	requireNonEmpty := func(s string) error {
+		if strings.TrimSpace(s) == "" {
+			return fmt.Errorf("required")
+		}
+		return nil
 	}
-	return strings.TrimSpace(scanner.Text()), nil
+
+	var fields []huh.Field
+	if needArtist {
+		fields = append(fields, huh.NewInput().
+			Title("Artist").
+			Value(&values.Artist).
+			Validate(requireNonEmpty))
+	}
+	if needTitle {
+		fields = append(fields, huh.NewInput().
+			Title("Title").
+			Value(&values.Title).
+			Validate(requireNonEmpty))
+	}
+	if needAlbum {
+		fields = append(fields, huh.NewInput().
+			Title("Album (optional)").
+			Value(&values.Album))
+	}
+	if needYear {
+		fields = append(fields, huh.NewInput().
+			Title("Year (optional)").
+			Value(&values.Year))
+	}
+
+	if len(fields) == 0 {
+		return nil
+	}
+
+	return huh.NewForm(huh.NewGroup(fields...)).Run()
 }

@@ -476,6 +476,7 @@ failed tracks.
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                                      |
 | `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`, `lyrics`)                      |
+| `github.com/charmbracelet/huh`           | Interactive form/prompt fields for `video add`/`video edit` (editable, pre-fillable text inputs)      |
 | `github.com/deluan/go-taglib`            | Cross-format metadata reading and writing (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
 | `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`, `lyrics`)                                        |
 | `github.com/spf13/cobra`                 | CLI command management                                                                                |
@@ -544,21 +545,21 @@ Jellyfin to pick up correctly, not the full scraper-oriented field set (no
   to any particular album.
 - The nfo is **always machine-written** via `encoding/xml` (marshal, not
   hand-built strings or hand-editing) — this is a deliberate design goal so that
-  malformed/typo'd XML is never a concern. `video add` is currently the only
-  command that writes one; a future `video edit`-style command is planned to
-  update an existing nfo's fields without requiring hand-editing (command shape
-  TBD).
+  malformed/typo'd XML is never a concern. `video add` writes a fresh one at
+  ingest time; `video edit` rewrites an existing one's fields afterward without
+  ever requiring hand-editing.
 
 ### 6.3 Commands
 
-| Command                                                                             | Description                                                                                                                                                                                                      |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `musicrename video fetch <url> [destination]`                                       | Downloads a video via `yt-dlp` and writes a generated `info.txt`. Standalone step; does not file the video into the library.                                                                                     |
-| `musicrename video add <file> [video-root] [--artist] [--title] [--album] [--year]` | Ingests a single raw video file. Prompts interactively for `--artist`/`--title` if not passed as flags; `--album`/`--year` stay optional with no prompt. `video-root` defaults to the current working directory. |
-| `musicrename video rename [video-root]`                                             | Idempotent whole-tree reconciliation pass, analogous to audio `rename`.                                                                                                                                          |
-| `musicrename video sums [path]`                                                     | Generates a per-video-directory `sums.md5`.                                                                                                                                                                      |
-| `musicrename video check [path]`                                                    | Audits the video tree for missing/incomplete nfo files, path conformance, and missing `sums.md5`.                                                                                                                |
-| `musicrename video inspect <file>`                                                  | Displays a single video's raw and sanitized metadata; read-only.                                                                                                                                                 |
+| Command                                                                              | Description                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `musicrename video fetch <url> [destination]`                                        | Downloads a video via `yt-dlp` and writes a generated `info.txt`. Standalone step; does not file the video into the library.                                                                                     |
+| `musicrename video add <file> [video-root] [--artist] [--title] [--album] [--year]`  | Ingests a single raw video file. Prompts interactively for `--artist`/`--title` if not passed as flags; `--album`/`--year` stay optional with no prompt. `video-root` defaults to the current working directory. |
+| `musicrename video edit [file-or-directory] [--artist] [--title] [--album] [--year]` | Creates or updates a video's `musicvideo.nfo`. Argument defaults to the current directory; any field not passed as a flag is prompted for, pre-filled with its current value if one exists.                      |
+| `musicrename video rename [video-root]`                                              | Idempotent whole-tree reconciliation pass, analogous to audio `rename`.                                                                                                                                          |
+| `musicrename video sums [path]`                                                      | Generates a per-video-directory `sums.md5`.                                                                                                                                                                      |
+| `musicrename video check [path]`                                                     | Audits the video tree for missing/incomplete nfo files, path conformance, and missing `sums.md5`.                                                                                                                |
+| `musicrename video inspect <file>`                                                   | Displays a single video's raw and sanitized metadata; read-only.                                                                                                                                                 |
 
 #### `video fetch`
 
@@ -603,8 +604,8 @@ separate, deliberate step.
 #### `video add`
 
 1. Resolve `--artist`/`--title` from flags, prompting for any that are missing.
-   `--album`/`--year` are used if passed and left empty otherwise — never
-   prompted for.
+   `--album`/`--year` are used if passed and left empty otherwise — `add` never
+   prompts for them, unlike `edit`.
 2. Sanitize artist and title through the shared `sanitize` pipeline; compute the
    destination path (`[video-root]/[bucket]/[artist]/[title]/[title].ext`).
 3. **Error and abort if the destination directory already exists** — there is no
@@ -616,6 +617,45 @@ separate, deliberate step.
    files (e.g. a `yt-dlp`-generated thumbnail) are left untouched.
 5. Write `musicvideo.nfo` into the destination directory unconditionally, using
    the resolved (unsanitized/raw) field values.
+
+#### `video edit`
+
+Creates or updates a video's `musicvideo.nfo` without hand-editing XML.
+
+The argument can be either the video file or its directory; if omitted it
+defaults to the current directory, so running this from inside a video's folder
+needs no argument. Unlike `add`/`inspect`'s `<file>` convention, this
+flexibility is deliberate: `musicvideo.nfo` has the same filename in every
+video's directory, so tab-completing on it specifically (from outside the
+video's own directory) carries no identifying information the way completing on
+the video file's unique name, or just being in the right directory already,
+does.
+
+1. Resolve the target directory (see above), then attempt to read its current
+   `musicvideo.nfo`. **A missing nfo is not an error** — `edit` creates one
+   fresh in that case (e.g. for a video that was never run through `add`, or
+   whose nfo was deleted), so prompts below simply start blank instead of
+   pre-filled. As a sanity check against writing an orphaned nfo into the wrong
+   directory, this still requires the target directory to contain a recognized
+   video file; it does not require that `add` was ever run.
+2. For `--artist`/`--title`/`--album`/`--year`: a flag passed explicitly
+   (including as an empty string, e.g. `--year ""`) is used as-is and skips
+   prompting for that field entirely. Anything not passed is prompted for via a
+   `huh` form field pre-filled with its current value (blank if there wasn't
+   one), so pressing enter keeps it unchanged; the field can also be edited or
+   cleared in place before submitting, since `huh`'s text input is a real
+   editable buffer, not a type-to-override default. Prompting is skipped
+   entirely (no terminal interaction at all) if every field was passed as a
+   flag.
+3. Write the resulting `musicvideo.nfo`, applying the same required
+   (artist/title)/optional (album/year, `omitempty`) rules as `add`.
+
+`edit` only ever writes the nfo — it never moves the video, renames the file, or
+otherwise touches the directory. If artist or title changes (or is set for the
+first time), the video's location will no longer match what `add`/`rename` would
+compute for the new values; running `video rename` afterward reconciles this,
+which is exactly the "nfo was hand-edited to fix a typo" scenario `rename`'s
+design already anticipates (see below).
 
 #### `video rename`
 
@@ -666,8 +706,6 @@ artist/title, in the same visual style as audio `inspect`. Read-only.
 
 ### 6.5 Future Work (Not Yet Implemented)
 
-- **`video edit`** (name TBD): update fields on an existing `musicvideo.nfo`
-  without hand-editing XML.
 - **iPod/Rockbox conversion pipeline:** transcode videos to a uniform,
   Rockbox-compatible resolution/format/framerate for on-device playback, and
   embed Artist/Title metadata into the converted file (MP4 atoms via go-taglib,

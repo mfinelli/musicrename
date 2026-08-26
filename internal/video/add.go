@@ -71,9 +71,9 @@ type AddResult struct {
 // the raw (unsanitized) field values.
 //
 // Add errors if the destination directory already exists (there is
-// no overwrite/force path); a pre-existing destination most likely means a 
-// duplicate import or an artist/title typo. The video file and, if present, 
-// an info.txt sitting alongside it (as written by video.Fetch) are moved 
+// no overwrite/force path); a pre-existing destination most likely means a
+// duplicate import or an artist/title typo. The video file and, if present,
+// an info.txt sitting alongside it (as written by video.Fetch) are moved
 // into place; any other sibling files are left untouched.
 func Add(videoRoot string, in AddInput) (*AddResult, error) {
 	artist := strings.TrimSpace(in.Artist)
