@@ -551,14 +551,14 @@ Jellyfin to pick up correctly, not the full scraper-oriented field set (no
 
 ### 6.3 Commands
 
-| Command                                                                | Description                                                                                                                                              |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `musicrename video fetch <url> [destination]`                          | Downloads a video via `yt-dlp` and writes a generated `info.txt`. Standalone step; does not file the video into the library.                             |
-| `musicrename video add <file> [--artist] [--title] [--album] [--year]` | Ingests a single raw video file. Prompts interactively for `--artist`/`--title` if not passed as flags; `--album`/`--year` stay optional with no prompt. |
-| `musicrename video rename [video-root]`                                | Idempotent whole-tree reconciliation pass, analogous to audio `rename`.                                                                                  |
-| `musicrename video sums [path]`                                        | Generates a per-video-directory `sums.md5`.                                                                                                              |
-| `musicrename video check [path]`                                       | Audits the video tree for missing/incomplete nfo files, path conformance, and missing `sums.md5`.                                                        |
-| `musicrename video inspect <file>`                                     | Displays a single video's raw and sanitized metadata; read-only.                                                                                         |
+| Command                                                                             | Description                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `musicrename video fetch <url> [destination]`                                       | Downloads a video via `yt-dlp` and writes a generated `info.txt`. Standalone step; does not file the video into the library.                                                                                     |
+| `musicrename video add <file> [video-root] [--artist] [--title] [--album] [--year]` | Ingests a single raw video file. Prompts interactively for `--artist`/`--title` if not passed as flags; `--album`/`--year` stay optional with no prompt. `video-root` defaults to the current working directory. |
+| `musicrename video rename [video-root]`                                             | Idempotent whole-tree reconciliation pass, analogous to audio `rename`.                                                                                                                                          |
+| `musicrename video sums [path]`                                                     | Generates a per-video-directory `sums.md5`.                                                                                                                                                                      |
+| `musicrename video check [path]`                                                    | Audits the video tree for missing/incomplete nfo files, path conformance, and missing `sums.md5`.                                                                                                                |
+| `musicrename video inspect <file>`                                                  | Displays a single video's raw and sanitized metadata; read-only.                                                                                                                                                 |
 
 #### `video fetch`
 
@@ -610,10 +610,10 @@ separate, deliberate step.
 3. **Error and abort if the destination directory already exists** — there is no
    `--force` overwrite path for `add`. A pre-existing destination most likely
    means a duplicate import or an artist/title typo.
-4. Move only the source video file into place. Other files that may exist
-   alongside the source (e.g. a `yt-dlp`-generated thumbnail or description) are
-   left untouched; `info.txt` in particular is expected to be added to the
-   destination by hand, separately.
+4. Move the video file into place, along with `info.txt` if one is sitting
+   alongside the source video (the normal case after `video fetch`, keeping the
+   fetch → add workflow from requiring a manual copy step). Any other sibling
+   files (e.g. a `yt-dlp`-generated thumbnail) are left untouched.
 5. Write `musicvideo.nfo` into the destination directory unconditionally, using
    the resolved (unsanitized/raw) field values.
 
