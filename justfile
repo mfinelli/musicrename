@@ -18,3 +18,4 @@ bump v:
 fmt:
     go fmt ./...
     prettier -w *.md
+    just --fmt
