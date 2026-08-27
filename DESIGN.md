@@ -710,8 +710,12 @@ non-zero when any findings are present, for use in scripts, matching audio
 
 #### `video inspect`
 
-Reads a single video file and its `musicvideo.nfo`, printing raw vs. sanitized
-artist/title, in the same visual style as audio `inspect`. Read-only.
+Reads a single video file's `musicvideo.nfo` and prints Title/Artist alongside
+their sanitized equivalents (the values that would be used when filing or
+renaming), plus Album/Year shown as-is — they're stored verbatim and never
+sanitized, since they never affect placement. Read-only. A video with no
+`musicvideo.nfo` yet is a clear error suggesting `add`/`edit`, rather than
+printing empty fields.
 
 ### 6.4 Formats and Constraints
 
