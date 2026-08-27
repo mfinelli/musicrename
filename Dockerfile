@@ -14,7 +14,7 @@ RUN go test ./...
 FROM alpine
 
 LABEL org.opencontainers.image.title=musicrename
-LABEL org.opencontainers.image.version=v3.3.0
+LABEL org.opencontainers.image.version=v3.4.0
 LABEL org.opencontainers.image.description="command line music management"
 LABEL org.opencontainers.image.url=https://github.com/mfinelli/musicrename
 LABEL org.opencontainers.image.source=https://github.com/mfinelli/musicrename

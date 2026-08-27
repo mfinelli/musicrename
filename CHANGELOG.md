@@ -4,6 +4,16 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v3.4.0 — 2026-08-27
+
+Add support for managing music videos as a completely separate library, with its
+own root path and a `video` command family (`fetch`, `add`, `edit`, `rename`,
+`sums`, `check`, `inspect`). Since videos are typically downloaded via `yt-dlp`
+with no reliable embedded metadata, each video's artist, title, and optional
+album/year live in a machine-written `musicvideo.nfo` sidecar (a minimal
+Kodi/Jellyfin-compatible XML file) instead; `video fetch` also writes a
+plain-text `info.txt` with the source URL, title, uploader, and description.
+
 ## v3.3.0 — 2026-08-26
 
 Support `folder.webp` and `folder.mp4` for animated primary album artwork
