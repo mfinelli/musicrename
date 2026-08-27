@@ -123,14 +123,9 @@ func Edit(dir string, in EditInput) (*EditResult, error) {
 // dirHasVideoFile reports whether dir directly contains at least one file
 // with a recognized video extension.
 func dirHasVideoFile(dir string) (bool, error) {
-	entries, err := os.ReadDir(dir)
+	files, err := videoFilesIn(dir)
 	if err != nil {
 		return false, err
 	}
-	for _, e := range entries {
-		if !e.IsDir() && videoExts[strings.ToLower(filepath.Ext(e.Name()))] {
-			return true, nil
-		}
-	}
-	return false, nil
+	return len(files) > 0, nil
 }

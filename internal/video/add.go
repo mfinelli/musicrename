@@ -35,6 +35,24 @@ const NFOFilename = "musicvideo.nfo"
 // videoExts is the set of file extensions recognized as video files.
 var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mkv": true}
 
+// videoFilesIn returns every file directly inside dir with a recognized
+// video extension, in directory-entry order. Shared primitive behind
+// dirHasVideoFile (edit.go) and soleVideoFile (rename.go).
+func videoFilesIn(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && videoExts[strings.ToLower(filepath.Ext(e.Name()))] {
+			files = append(files, filepath.Join(dir, e.Name()))
+		}
+	}
+	return files, nil
+}
+
 // NFO is the machine-written sidecar schema.
 type NFO struct {
 	XMLName xml.Name `xml:"musicvideo"`

@@ -156,27 +156,19 @@ func planEntry(videoRoot, dir string) (*RenameMove, string, error) {
 // soleVideoFile returns the single video file directly inside dir, erroring
 // if there isn't exactly one (assume exactly one video per directory for now).
 func soleVideoFile(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
+	files, err := videoFilesIn(dir)
 	if err != nil {
 		return "", err
 	}
 
-	var found string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if videoExts[strings.ToLower(filepath.Ext(e.Name()))] {
-			if found != "" {
-				return "", fmt.Errorf("multiple video files found (expected exactly one)")
-			}
-			found = filepath.Join(dir, e.Name())
-		}
-	}
-	if found == "" {
+	switch len(files) {
+	case 0:
 		return "", fmt.Errorf("no video file found")
+	case 1:
+		return files[0], nil
+	default:
+		return "", fmt.Errorf("multiple video files found (expected exactly one)")
 	}
-	return found, nil
 }
 
 // RenameResult describes the outcome of Execute.
