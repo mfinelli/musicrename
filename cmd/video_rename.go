@@ -25,27 +25,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/video"
-)
-
-// Lipgloss styles for video rename's output. Mirrors rename.go's audio
-// styles in intent, but kept as separate package-level vars (rather than
-// reused) since they're distinct style instances scoped to this command.
-var (
-	videoRenameHeaderStyle   = lipgloss.NewStyle().Bold(true)
-	videoRenameArtistStyle   = lipgloss.NewStyle().Bold(true)
-	videoRenameSourceStyle   = lipgloss.NewStyle().Faint(true)
-	videoRenameArrowStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("4")) // blue
-	videoRenameNewPathStyle  = lipgloss.NewStyle().Bold(true)
-	videoRenameNoOpStyle     = lipgloss.NewStyle().Faint(true)
-	videoRenameCaseOnlyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // bright yellow
-	videoRenameWarningStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // bright yellow
-	videoRenameRuleStyle     = lipgloss.NewStyle().Faint(true)
-	videoRenameBoldStyle     = lipgloss.NewStyle().Bold(true)
 )
 
 var videoRenameCmd = &cobra.Command{
@@ -124,7 +107,7 @@ func runVideoRename(cmd *cobra.Command, args []string) error {
 // printVideoRunPlan writes a condensed overview to out before execution
 // begins: artists with move counts, but no per-video detail.
 func printVideoRunPlan(out io.Writer, plan *video.RenamePlan) {
-	fmt.Fprintln(out, videoRenameHeaderStyle.Render("Renaming videos..."))
+	fmt.Fprintln(out, renameHeaderStyle.Render("Renaming videos..."))
 	fmt.Fprintln(out)
 
 	if len(plan.Moves) == 0 {
@@ -133,9 +116,9 @@ func printVideoRunPlan(out io.Writer, plan *video.RenamePlan) {
 	}
 
 	for _, g := range videoGroupByArtist(plan.Moves) {
-		fmt.Fprintln(out, videoRenameArtistStyle.Render(g.bucket+" / "+g.artist))
+		fmt.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
 		moves, noOps := videoMoveCounts(g.moves)
-		fmt.Fprintln(out, "  "+videoRenameSourceStyle.Render(
+		fmt.Fprintln(out, "  "+renameSourceStyle.Render(
 			fmt.Sprintf("· %d move(s), %d no-op(s)", moves, noOps),
 		))
 	}
@@ -146,7 +129,7 @@ func printVideoRunPlan(out io.Writer, plan *video.RenamePlan) {
 // artist. Warnings are shown at the top; a summary line appears at the
 // bottom.
 func printVideoDryRun(out io.Writer, plan *video.RenamePlan) {
-	fmt.Fprintln(out, videoRenameHeaderStyle.Render("Dry run: no files will be moved."))
+	fmt.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be moved."))
 	fmt.Fprintln(out)
 
 	printVideoWarnings(out, plan.Warnings)
@@ -157,22 +140,22 @@ func printVideoDryRun(out io.Writer, plan *video.RenamePlan) {
 	}
 
 	for _, g := range videoGroupByArtist(plan.Moves) {
-		fmt.Fprintln(out, videoRenameArtistStyle.Render(g.bucket+" / "+g.artist))
+		fmt.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
 
 		for _, m := range g.moves {
-			arrow := videoRenameArrowStyle.Render("→")
+			arrow := renameArrowStyle.Render("→")
 			// Bucket/artist are already shown in the group header above, so
 			// only the title-level directory name (the new leaf) needs
 			// to be shown here.
 			line := fmt.Sprintf("  %s  %s  %s",
-				videoRenameSourceStyle.Render(m.OldDir), arrow,
-				videoRenameNewPathStyle.Render(filepath.Base(m.NewDir)))
+				renameSourceStyle.Render(m.OldDir), arrow,
+				renameNewPathStyle.Render(filepath.Base(m.NewDir)))
 
 			switch {
 			case m.IsNoOp:
-				line += "  " + videoRenameNoOpStyle.Render("(no-op)")
+				line += "  " + renameNoOpStyle.Render("(no-op)")
 			case m.IsCaseOnly:
-				line += "  " + videoRenameCaseOnlyStyle.Render("(case rename)")
+				line += "  " + renameCaseOnlyStyle.Render("(case rename)")
 			}
 
 			fmt.Fprintln(out, line)
@@ -198,9 +181,9 @@ func printVideoWarnings(out io.Writer, warnings []string) {
 	if len(warnings) == 0 {
 		return
 	}
-	fmt.Fprintln(out, videoRenameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(warnings))))
+	fmt.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(warnings))))
 	for _, w := range warnings {
-		fmt.Fprintln(out, "   "+videoRenameWarningStyle.Render(w))
+		fmt.Fprintln(out, "   "+renameWarningStyle.Render(w))
 	}
 	fmt.Fprintln(out)
 }
@@ -213,8 +196,8 @@ func printVideoSummaryLine(out io.Writer, moves, noOps, warnings int) {
 		noOpLabel = "no-op"
 	}
 	summaryText := fmt.Sprintf("%d moves · %d %s · %d warnings", moves, noOps, noOpLabel, warnings)
-	fmt.Fprintln(out, videoRenameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, videoRenameBoldStyle.Render(summaryText))
+	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
 }
 
 // videoMoveCounts returns the number of real moves and no-op moves.
