@@ -52,11 +52,16 @@ const SumsFilename = "sums.md5"
 // Files with these extensions use the two-space separator in the output;
 // all other files use the binary format (space + asterisk).
 // Classification is by extension only; no magic-byte inspection is performed.
+//
+// .nfo is included for video.NFOFilename (musicvideo.nfo). This package has
+// no video-specific knowledge otherwise; it's included here because the
+// classification set is inherently extension-based and shared.
 var textExtensions = map[string]bool{
 	".cue":  true,
 	".log":  true,
 	".m3u":  true,
 	".m3u8": true,
+	".nfo":  true,
 	".txt":  true,
 }
 
