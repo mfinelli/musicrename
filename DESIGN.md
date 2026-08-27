@@ -693,13 +693,20 @@ subdirectories to recurse into).
 
 #### `video check`
 
-Rudimentary checks:
+Rudimentary checks, run per video directory:
 
+- Exactly one recognized video file is present
 - Missing `musicvideo.nfo`.
 - `musicvideo.nfo` present but missing `title` or `artist`.
 - Path does not match what `video rename` would produce (requires a video-root,
-  same constraint as audio path-conformance checks).
+  same constraint as audio path-conformance checks — skipped in single-video
+  mode, mirroring audio `check`'s posture on a single track with no library root
+  available).
 - Missing `sums.md5`.
+
+Auto-detects single-video vs. video-root mode the same way `sums` does. Exits
+non-zero when any findings are present, for use in scripts, matching audio
+`check`.
 
 #### `video inspect`
 
