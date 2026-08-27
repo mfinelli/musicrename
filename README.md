@@ -138,6 +138,108 @@ mrr inspect "01 back in black.flac"
   character determines the directory bucket (`b/` for "Beatles, The") while the
   folder name still comes from `ALBUMARTIST` ("the beatles").
 
+## Video Support
+
+Music videos (one video per track) are managed as a tree completely separate
+from the audio library, with their own root and `video` subcommands. Videos are
+typically sourced via [yt-dlp](https://github.com/yt-dlp/yt-dlp) with no
+reliable embedded metadata, so each video's artist/title live in a
+`musicvideo.nfo` sidecar (a small Kodi/Jellyfin-compatible XML file) instead.
+
+### Video Directory Structure
+
+```
+[first letter]/[artist]/[title]/[title].ext
+```
+
+For example:
+
+```
+b/beyonce/crazy in love/crazy in love.mp4
+                        musicvideo.nfo
+                        info.txt
+```
+
+Each video directory holds the video file (`.mp4`, `.webm`, or `.mkv`),
+`musicvideo.nfo`, and optionally `info.txt` (source URL/description, written by
+`fetch`). Bucketing and sanitization reuse the same rules as the audio library.
+
+### Video Workflow
+
+```sh
+mrr video fetch <url>   # download via yt-dlp, write info.txt
+mrr video add <file>    # sanitize, file into place, write musicvideo.nfo
+mrr video rename        # reconcile locations after any edits
+mrr video sums          # generate md5 checksums
+mrr video check         # audit for issues
+```
+
+### Video Commands
+
+#### `video fetch`
+
+Downloads a video via `yt-dlp` (must be installed and on `PATH`) and writes a
+generated `info.txt`. Cleans the URL to its bare video ID first, dropping
+playlist/timestamp/tracking parameters.
+
+```sh
+mrr video fetch https://youtu.be/dQw4w9WgXcQ
+```
+
+#### `video add`
+
+Sanitizes artist/title, files the video into place, and writes `musicvideo.nfo`.
+Prompts for artist/title if not passed as flags; errors if the destination
+already exists.
+
+```sh
+mrr video add "Never Gonna Give You Up.mp4" --artist "Rick Astley" --title "Never Gonna Give You Up"
+```
+
+#### `video edit`
+
+Creates or updates a video's `musicvideo.nfo` in place. Defaults to the current
+directory if no argument is given, so it works well run from inside a video's
+folder.
+
+```sh
+mrr video edit --year 2003
+```
+
+#### `video rename`
+
+Moves any video whose location no longer matches its `musicvideo.nfo` (e.g.
+after `edit` changed the artist or title).
+
+```sh
+mrr video rename --dry-run
+```
+
+#### `video sums`
+
+Same `sums.md5` format as audio `sums`, scoped to the video library.
+
+```sh
+mrr video sums
+```
+
+#### `video check`
+
+Audits the video library for missing/incomplete `musicvideo.nfo`, path
+conformance, and missing `sums.md5`. Exits non-zero if any findings are present.
+
+```sh
+mrr video check
+```
+
+#### `video inspect`
+
+Displays a video's raw and sanitized title/artist. Read-only.
+
+```sh
+mrr video inspect "crazy in love.mp4"
+```
+
 ## Contributing
 
 This is a personal tool but if you stumble across it and find it useful, PRs and
