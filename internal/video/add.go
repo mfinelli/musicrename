@@ -96,7 +96,7 @@ func Add(videoRoot string, in AddInput) (*AddResult, error) {
 		)
 	}
 
-	dir, videoPath, err := destination(videoRoot, artist, title, ext)
+	_, dir, videoPath, err := destination(videoRoot, artist, title, ext)
 	if err != nil {
 		return nil, err
 	}
@@ -143,32 +143,35 @@ func Add(videoRoot string, in AddInput) (*AddResult, error) {
 	return &AddResult{Dir: dir, VideoPath: videoPath, NFOPath: nfoPath, InfoPath: destInfoTxt}, nil
 }
 
-// destination computes the target directory and video file path for artist/
-// title under videoRoot, mirroring internal/planner's bucketing logic for
-// audio (shared sanitize package, shared bucket-override map) without the
-// ALBUMARTISTSORT/disc/track machinery that doesn't apply to a single flat
-// video.
-func destination(videoRoot, artist, title, ext string) (dir, videoPath string, err error) {
+// destination computes the bucket ("a"-"z" or "0"), target directory, and
+// video file path for artist/title under videoRoot, mirroring internal/
+// planner's bucketing logic for audio (shared sanitize package, shared
+// bucket-override map) without the ALBUMARTISTSORT/disc/track machinery
+// that doesn't apply to a single flat video. bucket is returned separately
+// (rather than only embedded in dir) so callers such as Rename's dry-run
+// output can group by it without re-deriving it from the computed path.
+func destination(videoRoot, artist, title, ext string) (bucket, dir, videoPath string, err error) {
 	sanArtist := sanitize.CleanStringResult(artist, sanitize.ArtistOverride)
 	truncArtist := sanitize.Truncate(sanArtist.Value, 60)
 	if truncArtist == "" {
-		return "", "", fmt.Errorf("artist %q sanitizes to an empty string", artist)
+		return "", "", "", fmt.Errorf("artist %q sanitizes to an empty string", artist)
 	}
 
 	afp, err := artistFolderPath(artist, truncArtist)
 	if err != nil {
-		return "", "", fmt.Errorf("artist path: %w", err)
+		return "", "", "", fmt.Errorf("artist path: %w", err)
 	}
+	bucket = strings.SplitN(afp, string(filepath.Separator), 2)[0]
 
 	sanTitle := sanitize.CleanStringResult(title, sanitize.TrackOverride)
 	truncTitle := sanitize.Truncate(sanTitle.Value, 40)
 	if truncTitle == "" {
-		return "", "", fmt.Errorf("title %q sanitizes to an empty string", title)
+		return "", "", "", fmt.Errorf("title %q sanitizes to an empty string", title)
 	}
 
 	dir = filepath.Join(videoRoot, afp, truncTitle)
 	videoPath = filepath.Join(dir, truncTitle+ext)
-	return dir, videoPath, nil
+	return bucket, dir, videoPath, nil
 }
 
 // artistFolderPath returns the bucket+artist path component (e.g.

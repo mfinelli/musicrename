@@ -661,12 +661,23 @@ design already anticipates (see below).
 
 Walks `video-root`, reads each directory's `musicvideo.nfo`, and re-derives the
 target path the same way `add` does. If the computed path differs from the
-current one (e.g. the nfo was hand-edited later to fix a typo, or a
-bucket-override/sanitization rule changed), the video file, `musicvideo.nfo`,
-and `info.txt` (if present) are moved together — mirroring how audio `rename`
-moves all of an album's associated assets as a unit. A directory whose video
-file has no accompanying `musicvideo.nfo` is skipped with a warning rather than
-guessed at, the same posture as an audio track missing `ARTIST`/ `ALBUMARTIST`.
+current one (e.g. `video edit` changed artist/title, a video was placed or had
+its nfo created by hand, or a bucket-override/sanitization rule changed), the
+video file, `musicvideo.nfo`, and `info.txt` (if present) are moved together —
+mirroring how audio `rename` moves all of an album's associated assets as a
+unit. A directory whose video file has no accompanying `musicvideo.nfo`, or that
+contains more than one video file, is skipped with a warning.
+
+Mirrors audio `rename`'s execution behavior: a `--dry-run` flag prints the plan
+without touching files; case-only path differences (relevant on case-insensitive
+filesystems, i.e. macOS) are handled via a temporary intermediate directory name
+rather than a direct move; a destination that already exists at execution time
+(a race since planning) is skipped with a warning rather than failing the whole
+run; and now-empty source directories are removed afterward, bubbling upward but
+never removing or climbing above `video-root` — so a sibling video still filed
+under the same artist correctly keeps that artist directory alive. Dry-run and
+live-run output are both grouped by bucket/artist, matching audio `rename`'s
+presentation.
 
 #### `video sums`
 
