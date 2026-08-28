@@ -255,6 +255,46 @@ func UpdateFile(dir, rel string) error {
 	return writeSumsEntries(dir, entries)
 }
 
+// RenameFile updates dir/sums.md5 so the entry currently recorded under
+// oldRel is recorded under newRel instead, with its hash left completely
+// unchanged — the file's content didn't change, only its name did, so there
+// is nothing to rehash (contrast with [UpdateFile], for when content did
+// change).
+//
+// found reports whether an existing entry for oldRel was located and
+// renamed. A false return (with a nil error) means sums.md5 existed but had
+// no entry for oldRel, which most likely means it was already out of date
+// before this call (callers may want to surface that as a warning).
+//
+// If dir/sums.md5 does not exist, RenameFile is a no-op and returns
+// (false, nil).
+func RenameFile(dir, oldRel, newRel string) (bool, error) {
+	entries, existed, err := parseSumsFile(dir)
+	if err != nil {
+		return false, fmt.Errorf("reading %s: %w", filepath.Join(dir, SumsFilename), err)
+	}
+	if !existed {
+		return false, nil
+	}
+
+	found := false
+	for i := range entries {
+		if entries[i].name == oldRel {
+			entries[i].name = newRel
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false, nil
+	}
+
+	if err := writeSumsEntries(dir, entries); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // RemoveFile deletes dir/rel's line from dir/sums.md5, if present, leaving
 // every other line unchanged. No hashing is performed (removal never
 // requires reading the file's contents).

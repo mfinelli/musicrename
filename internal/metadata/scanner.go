@@ -46,6 +46,16 @@ var (
 	scanExts = map[string]bool{".tiff": true, ".tif": true}
 )
 
+// IsAudioExt reports whether ext (including the leading dot, e.g. ".flac")
+// is a recognized audio file extension. Comparison is case-insensitive.
+// Exported so callers outside this package (e.g. the rename command, when
+// deciding whether a moved file is a candidate for playlist-manifest
+// updates) can reuse the same classification without duplicating the
+// extension set.
+func IsAudioExt(ext string) bool {
+	return audioExts[strings.ToLower(ext)]
+}
+
 // categorizeRootFile determines the category of a file at the album root level.
 // It is extracted as a named function so that both processDirectory and tests
 // share the same logic rather than duplicating it.

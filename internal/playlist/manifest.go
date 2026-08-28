@@ -62,6 +62,35 @@ func ReadManifest(albumDir, target string) ([]string, error) {
 	return names, nil
 }
 
+// RenameEntry replaces oldName with newName in albumDir's {target}.m3u8, if
+// present, preserving every other line and the file's order. changed
+// reports whether oldName was found (and thus renamed). A missing
+// manifest, or one that doesn't reference oldName, is not an error; it
+// simply returns (false, nil), since most tracks are never expected to be
+// on any given target's selection list.
+func RenameEntry(albumDir, target, oldName, newName string) (bool, error) {
+	names, err := ReadManifest(albumDir, target)
+	if err != nil {
+		return false, err
+	}
+
+	changed := false
+	for i, n := range names {
+		if n == oldName {
+			names[i] = newName
+			changed = true
+		}
+	}
+	if !changed {
+		return false, nil
+	}
+
+	if err := WriteManifest(albumDir, target, names); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // WriteManifest writes albumDir's {target}.m3u8 to contain exactly names, one
 // per line, in the given order.
 //

@@ -174,7 +174,7 @@ verification on any system that has `md5sum` installed.
 
 `sums` and the `--force` full-regeneration path always rehash every file in the
 album. Other commands that touch just one file in an already-`sums.md5`'d album
-(`playlist select`, §7.3; the planned `rename` follow-up) must **not** go
+(`playlist select`, §7.3; `rename` and `video rename`, §7.10) must **not** go
 through a full rehash to update it — doing so would silently recompute and
 overwrite the recorded hash of every _other_, untouched file in the album, which
 would mask real corruption (bit rot, a failing drive) on any file that happened
@@ -190,9 +190,9 @@ through unchanged (still sorted, still stable):
   `ipod.m3u8`): recompute that one file's hash and replace or insert its line.
   This is a real rehash, but scoped to the single file whose bytes actually
   changed.
-- **Only the filename changed, content did not** (the planned `rename`
-  follow-up, updating `sums.md5` after a file move/rename): rewrite the filename
-  on that file's existing line in place, reusing its already-recorded hash
+- **Only the filename changed, content did not** (`rename`/`video rename`
+  updating `sums.md5` after a file move/rename, §7.10): rewrite the filename on
+  that file's existing line in place, reusing its already-recorded hash
   unchanged. No rehashing at all — the bytes weren't touched, so there is
   nothing to recompute, and doing so anyway would throw away the corruption
   check on that file for no reason.
@@ -1011,17 +1011,51 @@ a measured bottleneck.
 
 ### 7.10 Interaction with `rename`
 
-- **Album-local manifests** (`{target}.m3u8`): `rename` already computes the
-  full old-filename -> new-filename mapping for every file in an album it
-  touches; updating any `{target}.m3u8` present in that same album directory is
-  a straightforward find-and-replace against that existing mapping, done as part
-  of the same rename operation.
+- **Album-local manifests** (`{target}.m3u8`) and **`sums.md5`**: after a real
+  (non-dry-run) `rename` run, for every file whose path relative to its own
+  album root actually changed (a real filename change, or a case-only rename — a
+  directory-only move needs no follow-up, since these paths are relative to the
+  album root, not absolute), `rename` updates `sums.md5` in place if it exists:
+  only the renamed entry's filename is rewritten via the targeted
+  `hasher.RenameFile` primitive (§3.4) — the hash is left untouched, since the
+  file's content didn't change, only its name did. For audio files specifically,
+  any `{target}.m3u8` referencing the old filename is updated to the new one the
+  same way (`playlist.RenameEntry`). This applies to _any_ moved file (audio or
+  asset) for `sums.md5`, but only to audio files for the manifest update, since
+  only audio track filenames ever appear in a selection manifest.
+
+  A track's rename rewriting a manifest's _content_ is a different case from the
+  track's own filename-only rename: the manifest file's bytes genuinely changed
+  (a line inside it was rewritten), so its own `sums.md5` entry, if it has one,
+  needs a real rehash via `hasher.UpdateFile` — not a `RenameFile` filename swap
+  — or `sums.md5` would record a stale hash for a file this same run just
+  legitimately edited, producing a false corruption signal on the very next
+  verification. So `--skip-md5` isn't quite risk-free in every case as
+  originally framed: the audio-file-rename half is pure bookkeeping with zero
+  rehash risk, but the manifest-content half is a real, necessary rehash scoped
+  to the one file that actually changed — consistent with, not an exception to,
+  `sums.md5`'s core guarantee (§3.4). `--skip-md5` and `--skip-playlists` opt
+  out of each independently. A move whose destination doesn't actually exist on
+  disk afterward (an executor-level race-condition skip) is left alone, so
+  nothing ever references a file that was never created. All of this is
+  best-effort: failures surface as warnings rather than aborting, since by that
+  point every file move has already succeeded.
+
 - **Global playlists** (`playlists/`): out of scope for `rename`, which has no
   visibility outside the single album it is processing at a time. Instead,
   `check` (§4.3) gains a new finding category — a playlist entry whose path no
   longer resolves to a file on disk — surfaced for a manual fix pass, consistent
   with `check`'s existing role as where library-wide drift gets flagged rather
   than silently auto-corrected.
+- **`video rename`** (§6): the same `sums.md5` filename-only update applies — a
+  video's own filename is title-derived and so can change independently of its
+  directory move. This surfaced a related gap: `video rename`'s executor
+  previously didn't move `sums.md5` along with the rest of a video directory's
+  contents at all, orphaning it on any real move. Fixed as a prerequisite:
+  `sums.md5` now travels with the directory unconditionally (like
+  `musicvideo.nfo` and `info.txt`), with only the _content_ update (the renamed
+  entry) gated by `--skip-md5`. There is no manifest/playlist concept for
+  videos.
 
 ### 7.11 Explicitly Out of Scope (For Now)
 

@@ -18,12 +18,16 @@
 package video
 
 import (
+	"crypto/md5"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/hasher"
 )
 
 // place adds a video (and its musicvideo.nfo, and info.txt if withInfo) at
@@ -40,6 +44,15 @@ func place(t *testing.T, videoRoot, relDir string, nfo NFO, withInfo bool) strin
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "info.txt"), []byte("url: x\n"), 0o644))
 	}
 	return dir
+}
+
+// hashHex returns the lowercase hex MD5 digest of content, matching the
+// format sums.md5 uses. Used to build hand-written sums.md5 fixtures without
+// duplicating the hashing logic under test.
+func hashHex(t *testing.T, content string) string {
+	t.Helper()
+	h := md5.Sum([]byte(content))
+	return fmt.Sprintf("%x", h)
 }
 
 func TestScan(t *testing.T) {
@@ -158,7 +171,7 @@ func TestExecute(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, plan.Moves, 1)
 
-		result, err := Execute(plan, root, nil)
+		result, err := Execute(plan, root, false, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result.Warnings)
 
@@ -188,7 +201,7 @@ func TestExecute(t *testing.T) {
 		plan, err := Scan(root)
 		require.NoError(t, err)
 
-		_, err = Execute(plan, root, nil)
+		_, err = Execute(plan, root, false, nil)
 		require.NoError(t, err)
 
 		// "beyonce" must survive: "Crazy in Love" was already correctly
@@ -209,7 +222,7 @@ func TestExecute(t *testing.T) {
 		require.NoError(t, err)
 
 		var calls int
-		_, err = Execute(plan, root, func(RenameMove) { calls++ })
+		_, err = Execute(plan, root, false, func(RenameMove) { calls++ })
 		require.NoError(t, err)
 		assert.Zero(t, calls)
 		assert.DirExists(t, correctDir)
@@ -225,7 +238,7 @@ func TestExecute(t *testing.T) {
 		require.NoError(t, err)
 
 		var moved []RenameMove
-		_, err = Execute(plan, root, func(m RenameMove) { moved = append(moved, m) })
+		_, err = Execute(plan, root, false, func(m RenameMove) { moved = append(moved, m) })
 		require.NoError(t, err)
 		assert.Len(t, moved, 1)
 	})
@@ -244,10 +257,98 @@ func TestExecute(t *testing.T) {
 		// and execution.
 		require.NoError(t, os.MkdirAll(plan.Moves[0].NewDir, 0o755))
 
-		result, err := Execute(plan, root, nil)
+		result, err := Execute(plan, root, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Warnings, 1)
 		assert.Contains(t, result.Warnings[0], "race condition")
+	})
+
+	t.Run("sums.md5 travels with the directory when present", func(t *testing.T) {
+		root := t.TempDir()
+		oldDir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, hasher.SumsFilename),
+			[]byte(hashHex(t, "data")+" *video.mp4\n"),
+			0o644,
+		))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		require.Len(t, plan.Moves, 1)
+		newDir := plan.Moves[0].NewDir
+
+		result, err := Execute(plan, root, false, nil)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+
+		assert.FileExists(t, filepath.Join(newDir, hasher.SumsFilename))
+		_, err = os.Stat(filepath.Join(oldDir, hasher.SumsFilename))
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("sums.md5 entry filename is updated in place, hash unchanged", func(t *testing.T) {
+		root := t.TempDir()
+		oldDir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		videoHash := hashHex(t, "data")
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, hasher.SumsFilename),
+			[]byte(videoHash+" *video.mp4\n"),
+			0o644,
+		))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		newDir := plan.Moves[0].NewDir
+
+		_, err = Execute(plan, root, false, nil)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(filepath.Join(newDir, hasher.SumsFilename))
+		require.NoError(t, err)
+		assert.NotContains(t, string(got), "video.mp4")
+		assert.Contains(t, string(got), videoHash+" *title.mp4\n")
+	})
+
+	t.Run("skipMD5 moves sums.md5 but does not rewrite its entry", func(t *testing.T) {
+		root := t.TempDir()
+		oldDir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, hasher.SumsFilename),
+			[]byte(hashHex(t, "data")+" *video.mp4\n"),
+			0o644,
+		))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		newDir := plan.Moves[0].NewDir
+
+		_, err = Execute(plan, root, true, nil)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(filepath.Join(newDir, hasher.SumsFilename))
+		require.NoError(t, err)
+		assert.Contains(t, string(got), "video.mp4",
+			"skipMD5 must still move the file but leave its content alone")
+	})
+
+	t.Run("no sums.md5 present is not an error", func(t *testing.T) {
+		root := t.TempDir()
+		place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+
+		result, err := Execute(plan, root, false, nil)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
 	})
 }
 

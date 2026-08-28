@@ -82,6 +82,57 @@ func TestReadManifest(t *testing.T) {
 	})
 }
 
+func TestRenameEntry(t *testing.T) {
+	t.Run("no-op when manifest does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		changed, err := RenameEntry(dir, "ipod", "old.flac", "new.flac")
+		require.NoError(t, err)
+		assert.False(t, changed)
+		_, err = os.Stat(filepath.Join(dir, "ipod.m3u8"))
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("no-op when oldName is not in the manifest", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, WriteManifest(dir, "ipod", []string{"01 track.flac"}))
+
+		changed, err := RenameEntry(dir, "ipod", "nonexistent.flac", "new.flac")
+		require.NoError(t, err)
+		assert.False(t, changed)
+
+		got, err := ReadManifest(dir, "ipod")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"01 track.flac"}, got)
+	})
+
+	t.Run("renames the matching entry, preserving order and other entries", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, WriteManifest(dir, "ipod",
+			[]string{"01 a.flac", "02 b.flac", "03 c.flac"}))
+
+		changed, err := RenameEntry(dir, "ipod", "02 b.flac", "02 renamed.flac")
+		require.NoError(t, err)
+		assert.True(t, changed)
+
+		got, err := ReadManifest(dir, "ipod")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"01 a.flac", "02 renamed.flac", "03 c.flac"}, got)
+	})
+
+	t.Run("different targets are independent", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, WriteManifest(dir, "ipod", []string{"01 track.flac"}))
+
+		changed, err := RenameEntry(dir, "sdcard", "01 track.flac", "01 renamed.flac")
+		require.NoError(t, err)
+		assert.False(t, changed)
+
+		got, err := ReadManifest(dir, "ipod")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"01 track.flac"}, got, "ipod manifest must be untouched")
+	})
+}
+
 func TestWriteManifest(t *testing.T) {
 	t.Run("writes one filename per line in the given order", func(t *testing.T) {
 		dir := t.TempDir()

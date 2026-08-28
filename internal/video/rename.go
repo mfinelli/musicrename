@@ -26,6 +26,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/mfinelli/musicrename/internal/hasher"
 )
 
 // RenameMove describes one video, either needing to move from its current
@@ -177,14 +179,26 @@ type RenameResult struct {
 }
 
 // Execute performs the moves in plan, moving each video's file, its
-// musicvideo.nfo, and its info.txt (if present) together as a unit. No-op
-// moves are skipped. Case-only moves rename the whole directory via a
-// temporary intermediate name rather than moving files individually, since
-// on a case-insensitive filesystem OldDir and NewDir would otherwise collide.
+// musicvideo.nfo, its info.txt (if present), and its sums.md5 (if present)
+// together as a unit. No-op moves are skipped. Case-only moves rename the
+// whole directory via a temporary intermediate name rather than moving files
+// individually, since on a case-insensitive filesystem OldDir and NewDir
+// would otherwise collide; sums.md5 travels with the directory in that case
+// and needs no further update, since its filename entries are unaffected by
+// a directory-only move.
+//
+// When a real (non-case-only) move also changes the video's filename
+// (title-driven, so it can differ from the directory rename) and sums.md5
+// exists, that one entry's filename is updated in place (the hash is left
+// untouched, since the file's content didn't change) unless skipMD5 is
+// true. A sums.md5 that exists but has no entry for the old filename
+// produces a warning rather than an error, since it most likely means the
+// checksum file was already out of date.
+//
 // If progress is non-nil, it is called after each real (non-no-op) move.
 // Now-empty source directories are removed afterward, bubbling upward but
 // never removing or climbing above videoRoot.
-func Execute(plan *RenamePlan, videoRoot string, progress func(RenameMove)) (*RenameResult, error) {
+func Execute(plan *RenamePlan, videoRoot string, skipMD5 bool, progress func(RenameMove)) (*RenameResult, error) {
 	var warnings []string
 	touchedDirs := make(map[string]struct{})
 
@@ -228,6 +242,40 @@ func Execute(plan *RenamePlan, videoRoot string, progress func(RenameMove)) (*Re
 				filepath.Join(move.NewDir, "info.txt"),
 			); err != nil {
 				return nil, fmt.Errorf("moving info.txt: %w", err)
+			}
+		}
+
+		// sums.md5, if present, travels with the directory like nfo/info.txt
+		// above (moving it is not gated by skipMD5, since leaving it behind
+		// would orphan it in a directory that's about to be cleaned up).
+		sumsOld := filepath.Join(move.OldDir, hasher.SumsFilename)
+		sumsNew := filepath.Join(move.NewDir, hasher.SumsFilename)
+		hadSums := false
+		if _, err := os.Stat(sumsOld); err == nil {
+			hadSums = true
+			if err := moveVideoFile(sumsOld, sumsNew); err != nil {
+				return nil, fmt.Errorf("moving sums.md5: %w", err)
+			}
+		}
+
+		// The video's filename is title-derived and so can change
+		// independently of the directory move. If it did, and sums.md5
+		// exists, update that one entry in place (hash unchanged; only
+		// skipMD5 gates this content update, not the move above).
+		if hadSums && !skipMD5 {
+			oldBase := filepath.Base(move.OldVideoPath)
+			newBase := filepath.Base(move.NewVideoPath)
+			if oldBase != newBase {
+				found, err := hasher.RenameFile(move.NewDir, oldBase, newBase)
+				if err != nil {
+					warnings = append(warnings, fmt.Sprintf(
+						"updating sums.md5 for %s: %v", newBase, err,
+					))
+				} else if !found {
+					warnings = append(warnings, fmt.Sprintf(
+						"sums.md5 exists but has no entry for %s; leaving as-is", oldBase,
+					))
+				}
 			}
 		}
 

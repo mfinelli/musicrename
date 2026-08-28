@@ -90,6 +90,25 @@ func TestCategorizeRootFile(t *testing.T) {
 	}
 }
 
+func TestIsAudioExt(t *testing.T) {
+	t.Run("returns true for recognized audio extensions", func(t *testing.T) {
+		for _, ext := range []string{".flac", ".mp3", ".m4a"} {
+			assert.True(t, IsAudioExt(ext), "expected %q to be an audio extension", ext)
+		}
+	})
+
+	t.Run("returns false for non-audio extensions", func(t *testing.T) {
+		for _, ext := range []string{".jpg", ".txt", ".md5", ".m3u8", ""} {
+			assert.False(t, IsAudioExt(ext), "did not expect %q to be an audio extension", ext)
+		}
+	})
+
+	t.Run("comparison is case-insensitive", func(t *testing.T) {
+		assert.True(t, IsAudioExt(".FLAC"))
+		assert.True(t, IsAudioExt(".Mp3"))
+	})
+}
+
 func TestProcessDirectory(t *testing.T) {
 	t.Run("empty directory is not an album", func(t *testing.T) {
 		dir := t.TempDir()
