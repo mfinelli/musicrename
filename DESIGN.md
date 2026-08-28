@@ -1231,14 +1231,48 @@ remotely.
 Any other Navidrome sync command errors out immediately if no credentials are
 stored, rather than the tool gaining a broader user-facing configuration system.
 
-### 8.2 Scan-Before-Sync
+### 8.2 Scan-Before-Sync (Implemented)
 
 Before any track resolution, sync triggers a manual library scan via
-`/rest/startScan` and polls `/rest/getScanStatus` until it reports complete.
-This guarantees Navidrome's view of the filesystem is current — recently added,
-renamed, or removed tracks resolve correctly — before any ID lookups run. This
-addresses scan staleness only; it is a separate concern from the
-playlist-membership handling in §8.5-8.6.
+`/rest/startScan` and polls `/rest/getScanStatus` until it reports complete
+(`internal/navidrome`, `Scan`). This guarantees Navidrome's view of the
+filesystem is current — recently added, renamed, or removed tracks resolve
+correctly — before any ID lookups run. This addresses scan staleness only; it is
+a separate concern from the playlist-membership handling in §8.5-8.6.
+
+Built on
+[`github.com/supersonic-app/go-subsonic`](https://github.com/supersonic-app/go-subsonic)
+rather than a hand-rolled client for this and the playlist operations to follow
+(§8.3, §8.5-8.7) — an actively maintained library (used by the real Supersonic
+desktop client), GPL-3.0 (matching this project's own license), whose typed
+methods (`StartScan`, `GetScanStatus`, and later the playlist CRUD methods)
+avoid re-deriving several endpoints' exact JSON shapes from scratch, including
+handling the OpenSubsonic HTTP-POST-vs-GET extension automatically for longer
+requests. Its own `Authenticate` generates its salt with `math/rand` rather than
+`crypto/rand` — weaker than the `saltedToken`/`Ping` already built for `login`
+(§8.1) — and its `salt`/`token` fields are unexported, so there's no way to
+inject `saltedToken`'s output instead without forking the library. Accepted
+deliberately: the value is still unique per process run, never persisted, and
+travels over TLS: a minor, disclosed downside, not a serious one. `login`'s own
+validation (§8.1) is unaffected — it doesn't use this library at all.
+
+`Scan`'s status is checked immediately after starting, before any waiting — the
+common case (an incremental scan where little or nothing changed since the last
+sync) often finishes before the first poll would even happen, and there's no
+reason to make that case wait a full poll interval for no benefit. The default
+poll interval thereafter is 1 second (`DefaultScanPollInterval`): short enough
+that a quick scan is noticed within about a second of finishing, without being
+so aggressive it's needless chatter against the server for a scan that genuinely
+takes a while. `Scan` reports a `ScanProgress{Elapsed, Count}` after every
+still-running check via an optional callback, so a caller can show something
+concrete rather than apparent silence for however long a longer scan takes — a
+sync operation that scans before doing anything else would otherwise look like
+it had hung. `internal/navidrome` stays presentation- agnostic (no TTY
+detection, no `\r`-based console rendering) per this project's `internal`/`cmd`
+split (§4); rendering that progress to the terminal is the concern of the
+`sync navidrome` commands that call `Scan` (§8.5-8.7, not yet implemented),
+matching the existing TTY-gated `\r` progress pattern already used by
+`rename`/`video rename`.
 
 ### 8.3 Track Resolution
 
