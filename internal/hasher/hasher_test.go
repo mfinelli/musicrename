@@ -286,6 +286,129 @@ func TestCollectFiles(t *testing.T) {
 	})
 }
 
+func TestUpdateFile(t *testing.T) {
+	t.Run("no-op when sums.md5 does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "ipod.m3u8"), "01 track.flac\n")
+
+		require.NoError(t, UpdateFile(dir, "ipod.m3u8"))
+
+		_, err := os.Stat(filepath.Join(dir, SumsFilename))
+		assert.True(t, os.IsNotExist(err), "sums.md5 should not have been created")
+	})
+
+	t.Run("inserts a new line for a file not previously present", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+
+		makeFile(t, filepath.Join(dir, "ipod.m3u8"), "01 track.flac\n")
+		require.NoError(t, UpdateFile(dir, "ipod.m3u8"))
+
+		got := readSums(t, dir)
+		assert.Contains(t, got, md5hex("01 track.flac\n")+"  ipod.m3u8\n")
+		assert.Contains(t, got, "01 track.flac\n") // original entry untouched
+	})
+
+	t.Run("updates an existing line without touching other entries", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		makeFile(t, filepath.Join(dir, "ipod.m3u8"), "01 track.flac\n")
+		require.NoError(t, Hash(dir, nil))
+
+		before := readSums(t, dir)
+
+		// Rewrite the manifest's content and update just that one line.
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, "ipod.m3u8"), []byte("01 track.flac\n02 track.flac\n"), 0644,
+		))
+		require.NoError(t, UpdateFile(dir, "ipod.m3u8"))
+
+		after := readSums(t, dir)
+		assert.Contains(t, after, md5hex("01 track.flac\n02 track.flac\n")+"  ipod.m3u8\n")
+		// The audio file's line must be byte-for-byte identical to before
+		// which is the whole point: UpdateFile must never rehash it.
+		for _, line := range strings.Split(strings.TrimRight(before, "\n"), "\n") {
+			if strings.HasSuffix(line, "01 track.flac") {
+				assert.Contains(t, after, line)
+			}
+		}
+	})
+
+	t.Run("does not rehash untouched files, preserving a stale/corrupted hash", func(t *testing.T) {
+		dir := t.TempDir()
+		audioPath := filepath.Join(dir, "01 track.flac")
+		makeFile(t, audioPath, "original audio")
+		makeFile(t, filepath.Join(dir, "ipod.m3u8"), "01 track.flac\n")
+		require.NoError(t, Hash(dir, nil))
+		originalHash := md5hex("original audio")
+
+		// Simulate bit rot: the file on disk changes without a deliberate
+		// rewrite through this tool.
+		require.NoError(t, os.WriteFile(audioPath, []byte("corrupted audio"), 0644))
+
+		// Only the manifest changed as far as this call is concerned.
+		require.NoError(t, UpdateFile(dir, "ipod.m3u8"))
+
+		got := readSums(t, dir)
+		assert.Contains(t, got, originalHash+" *01 track.flac\n",
+			"the untouched audio file's recorded hash must be preserved so corruption is still detectable")
+	})
+
+	t.Run("result remains sorted by filename", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "a")
+		makeFile(t, filepath.Join(dir, "sdcard.m3u8"), "01 track.flac\n")
+		require.NoError(t, Hash(dir, nil))
+
+		makeFile(t, filepath.Join(dir, "ipod.m3u8"), "01 track.flac\n")
+		require.NoError(t, UpdateFile(dir, "ipod.m3u8"))
+
+		got := readSums(t, dir)
+		lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+		require.Len(t, lines, 3)
+		assert.Contains(t, lines[0], "01 track.flac")
+		assert.Contains(t, lines[1], "ipod.m3u8")
+		assert.Contains(t, lines[2], "sdcard.m3u8")
+	})
+}
+
+func TestRemoveFile(t *testing.T) {
+	t.Run("no-op when sums.md5 does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.NotPanics(t, func() {
+			require.NoError(t, RemoveFile(dir, "ipod.m3u8"))
+		})
+		_, err := os.Stat(filepath.Join(dir, SumsFilename))
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("no-op when the file has no existing line", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+		before := readSums(t, dir)
+
+		require.NoError(t, RemoveFile(dir, "ipod.m3u8"))
+
+		after := readSums(t, dir)
+		assert.Equal(t, before, after)
+	})
+
+	t.Run("removes exactly the named line, leaving others untouched", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		makeFile(t, filepath.Join(dir, "ipod.m3u8"), "01 track.flac\n")
+		require.NoError(t, Hash(dir, nil))
+
+		require.NoError(t, RemoveFile(dir, "ipod.m3u8"))
+
+		got := readSums(t, dir)
+		assert.NotContains(t, got, "ipod.m3u8")
+		assert.Contains(t, got, "01 track.flac")
+	})
+}
+
 func TestIsTextFile(t *testing.T) {
 	t.Run("returns true for recognised text extensions", func(t *testing.T) {
 		textFiles := []string{

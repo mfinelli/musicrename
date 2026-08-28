@@ -170,6 +170,36 @@ verification on any system that has `md5sum` installed.
     album directories within it are processed recursively. Albums that already
     have a `sums.md5` are silently skipped; `--force` regenerates them all.
 
+#### Targeted Single-File Updates
+
+`sums` and the `--force` full-regeneration path always rehash every file in the
+album. Other commands that touch just one file in an already-`sums.md5`'d album
+(`playlist select`, §7.3; the planned `rename` follow-up) must **not** go
+through a full rehash to update it — doing so would silently recompute and
+overwrite the recorded hash of every _other_, untouched file in the album, which
+would mask real corruption (bit rot, a failing drive) on any file that happened
+to have degraded since the last real `sums` run instead of flagging it.
+`sums.md5`'s entire value as a corruption detector depends on a file's recorded
+hash only ever changing when that specific file was deliberately rewritten.
+
+Two narrower primitives are needed instead, both operating on a single existing
+`sums.md5` by reading it, editing exactly one line, and rewriting the rest
+through unchanged (still sorted, still stable):
+
+- **Content changed** (a file was rewritten, e.g. `playlist select` editing
+  `ipod.m3u8`): recompute that one file's hash and replace or insert its line.
+  This is a real rehash, but scoped to the single file whose bytes actually
+  changed.
+- **Only the filename changed, content did not** (the planned `rename`
+  follow-up, updating `sums.md5` after a file move/rename): rewrite the filename
+  on that file's existing line in place, reusing its already-recorded hash
+  unchanged. No rehashing at all — the bytes weren't touched, so there is
+  nothing to recompute, and doing so anyway would throw away the corruption
+  check on that file for no reason.
+
+Both primitives are no-ops (or plain insert/delete) when no `sums.md5` exists
+yet in the album — they only ever touch a file that's already there.
+
 ## 4. Architecture
 
 ### 4.1 Commands
@@ -802,6 +832,38 @@ the playlist file format without its ordering semantics (contrast with §7.4).
 These files are a source-side selection input only and are never copied to the
 device.
 
+#### Editing via `playlist select`
+
+`musicrename playlist select <target> [album-path]` (§9) is the intended way to
+create or update a `{target}.m3u8`: an interactive checkbox list
+(`charmbracelet/huh`) of every track in the album, pre-checked against any
+existing selection, sorted by `(DiscNumber, TrackNumber)` rather than
+filesystem/directory order (the two coincide after `rename`, but the sort is
+explicit rather than relying on that). Each row shows track number, disc number
+(only when the album has more than one disc), title, and — only when it differs
+from the album's resolved artist — that track's own artist. A track with no
+`TITLE` tag falls back to display by filename stem, since this command is
+expected to typically run _before_ the final `rename` pass, unlike most other
+commands in this document.
+
+**Stale entries:** if the existing `{target}.m3u8` references a filename that no
+longer matches any track currently found in the album (renamed outside the tool,
+deleted, etc.), it is still shown — pre-checked, since it's still technically
+part of the current selection — but as a bare filename with no tag data and a
+visible warning marker, sorted after every real track. It is never silently
+dropped; unchecking it removes it from the selection through the exact same save
+path as any real track.
+
+**Saving:** the file is (re)written listing every checked entry in the sorted
+track order described above (readability/diffability, matching the existing
+`sums.md5` stable-sort precedent — not because order is semantically meaningful
+here). If every track ends up unchecked, the `{target}.m3u8` file is deleted
+rather than left behind empty; an empty file and a missing file are equivalent
+to the sync reconciliation in §7.7, so there's no reason to leave clutter
+behind. If an existing `sums.md5` is present in the album, it is updated to
+match via the targeted single-file primitive described in §3.4 — never a full
+rehash — unless a flag (name TBD, e.g. `--skip-md5`) is passed to suppress this.
+
 ### 7.4 Playlists
 
 A top-level `playlists/` directory sits as a sibling of the library roots (not
@@ -1106,16 +1168,16 @@ one place strict error handling is non-negotiable rather than a nicety.
 
 ## 9. Command-Line Interface for §7/§8 (Design / Not Yet Implemented)
 
-| Command                                                     | Description                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `musicrename login [--url] [--token]`                       | Stores the Navidrome server URL and API token in the XDG config file (§8.1); kept out of version control. Prompts interactively for any flag not supplied.                                                                                                                                                                  |
-| `musicrename logout`                                        | Clears stored Navidrome credentials.                                                                                                                                                                                                                                                                                        |
-| `musicrename playlist select <target> [album-path]`         | Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back (§7.3). `album-path` defaults to the current directory, matching `inspect`/`lyrics`.                                              |
-| `musicrename sync ipod <device-path> [library-root-root]`   | Full reconciliation sync to an attached iPod (§7.7). `--dry-run`, `--verbose`.                                                                                                                                                                                                                                              |
-| `musicrename sync sdcard <device-path> [library-root-root]` | Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                 |
-| `musicrename sync navidrome pull [playlist]`                | Pulls all playlists, or one by path if given (§8.5). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                |
-| `musicrename sync navidrome push [playlist]`                | Mirror of `pull`. Same flags.                                                                                                                                                                                                                                                                                               |
-| `musicrename sync navidrome delete <playlist>`              | Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete. |
+| Command                                                     | Description                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `musicrename login [--url] [--token]`                       | Stores the Navidrome server URL and API token in the XDG config file (§8.1); kept out of version control. Prompts interactively for any flag not supplied.                                                                                                                                                                                                                                           |
+| `musicrename logout`                                        | Clears stored Navidrome credentials.                                                                                                                                                                                                                                                                                                                                                                 |
+| `musicrename playlist select <target> [album-path]`         | Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back, targeted-updating (never fully rehashing) `sums.md5` if present (§7.3, §3.4). `album-path` defaults to the current directory, matching `inspect`/`lyrics`. `--skip-md5` suppresses the `sums.md5` update. |
+| `musicrename sync ipod <device-path> [library-root-root]`   | Full reconciliation sync to an attached iPod (§7.7). `--dry-run`, `--verbose`.                                                                                                                                                                                                                                                                                                                       |
+| `musicrename sync sdcard <device-path> [library-root-root]` | Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                          |
+| `musicrename sync navidrome pull [playlist]`                | Pulls all playlists, or one by path if given (§8.5). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                         |
+| `musicrename sync navidrome push [playlist]`                | Mirror of `pull`. Same flags.                                                                                                                                                                                                                                                                                                                                                                        |
+| `musicrename sync navidrome delete <playlist>`              | Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete.                                                                          |
 
 ### 9.1 Shape Notes
 

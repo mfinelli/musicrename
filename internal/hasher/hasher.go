@@ -34,6 +34,7 @@ package hasher
 
 import (
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -154,4 +155,133 @@ func hashFile(path string) (string, error) {
 // based purely on the file extension; no magic-byte inspection is performed.
 func isTextFile(path string) bool {
 	return textExtensions[strings.ToLower(filepath.Ext(path))]
+}
+
+// sumEntry is a single parsed line from a sums.md5 file.
+type sumEntry struct {
+	hash string
+	name string
+}
+
+// parseSumsFile reads and parses dir/sums.md5. The second return value
+// reports whether the file existed; a missing file is not an error and
+// returns (nil, false, nil). Malformed lines (shorter than the fixed-width
+// "<32-hex-hash><sep>" prefix) are skipped defensively rather than causing
+// the whole read to fail.
+func parseSumsFile(dir string) ([]sumEntry, bool, error) {
+	path := filepath.Join(dir, SumsFilename)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	var entries []sumEntry
+	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		// Fixed-width prefix: 32 hex characters, then a two-character
+		// separator ("  " for text, " *" for binary), then the filename.
+		if len(line) < 34 {
+			continue
+		}
+		entries = append(entries, sumEntry{hash: line[:32], name: line[34:]})
+	}
+	return entries, true, nil
+}
+
+// writeSumsEntries serializes entries to dir/sums.md5, sorted by filename
+// (not by the raw line, which would sort by hash first and destroy the
+// stable, diffable filename ordering.
+func writeSumsEntries(dir string, entries []sumEntry) error {
+	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+
+	var sb strings.Builder
+	for _, e := range entries {
+		if isTextFile(e.name) {
+			fmt.Fprintf(&sb, "%s  %s\n", e.hash, e.name)
+		} else {
+			fmt.Fprintf(&sb, "%s *%s\n", e.hash, e.name)
+		}
+	}
+
+	dest := filepath.Join(dir, SumsFilename)
+	if err := os.WriteFile(dest, []byte(sb.String()), 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", dest, err)
+	}
+	return nil
+}
+
+// UpdateFile recomputes the MD5 digest for the single file dir/rel and
+// updates (or inserts) its line in dir/sums.md5, leaving every other line
+// byte-for-byte as it was. This is intentionally not a full [Hash] re-run:
+// recomputing every file's digest would silently overwrite the recorded hash
+// of every other, untouched file in the album, masking any real corruption
+// (bit rot, a failing drive) that happened to that file since the last real
+// sums.md5 generation instead of flagging it. UpdateFile only ever touches
+// the one file whose content is known to have actually changed.
+//
+// If dir/sums.md5 does not exist, UpdateFile is a no-op: it only ever
+// updates an existing checksum file; it doesn't create one from scratch.
+func UpdateFile(dir, rel string) error {
+	entries, existed, err := parseSumsFile(dir)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", filepath.Join(dir, SumsFilename), err)
+	}
+	if !existed {
+		return nil
+	}
+
+	sum, err := hashFile(filepath.Join(dir, rel))
+	if err != nil {
+		return fmt.Errorf("hashing %s: %w", rel, err)
+	}
+
+	found := false
+	for i := range entries {
+		if entries[i].name == rel {
+			entries[i].hash = sum
+			found = true
+			break
+		}
+	}
+	if !found {
+		entries = append(entries, sumEntry{hash: sum, name: rel})
+	}
+
+	return writeSumsEntries(dir, entries)
+}
+
+// RemoveFile deletes dir/rel's line from dir/sums.md5, if present, leaving
+// every other line unchanged. No hashing is performed (removal never
+// requires reading the file's contents).
+//
+// If dir/sums.md5 does not exist, or rel has no line in it, RemoveFile is a
+// no-op.
+func RemoveFile(dir, rel string) error {
+	entries, existed, err := parseSumsFile(dir)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", filepath.Join(dir, SumsFilename), err)
+	}
+	if !existed {
+		return nil
+	}
+
+	filtered := make([]sumEntry, 0, len(entries))
+	changed := false
+	for _, e := range entries {
+		if e.name == rel {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+	if !changed {
+		return nil
+	}
+
+	return writeSumsEntries(dir, filtered)
 }
