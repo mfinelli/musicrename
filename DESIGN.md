@@ -867,9 +867,23 @@ rehash — unless a flag (name TBD, e.g. `--skip-md5`) is passed to suppress thi
 ### 7.4 Playlists
 
 A top-level `playlists/` directory sits as a sibling of the library roots (not
-hidden — this simply means no library root may be named `playlists`). Structure:
-`playlists/{target}/*.m3u8` for target-specific playlists, plus
-`playlists/*.m3u8` directly for playlists that apply to every target.
+hidden — this simply means no library root may be named `playlists`). Playlists
+live flat as `playlists/*.m3u8` — there is exactly one file per playlist, never
+a per-target copy. Subdirectories under `playlists/` carry no scoping meaning;
+`playlist check` (§7.12) walks the whole tree recursively so purely
+organizational subfolders (by genre, mood, whatever) are fine to use, they just
+don't do anything special.
+
+Which targets a playlist applies to is declared inside the file itself via a
+`#TARGETS:` directive line (§8.4), e.g. `#TARGETS:ipod,sdcard`. A playlist with
+no `#TARGETS:` directive applies to every target. This directive exists
+specifically so a playlist can be selectively scoped without duplicating the
+file — an earlier version of this design used `playlists/{target}/`
+subdirectories for that instead, but a playlist scoped to more than one (but not
+all) targets forced writing the same file more than once, which meant two
+on-disk copies of the same `#NAVIDROME-ID` that could independently drift out of
+sync with each other with no warning; storing scope as data inside a single
+canonical file removes the duplication (and the drift risk) entirely.
 
 Entries are paths relative to the library-root-root (§7.1), e.g.
 `main/a/artist/2020 album/01 track.flac`. Because the device mirrors the same
@@ -881,10 +895,11 @@ Unlike album-local manifests, order here is meaningful (played back as listed).
 Playlists are copied onto devices that actually consume them for playback (e.g.
 `ipod`/Rockbox).
 
-**Membership implies selection:** a track referenced by any playlist relevant to
-a target is automatically included in that target's desired sync set, even if
-that track's album `{target}.m3u8` doesn't list it. This avoids ever shipping a
-playlist with dangling entries.
+**Membership implies selection:** a track referenced by any playlist whose
+`#TARGETS:` directive includes a given target (or that has no `#TARGETS:`
+directive at all) is automatically included in that target's desired sync set,
+even if that track's album `{target}.m3u8` doesn't list it. This avoids ever
+shipping a playlist with dangling entries.
 
 ### 7.5 Device-Side Layout
 
@@ -932,7 +947,8 @@ a measured bottleneck.
 
 1. **Desired-state computation:** union, across every library root except
    `videos`, of every album's `{target}.m3u8` entries plus every entry from a
-   target-relevant playlist (§7.4.1) — producing a flat list of
+   playlist whose `#TARGETS:` directive includes that target, or has no
+   `#TARGETS:` directive at all (§7.4) — producing a flat list of
    `(root, relative path)`. Implemented as a distinct planner (mirroring the
    existing `planner`/`executor` split, e.g. `internal/sync`) so a plan can be
    produced and dry-run-inspected before anything touches the device.
@@ -1051,10 +1067,9 @@ CLI.
 
 - **Global playlists** (`playlists/`): out of scope for `rename`, which has no
   visibility outside the single album it is processing at a time. Instead,
-  `check` (§4.3) gains a new finding category — a playlist entry whose path no
-  longer resolves to a file on disk — surfaced for a manual fix pass, consistent
-  with `check`'s existing role as where library-wide drift gets flagged rather
-  than silently auto-corrected.
+  `musicrename playlist check` (§7.12) audits the `playlists/` tree separately
+  for dangling entries, since — unlike album-local manifests — it has no
+  per-album scope for `check`/`rename` to hook into.
 - **`video rename`** (§6): the same `sums.md5` filename-only update applies — a
   video's own filename is title-derived and so can change independently of its
   directory move. This surfaced a related gap: `video rename`'s executor
@@ -1073,6 +1088,62 @@ CLI.
 - No dedicated sync-state database (SQLite or otherwise) — see §7.6.
 - The Navidrome/SMB use case is unaffected by any of the above and continues to
   be handled entirely within Navidrome.
+
+### 7.12 Checking Playlists (Implemented)
+
+Auditing splits across two places, matching the same scope boundary used
+throughout this document — per-album vs. library-wide:
+
+- **Album-local manifests** (`{target}.m3u8`, §7.3): a new finding category in
+  the existing `musicrename check` (§4.3), added alongside its other per-album
+  checks. Two things are flagged:
+  - A manifest for an unrecognized target name (e.g. a stray `xbox.m3u8` —
+    target names are a small, hardcoded set, `internal/target`, so this is
+    almost certainly a typo or leftover cruft, not a real target).
+  - For a manifest whose target name _is_ recognized, an entry that no longer
+    matches any track currently found in the album — the same "stale entry"
+    condition `playlist select` (§7.3) detects interactively, surfaced here as a
+    passive audit finding instead. Not checked on an unrecognized-target
+    manifest, since that manifest is already flagged as a whole.
+- **Global playlists** (`playlists/`, §7.4): a new
+  `musicrename playlist check [library-root-root]` command (§9), not folded into
+  `musicrename check` itself. `check`'s scope model is "a library root, or a
+  single album within one" — album-local manifests fit that model directly, but
+  global playlists don't: they're not inside any library root, they're a sibling
+  of all of them, keyed to the library-root-root (§7.4/§8.1). Teaching `check` a
+  second, unrelated scope concept for one feature seemed like the wrong trade
+  against a small dedicated command. It walks `playlists/` recursively
+  (subdirectories carry no scoping meaning under the flat, `#TARGETS:`-based
+  structure in §7.4, but are harmless to use for organization, so the walk
+  doesn't assume a flat layout) and flags:
+  - An entry whose path doesn't resolve to an actual file anywhere under the
+    root (the dangling-entry case originally described as living in `check`
+    itself; relocated here instead once the scope mismatch above became clear).
+  - An unrecognized target name inside a `#TARGETS:` directive (§8.4) — the same
+    typo/cruft-catching reasoning as the album-local unrecognized-target check
+    above.
+  - Two or more playlist files sharing the same `#NAVIDROME-ID` directive (§8.4,
+    §8.9). Under the current one-file-per-playlist structure this is never
+    legitimate — an earlier design revision used a directory-per-target layout
+    instead, where the same ID appearing on more than one file was the
+    _expected_ result of deliberately scoping a playlist to several targets,
+    which would have made this check a heuristic (same ID, differing content)
+    rather than an unconditional error. Moving target scope into the `#TARGETS:`
+    directive (§7.4) removed that legitimate-duplication case entirely, so any
+    duplicate ID found today is unambiguously a mistake.
+
+  Reading a library-wide playlist file for this command uses three small new
+  `internal/playlist` functions — `ReadEntries` (plain entries, skipping
+  `#`-prefixed directive lines and blank lines), `ReadNavidromeID` (extracts a
+  `#NAVIDROME-ID:` directive's value if present), and `ReadTargets` (extracts
+  and splits a `#TARGETS:` directive's value if present) — distinct from
+  `ReadManifest`/`WriteManifest`, which are keyed by an album directory and
+  target name and only ever apply to album-local manifests. All three new
+  functions take an explicit file path instead, since library-wide playlist
+  files live at arbitrary discovered locations rather than a predictable
+  per-album name. Neither command modifies anything; both are read-only audits,
+  consistent with `check`'s existing behavior, exiting non-zero when findings
+  are present.
 
 ## 8. Navidrome Playlist Sync (Design / Not Yet Implemented)
 
@@ -1121,18 +1192,25 @@ document (e.g. `rename`, `lyrics`).
 
 ### 8.4 Local Playlist File Conventions
 
-Each locally-authored playlist file (§7.4) carries two extended-M3U comment
-lines at its top:
+Each locally-authored playlist file (§7.4) carries extended-M3U comment lines at
+its top:
 
 - `#PLAYLIST:<name>` — the playlist's real display name, independent of its
   (ASCII-sanitized, §3.2) filename. A standard extended-M3U directive, not a
   `musicrename` invention.
 - `#NAVIDROME-ID:<id>` — the corresponding Navidrome playlist's internal ID,
   once one exists; absent on a playlist that has never been pushed.
+- `#TARGETS:<comma-separated target names>` (§7.4) — which sync targets this
+  playlist applies to, e.g. `#TARGETS:ipod,sdcard`. Absent entirely means "every
+  target." This is what lets one playlist file be scoped to more than one (but
+  not all) targets without needing a second on-disk copy.
 
-Correlation between a local file and a remote playlist is by this ID, never by
-filename or display name — renaming a playlist locally does not orphan or
-duplicate its remote counterpart.
+Correlation between a local file and a remote playlist is by the
+`#NAVIDROME-ID`, never by filename or display name — renaming a playlist locally
+does not orphan or duplicate its remote counterpart. Because there is exactly
+one file per playlist (§7.4), a given `#NAVIDROME-ID` should never legitimately
+appear on more than one file; `playlist check` (§7.12) treats any duplicate as
+an error unconditionally, not a heuristic.
 
 ### 8.5 Pull / Edit / Push as a Session, Not a Diff
 
@@ -1215,6 +1293,7 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename login [--url] [--token]`                       | Stores the Navidrome server URL and API token in the XDG config file (§8.1); kept out of version control. Prompts interactively for any flag not supplied.                                                                                                                                                                                                                                           |
 | `musicrename logout`                                        | Clears stored Navidrome credentials.                                                                                                                                                                                                                                                                                                                                                                 |
 | `musicrename playlist select <target> [album-path]`         | Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back, targeted-updating (never fully rehashing) `sums.md5` if present (§7.3, §3.4). `album-path` defaults to the current directory, matching `inspect`/`lyrics`. `--skip-md5` suppresses the `sums.md5` update. |
+| `musicrename playlist check [library-root-root]`            | **Implemented (§7.12).** Audits the `playlists/` tree for entries that don't resolve to a file, unrecognized `#TARGETS:` names, and duplicate `#NAVIDROME-ID` values across files. Read-only; exits non-zero on findings, matching `check`'s conventions. Album-local manifest findings live in `musicrename check` instead (§4.3, §7.12), not here.                                                 |
 | `musicrename sync ipod <device-path> [library-root-root]`   | Full reconciliation sync to an attached iPod (§7.7). `--dry-run`, `--verbose`.                                                                                                                                                                                                                                                                                                                       |
 | `musicrename sync sdcard <device-path> [library-root-root]` | Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                          |
 | `musicrename sync navidrome pull [playlist]`                | Pulls all playlists, or one by path if given (§8.5). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                         |
@@ -1237,11 +1316,10 @@ one place strict error handling is non-negotiable rather than a nicety.
 ### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
 
 Tooling beyond `playlist select` for the global `playlists/` tree (§7.4) — e.g.
-`playlist create <name> [--target]` to scaffold a new file with a correctly
-formatted `#PLAYLIST:` header in the right `playlists/{target}/` location,
-reordering, moving a playlist between target subfolders, or repairing malformed
-headers — is deferred as a later phase of this same work, alongside the
-video/Rockbox pipeline (§6.5) and the on-device sync mechanism (§7) itself.
-`playlist select`'s narrower album-manifest scope covers the immediate need; the
-global-playlist authoring experience remains manual (a text editor) until this
-phase is picked up.
+`playlist create <name> [--targets]` to scaffold a new file with correctly
+formatted `#PLAYLIST:`/`#TARGETS:` headers, reordering, editing a playlist's
+`#TARGETS:` scope, or repairing malformed headers — is deferred as a later phase
+of this same work, alongside the video/Rockbox pipeline (§6.5) and the on-device
+sync mechanism (§7) itself. `playlist select`'s narrower album-manifest scope
+covers the immediate need; the global-playlist authoring experience remains
+manual (a text editor) until this phase is picked up.
