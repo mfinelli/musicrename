@@ -1103,3 +1103,41 @@ one place strict error handling is non-negotiable rather than a nicety.
 - Two local files sharing the same `#NAVIDROME-ID`, and a pulled playlist entry
   that fails to resolve to a local track (§8.3), are surfaced as new `check`
   (§4.3) finding categories rather than resolved automatically.
+
+## 9. Command-Line Interface for §7/§8 (Design / Not Yet Implemented)
+
+| Command                                                     | Description                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `musicrename login [--url] [--token]`                       | Stores the Navidrome server URL and API token in the XDG config file (§8.1); kept out of version control. Prompts interactively for any flag not supplied.                                                                                                                                                                  |
+| `musicrename logout`                                        | Clears stored Navidrome credentials.                                                                                                                                                                                                                                                                                        |
+| `musicrename playlist select <target> [album-path]`         | Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back (§7.3). `album-path` defaults to the current directory, matching `inspect`/`lyrics`.                                              |
+| `musicrename sync ipod <device-path> [library-root-root]`   | Full reconciliation sync to an attached iPod (§7.7). `--dry-run`, `--verbose`.                                                                                                                                                                                                                                              |
+| `musicrename sync sdcard <device-path> [library-root-root]` | Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                 |
+| `musicrename sync navidrome pull [playlist]`                | Pulls all playlists, or one by path if given (§8.5). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                |
+| `musicrename sync navidrome push [playlist]`                | Mirror of `pull`. Same flags.                                                                                                                                                                                                                                                                                               |
+| `musicrename sync navidrome delete <playlist>`              | Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete. |
+
+### 9.1 Shape Notes
+
+- **`sync` is one parent covering both device and Navidrome flavors of
+  syncing.** `ipod`/`sdcard` are direct subcommands of `sync` rather than nested
+  under an intermediate `device` level — this keeps every hardcoded §7.2 target
+  a flat, independently addable sibling as new targets are added.
+  `sync navidrome` reads clearly as the odd one out, consistent with §8's
+  explicit statement that Navidrome isn't a `target` in the §7.2 sense.
+- **`playlist select` only touches album-local manifests** (`{target}.m3u8`,
+  §7.3) — a single album's checkbox-selected track list. It does not touch the
+  global `playlists/` tree (§7.4), which stays hand-authored text files using
+  the `#PLAYLIST:`/`#NAVIDROME-ID:` header conventions (§8.4).
+
+### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
+
+Tooling beyond `playlist select` for the global `playlists/` tree (§7.4) — e.g.
+`playlist create <name> [--target]` to scaffold a new file with a correctly
+formatted `#PLAYLIST:` header in the right `playlists/{target}/` location,
+reordering, moving a playlist between target subfolders, or repairing malformed
+headers — is deferred as a later phase of this same work, alongside the
+video/Rockbox pipeline (§6.5) and the on-device sync mechanism (§7) itself.
+`playlist select`'s narrower album-manifest scope covers the immediate need; the
+global-playlist authoring experience remains manual (a text editor) until this
+phase is picked up.
