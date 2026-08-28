@@ -30,11 +30,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/executor"
-	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
-	"github.com/mfinelli/musicrename/internal/playlist"
-	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/renamesync"
 )
 
 // Lipgloss styles for the dry-run output. Defined at package level so they are
@@ -145,121 +143,11 @@ func runRename(cmd *cobra.Command, args []string) error {
 
 	skipMD5, _ := cmd.Flags().GetBool("skip-md5")
 	skipPlaylists, _ := cmd.Flags().GetBool("skip-playlists")
-	execWarnings = append(execWarnings, syncRenamedFileMetadata(plan, skipMD5, skipPlaylists)...)
+	execWarnings = append(execWarnings, renamesync.Sync(plan, skipMD5, skipPlaylists)...)
 
 	// Phase 2: surface all warnings (planner + executor) and the summary line.
 	printRunSummary(out, plan, execWarnings)
 	return nil
-}
-
-// syncRenamedFileMetadata is a best-effort follow-up pass run after
-// executor.Execute has already completed successfully. For every real
-// (non-no-op) move whose path relative to its own album root actually
-// changed, it:
-//
-//   - Updates that entry's filename in place in sums.md5 (never rehashing —
-//     the file's content is unchanged, only its name is), if sums.md5
-//     exists in the album and skipMD5 is false.
-//   - For audio files specifically, updates any {target}.m3u8 that
-//     references the old filename, unless skipPlaylists is true. When that
-//     actually rewrites a manifest's content, the manifest's sums.md5
-//     entry (if any) is then rehashed via UpdateFile rather than
-//     RenameFile (its bytes genuinely changed this time, unlike the audio
-//     file's filename-only rename above, so a full rehash of that one
-//     file is correct and necessary here, not something to avoid).
-//
-// A move whose relative path is unchanged (only the album's directory
-// moved e.g., an artist rename, a bucket change) needs no follow-up: sums.md5
-// and manifest entries are relative to the album root, so they remain
-// correct without any rewrite.
-//
-// A move is only acted on if op.NewPath actually exists on disk afterward —
-// the executor may have skipped a specific move due to a race condition
-// (something appearing at the destination between planning and execution)
-// without that aborting the whole run, and this guards against rewriting
-// sums.md5/manifests to reference a file that was never actually created.
-//
-// Failures here are collected as warnings rather than aborting: by this
-// point every file move has already succeeded, so a checksum/manifest
-// bookkeeping failure shouldn't undo or block reporting on an otherwise
-// successful rename.
-func syncRenamedFileMetadata(plan *planner.Plan, skipMD5, skipPlaylists bool) []string {
-	if skipMD5 && skipPlaylists {
-		return nil
-	}
-
-	var warnings []string
-
-	for _, ap := range plan.Albums {
-		for _, op := range ap.Moves {
-			if op.IsNoOp {
-				continue
-			}
-
-			oldRel, err := filepath.Rel(ap.SourceDir, op.OldPath)
-			if err != nil {
-				continue
-			}
-			newRel, err := filepath.Rel(ap.DestDir, op.NewPath)
-			if err != nil {
-				continue
-			}
-			if oldRel == newRel {
-				continue
-			}
-
-			if _, err := os.Stat(op.NewPath); err != nil {
-				// The move didn't actually happen (e.g. a race-condition
-				// skip reported separately by the executor); nothing here
-				// should reference a file that was never created.
-				continue
-			}
-
-			if !skipMD5 {
-				found, err := hasher.RenameFile(ap.DestDir, oldRel, newRel)
-				switch {
-				case err != nil:
-					warnings = append(warnings, fmt.Sprintf(
-						"updating sums.md5 for %s: %v", newRel, err,
-					))
-				case !found:
-					if _, statErr := os.Stat(filepath.Join(ap.DestDir, hasher.SumsFilename)); statErr == nil {
-						warnings = append(warnings, fmt.Sprintf(
-							"sums.md5 exists but has no entry for %s; leaving as-is", oldRel,
-						))
-					}
-				}
-			}
-
-			if !skipPlaylists && metadata.IsAudioExt(filepath.Ext(op.NewPath)) {
-				for _, tgt := range target.Names {
-					changed, err := playlist.RenameEntry(ap.DestDir, tgt, oldRel, newRel)
-					if err != nil {
-						warnings = append(warnings, fmt.Sprintf(
-							"updating %s for %s: %v", playlist.ManifestFilename(tgt), newRel, err,
-						))
-						continue
-					}
-
-					// RenameEntry rewrote a line inside the manifest, so
-					// the manifest's bytes actually changed. Left unrehashed,
-					// sums.md5 would record a stale hash for a file this
-					// same run just legitimately rewrote which is a false
-					// corruption signal on the very next verification.
-					if changed && !skipMD5 {
-						manifestName := playlist.ManifestFilename(tgt)
-						if err := hasher.UpdateFile(ap.DestDir, manifestName); err != nil {
-							warnings = append(warnings, fmt.Sprintf(
-								"updating sums.md5 for %s: %v", manifestName, err,
-							))
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return warnings
 }
 
 // printRunPlan writes a condensed album-level overview to out before execution

@@ -1011,6 +1011,14 @@ a measured bottleneck.
 
 ### 7.10 Interaction with `rename`
 
+This logic lives in `internal/renamesync`, not in `cmd/rename.go` — the
+project's stated split (§4: business logic in `internal/`, testable without a
+terminal; user interaction in `cmd/`) applies here too, so the sync pass is a
+plain `Sync(plan, skipMD5, skipPlaylists) []string` function `cmd/rename.go`
+calls after `executor.Execute`, with its own test suite exercising the edge
+cases below directly against `planner.Plan` fixtures rather than through the
+CLI.
+
 - **Album-local manifests** (`{target}.m3u8`) and **`sums.md5`**: after a real
   (non-dry-run) `rename` run, for every file whose path relative to its own
   album root actually changed (a real filename change, or a case-only rename — a
