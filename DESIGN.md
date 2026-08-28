@@ -1156,14 +1156,80 @@ itself (e.g. from a phone) pulled back down. This section is not a `target` in
 the §7.2 sense and shares none of the audio-copy, transcode, or artwork-resize
 machinery from that section.
 
-### 8.1 Authentication
+### 8.1 Authentication (Implemented)
 
-Credentials (server URL and API token) cannot follow the "hardcode it in code"
-pattern used for §7.2 targets, since the repository is public. Instead, a
-dedicated `auth` command accepts and stores them in a local file under the XDG
-config directory, kept out of version control. Any Navidrome sync command errors
-out immediately if no credentials are stored, rather than the tool gaining a
-broader user-facing configuration system.
+Credentials cannot follow the "hardcode it in code" pattern used for §7.2
+targets, since the repository is public. Instead, `musicrename login` prompts
+for and stores them; `musicrename logout` clears them.
+
+**What's actually stored, and why it's not an "API token":** Navidrome has no
+separate, revocable API-token concept distinct from the account password. Two
+auth surfaces exist:
+
+- The **native API** (`/api/*`) uses `POST /auth/login` with a
+  username/password, returning a JWT that expires in ~48h by default and
+  _rotates on every request_ — a session model, a poor fit for a CLI that might
+  run once a week.
+- The **Subsonic API** (`/rest/*`, already needed regardless for the
+  scan-trigger in §8.2 and the playlist CRUD in §8.3) is stateless per request:
+  each call carries a username plus a token computed fresh as
+  `md5(password + random_salt)`. No login call, no expiry, no rotation to manage
+  — just the password on hand to compute a valid signature each time.
+
+Since the Subsonic API is already the natural choice for everything else in this
+design, `login` builds on it too: **what's stored is the username and
+password**, not a token, and each request computes its own salt/token pair at
+call time (`internal/navidrome`, `saltedToken`) rather than reusing a cached
+one. This does mean the stored credential is the actual account password, not an
+independently scoped or revocable one — worth using a dedicated Navidrome user
+for this tool rather than a primary account, purely so the blast radius of that
+file is limited.
+
+`saltedToken`'s use of MD5 is a protocol requirement, not a choice — static
+analysis (CodeQL's `go/weak-sensitive-data-hashing`) will flag it, since its
+underlying concern is normally about an algorithm being too fast to resist
+offline brute-forcing of a _stored_ password hash. That doesn't apply here: this
+value is computed fresh per request and never stored anywhere, and a stronger
+algorithm would simply fail to authenticate against Navidrome (or any other
+Subsonic-compatible server), since the server independently computes the same
+value to compare against. Suppressed inline at the call site with a
+`codeql[go/weak-sensitive-data-hashing]` comment and an explanation, rather than
+dismissed silently.
+
+**Storage:** a JSON file (`encoding/json`, no new dependency for something this
+small) at `$XDG_CONFIG_HOME/musicrename/navidrome.json` — via Go's
+`os.UserConfigDir()`, which already resolves `XDG_CONFIG_HOME` (or `~/.config`)
+on Linux and the platform-appropriate equivalent elsewhere, rather than
+hand-rolling XDG lookup. The file is written `0600` and its parent directory
+`0700`, both owner-only. musicrename supports one configured server at a time
+(§8, "single server" decision) — `login` run again simply overwrites whatever
+was stored before; there's no profile concept to select between.
+
+**`login`'s shape:** `--url` and `--username` may be passed as flags or left to
+be prompted for (`charmbracelet/huh`). The password is never accepted as a flag
+under any circumstance — a secret passed as a command-line argument leaks into
+shell history and is visible to other users on the same machine via `ps`. By
+default it's prompted for interactively, masked (`huh.EchoModePassword`);
+`--password-stdin` reads it from stdin instead (reading all of stdin, trimming a
+trailing `\r\n`), for scripting — piping from a password manager, or a bootstrap
+script — without ever needing an interactive terminal. `--password-stdin` fails
+fast if stdin is actually a live terminal rather than something redirected
+(checked _before_ any prompting starts, including for `--url`/`--username` if
+those are also missing), rather than silently hanging waiting for input that
+will never come. `--password-stdin` alone doesn't force a fully non-interactive
+invocation — `--url`/`--username` are still prompted for if not also passed as
+flags — full automation just means passing all three.
+
+Before writing anything to disk, `login` validates the credentials against the
+server via `/rest/ping`, so a typo'd URL or wrong password is caught immediately
+rather than surfacing later as a confusing failure mid-sync.
+
+`logout` is a pure local file removal — since there's no server-side session
+under the Subsonic auth scheme (see above), there's nothing to invalidate
+remotely.
+
+Any other Navidrome sync command errors out immediately if no credentials are
+stored, rather than the tool gaining a broader user-facing configuration system.
 
 ### 8.2 Scan-Before-Sync
 
@@ -1251,8 +1317,8 @@ carry different amounts of information:
   go delete the file by hand.
 
   This must trigger only on a confirmed not-found response, never on a generic
-  request failure (auth expired, network error, 5xx) — see §8.8. Dry-run always
-  surfaces a pending local deletion before it happens.
+  request failure (wrong/stale credentials, network error, 5xx) — see §8.8.
+  Dry-run always surfaces a pending local deletion before it happens.
 
 ### 8.7 Explicit Single-Playlist Operations
 
@@ -1290,8 +1356,8 @@ one place strict error handling is non-negotiable rather than a nicety.
 
 | Command                                                     | Description                                                                                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `musicrename login [--url] [--token]`                       | Stores the Navidrome server URL and API token in the XDG config file (§8.1); kept out of version control. Prompts interactively for any flag not supplied.                                                                                                                                                                                                                                           |
-| `musicrename logout`                                        | Clears stored Navidrome credentials.                                                                                                                                                                                                                                                                                                                                                                 |
+| `musicrename login [--url] [--username] [--password-stdin]` | **Implemented (§8.1).** Stores the Navidrome server URL, username, and password in a `0600` JSON file under `XDG_CONFIG_HOME` (§8.1). `--url`/`--username` are prompted for if omitted; the password is prompted for (masked) by default, or read from stdin with `--password-stdin` for scripting — never accepted as a flag. Validates via `/rest/ping` before saving.                             |
+| `musicrename logout`                                        | **Implemented (§8.1).** Clears stored Navidrome credentials. Pure local file removal; not an error if not logged in.                                                                                                                                                                                                                                                                                 |
 | `musicrename playlist select <target> [album-path]`         | Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back, targeted-updating (never fully rehashing) `sums.md5` if present (§7.3, §3.4). `album-path` defaults to the current directory, matching `inspect`/`lyrics`. `--skip-md5` suppresses the `sums.md5` update. |
 | `musicrename playlist check [library-root-root]`            | **Implemented (§7.12).** Audits the `playlists/` tree for entries that don't resolve to a file, unrecognized `#TARGETS:` names, and duplicate `#NAVIDROME-ID` values across files. Read-only; exits non-zero on findings, matching `check`'s conventions. Album-local manifest findings live in `musicrename check` instead (§4.3, §7.12), not here.                                                 |
 | `musicrename sync ipod <device-path> [library-root-root]`   | Full reconciliation sync to an attached iPod (§7.7). `--dry-run`, `--verbose`.                                                                                                                                                                                                                                                                                                                       |

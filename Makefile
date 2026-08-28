@@ -10,7 +10,8 @@ endif
 
 SOURCES := $(wildcard *.go cmd/*.go internal/checker/*.go \
 	   internal/executor/*.go internal/hasher/*.go internal/lyrics/*.go \
-	   internal/metadata/*.go internal/planner/*.go internal/playlist/*.go \
+	   internal/metadata/*.go internal/navidrome/*.go \
+	   internal/planner/*.go internal/playlist/*.go \
 	   internal/renamesync/*.go internal/sanitize/*.go \
 	   internal/target/*.go internal/video/*.go)
 
