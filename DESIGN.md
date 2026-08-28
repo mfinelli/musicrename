@@ -575,7 +575,7 @@ tracking parameters doesn't carry that cruft into the library:
 2. **Download.** Shell out to `yt-dlp --write-info-json <clean-url>` in the
    target directory (defaults to the current directory, consistent with other
    commands' path-argument defaults). No `--format`/`--merge-output-format`
-   override is applied — yt-dlp's own default selection and resulting container
+   override is applied — yt-dlp's default selection and resulting container
    (commonly `.webm` or `.mp4` depending on source) are accepted as-is,
    consistent with `add`/`rename` already handling multiple extensions.
 3. **Extract fields.** Parse the resulting `.info.json` for `webpage_url`,
@@ -627,9 +627,8 @@ defaults to the current directory, so running this from inside a video's folder
 needs no argument. Unlike `add`/`inspect`'s `<file>` convention, this
 flexibility is deliberate: `musicvideo.nfo` has the same filename in every
 video's directory, so tab-completing on it specifically (from outside the
-video's own directory) carries no identifying information the way completing on
-the video file's unique name, or just being in the right directory already,
-does.
+video's directory) carries no identifying information the way completing on the
+video file's unique name, or just being in the right directory already, does.
 
 1. Resolve the target directory (see above), then attempt to read its current
    `musicvideo.nfo`. **A missing nfo is not an error** — `edit` creates one
@@ -736,3 +735,371 @@ printing empty fields.
   plugin actually reads and displays embedded metadata during playback, or only
   identifies videos by filename, is unconfirmed and should be verified against
   the target device before this is relied upon.
+
+## 7. Device Sync & Playlist Management (Design / Not Yet Implemented)
+
+Two playlist/device use cases exist. The first — Navidrome, accessed over an SMB
+share — requires no work from this tool: files are already reachable at their
+normal library paths, and playlist management happens entirely inside Navidrome.
+This section covers the second use case only: copying a curated subset of the
+library onto directly-attached removable storage. The initial target is an iPod
+running Rockbox (which exposes itself as plain USB mass storage, no
+iTunes/libimobiledevice involved), generalizing to a similar generic-SD-card
+target (e.g. for a car head unit), which additionally may require transcoding
+since car head units commonly lack FLAC support.
+
+### 7.1 Library Roots and the Library-Root-Root
+
+The audio library is not a single tree: `main`, `christmas`, and (eventually)
+further roots such as `classical` are separate, fixed sibling directories under
+one common parent, and will remain so indefinitely. The `videos` root (§6) is a
+sibling too, but is excluded from all sync operations (see §7.11).
+
+Every relative path used for sync purposes (playlist entries, §7.4) is expressed
+relative to this common parent — the "library-root-root" — which means the first
+path component of any such relative path is always the library root's name, and
+no separate field is needed to record which root an entry belongs to.
+
+On-device, each library root is mirrored as its own top-level directory (e.g.
+`/main/...`, `/christmas/...`). This avoids artist/album name collisions between
+roots on the device and keeps every path in this design root-qualified and
+unambiguous.
+
+### 7.2 Targets
+
+A "target" is a sync destination with its own constraints: which source audio
+formats it can play back as-is, how (and whether) it needs unsupported formats
+transcoded, and how it wants artwork delivered. Targets are a small, hardcoded
+set in code — the same philosophy as the manual sanitization overrides and
+`bucketOverrides` (§3.2, §3.1) — not a user-facing config file.
+
+| Property               | Description                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| Accepted audio formats | Source formats copied through unchanged (passthrough).                                               |
+| Transcode codec/params | Fixed encoder settings used for any source format outside the accepted set.                          |
+| Artwork max dimension  | Controlling constraint for resized artwork (see §7.8); no separate file-size cap.                    |
+| Artwork delivery       | External file only, or embedded in the audio file (embedding not used by any target yet — see §7.8). |
+
+Initial targets:
+
+- **`ipod`:** passthrough for whatever formats Rockbox supports directly
+  (FLAC/MP3/M4A); external artwork only, resized to a fixed max dimension.
+- **`sdcard`:** MP3 only — anything else is transcoded to MP3 (libmp3lame, VBR
+  quality V0, via `ffmpeg`); external artwork, same resize treatment as `ipod`.
+
+A target's accepted-format set only determines _whether_ a given track needs
+transcoding, not that the whole target always transcodes — a sync run against
+`sdcard` will copy an already-MP3 source track through untouched and transcode a
+FLAC track in the same run.
+
+### 7.3 Selection: Album-Local Manifests
+
+Each album directory may contain a `{target}.m3u8` file per relevant target
+(e.g. `ipod.m3u8`, `sdcard.m3u8`), living alongside `sums.md5` and the primary
+artwork. It lists the filenames, from that album, selected for that target.
+Despite the `.m3u8` extension, entry order carries no meaning here — this reuses
+the playlist file format without its ordering semantics (contrast with §7.4).
+These files are a source-side selection input only and are never copied to the
+device.
+
+### 7.4 Playlists
+
+A top-level `playlists/` directory sits as a sibling of the library roots (not
+hidden — this simply means no library root may be named `playlists`). Structure:
+`playlists/{target}/*.m3u8` for target-specific playlists, plus
+`playlists/*.m3u8` directly for playlists that apply to every target.
+
+Entries are paths relative to the library-root-root (§7.1), e.g.
+`main/a/artist/2020 album/01 track.flac`. Because the device mirrors the same
+roots-as-siblings layout, this same relative path resolves unchanged on both
+source and device — rewriting a playlist for the device is effectively an
+identity operation on the path strings, just against a different base.
+
+Unlike album-local manifests, order here is meaningful (played back as listed).
+Playlists are copied onto devices that actually consume them for playback (e.g.
+`ipod`/Rockbox).
+
+**Membership implies selection:** a track referenced by any playlist relevant to
+a target is automatically included in that target's desired sync set, even if
+that track's album `{target}.m3u8` doesn't list it. This avoids ever shipping a
+playlist with dangling entries.
+
+### 7.5 Device-Side Layout
+
+- Each library root becomes its own top-level directory on-device (§7.1),
+  internally mirroring the source directory hierarchy (§3.1). Sanitized
+  filenames are already FAT32-safe, since only lowercase `a`-`z`, `0`-`9`, and
+  space survive the sanitization pipeline (§3.2).
+- Rockbox builds its own tag database (tagcache) by reading embedded tags
+  directly; the mirrored directory tree exists for path stability, not because
+  Rockbox requires filesystem browsing. Users are expected to enable Rockbox's
+  tagcache "autoupdate" setting so the on-device database stays current after a
+  sync — this tool does not manage the tagcache itself.
+- Copied playlists (§7.4) live at a matching `playlists/` location on-device.
+
+### 7.6 Integrity, Drift Detection, and the "No Database" Approach
+
+On-device `sums.md5` per album always hashes the actual bytes present on the
+device — never a passthrough copy of the source's `sums.md5` — so `md5sum -c`
+remains valid against a device copy at any time, matching the existing
+`sums.md5` guarantee (§3.4).
+
+- **Passthrough files:** device bytes are byte-identical to source, so the
+  on-device `sums.md5` entry equals the source `sums.md5` entry for that file.
+  Drift detection is a plain string comparison between the two — no re-hashing
+  on either side, avoiding slow reads and unnecessary flash wear on the device
+  and unnecessary work on the source.
+- **Derived files** (transcoded audio, resized artwork, or any future case where
+  on-device bytes are not identical to source bytes): the passthrough comparison
+  can never match by construction. These get a small additional per-album
+  sidecar on-device, `{target}.src.md5`, recording — per derived file — the hash
+  of the _source_ file that produced it (not the derived bytes). Drift is then:
+  compare the sidecar's recorded source-hash against the current source
+  `sums.md5` entry for that file; a mismatch means the source changed since the
+  last sync and the derived file needs to be regenerated.
+
+No general-purpose sync-state database (SQLite or otherwise) is used. All state
+needed to plan a sync is derived by walking the device tree and reading the
+per-album `sums.md5` (and `{target}.src.md5` where present) already sitting on
+it — keeping the device fully self-describing and portable, usable from any
+machine rather than tied to one host's local state. This is expected to remain
+fast even at a library of tens of thousands of files; revisit only if it becomes
+a measured bottleneck.
+
+### 7.7 Sync Reconciliation Algorithm
+
+1. **Desired-state computation:** union, across every library root except
+   `videos`, of every album's `{target}.m3u8` entries plus every entry from a
+   target-relevant playlist (§7.4.1) — producing a flat list of
+   `(root, relative path)`. Implemented as a distinct planner (mirroring the
+   existing `planner`/`executor` split, e.g. `internal/sync`) so a plan can be
+   produced and dry-run-inspected before anything touches the device.
+2. **Current-state discovery:** walk the device tree for the target; for each
+   album directory found, read its `sums.md5` (and `{target}.src.md5`, if
+   present) into a map of on-device relative path -> recorded hash(es). No
+   hashing is performed during this walk.
+3. **Three-way diff**, per desired entry:
+   - Not present on device -> **add**.
+   - Present, passthrough file, device hash == source `sums.md5` hash -> skip.
+   - Present, derived file, sidecar source-hash == current source `sums.md5`
+     hash -> skip.
+   - Present but hash mismatch (either case) -> **regenerate and recopy**
+     (retranscode/rescale as needed).
+
+   Every on-device file _not_ in the desired set -> **delete**; directories left
+   empty by deletions are removed too, bubbling upward but never above the
+   root's top-level device directory — mirroring `rename`'s existing
+   empty-directory cleanup (§4.2).
+
+4. **Capacity check:** no `du` is needed anywhere. Free space on the device is
+   read via a single `Statfs` call (`golang.org/x/sys/unix.Statfs`, portable
+   across Linux and macOS's BSD-family syscall with a small per-OS build-tag
+   split if needed); the size of additions/regenerations is already known from
+   source-side `stat` calls made during planning, and space reclaimed by
+   deletions is already known from the device-tree walk in step 2 — so the plan
+   reports "requires X MB more, Y MB will be freed, Z MB available" without ever
+   touching `du`.
+5. **Output:** dry-run is always available first. Default output is a summary —
+   counts and total bytes for add / regenerate / delete-file / delete-dir, plus
+   the capacity delta from step 4. `--verbose` itemizes every add and regenerate
+   individually; deletions are only itemized under `--verbose` even then, since
+   deletion only affects the device copy — source data is never touched, so the
+   worst case of an unwanted deletion is a stale `{target}.m3u8`/playlist entry
+   to fix and a re-sync.
+
+### 7.8 Artwork Handling
+
+- Both current targets (`ipod`, `sdcard`) use external artwork only; embedding
+  is a per-target option (§7.2) reserved for a future device that needs it, not
+  used today.
+- On sync, external artwork is resized to the target's fixed max dimension via
+  `ffmpeg`, at a fixed JPEG quality. Dimension is the controlling constraint;
+  file size is whatever falls out of dimension + quality, not an independent
+  target.
+- Resized artwork is a derived file exactly like transcoded audio (§7.6): it
+  gets a `{target}.src.md5` sidecar entry keyed off the _source_ artwork file's
+  hash (already tracked in the album's real `sums.md5`), so a source artwork
+  change is detected and triggers a recopy of the resized artwork the same way a
+  source audio change triggers a recopy of that track.
+- If a target embeds artwork rather than shipping it externally (not currently
+  the case for `ipod`/`sdcard`), an artwork change additionally requires
+  re-embedding (re-tagging, not re-transcoding) every already-synced track in
+  that album for that target — cheaper than a full retranscode, but still a real
+  pass over every file, gated entirely on the target's embed-artwork setting.
+
+### 7.9 Transcoding
+
+- Implemented by shelling out to `ffmpeg`, mirroring the existing `yt-dlp`
+  shell-out pattern used for music video fetching (§6), rather than calling
+  dedicated encoder binaries (`lame`, `flac`) directly — one external dependency
+  instead of several, and already required for future video work (§6.5). Most
+  non-minimal distro `ffmpeg` builds link `libmp3lame`, so this doesn't give up
+  LAME's encoder, just calls it through `ffmpeg`'s CLI; worth confirming with
+  `ffmpeg -encoders | grep libmp3lame` on the target build before relying on it.
+- Encode parameters are hardcoded per target (same philosophy as manual
+  sanitization overrides, §3.2) — e.g. `sdcard` uses libmp3lame VBR quality V0.
+- A target only transcodes tracks whose source format falls outside its
+  accepted-formats set (§7.2); accepted-format tracks pass through untouched, so
+  a single sync run against a transcoding target can produce a mix of copied and
+  transcoded output.
+- The `ffmpeg`-invoking wrapper (progress callback, exit-status handling) is
+  expected to be shared between audio transcode and future artwork/video
+  `ffmpeg` calls, parameterized per call site, rather than maintained as
+  separate code paths.
+
+### 7.10 Interaction with `rename`
+
+- **Album-local manifests** (`{target}.m3u8`): `rename` already computes the
+  full old-filename -> new-filename mapping for every file in an album it
+  touches; updating any `{target}.m3u8` present in that same album directory is
+  a straightforward find-and-replace against that existing mapping, done as part
+  of the same rename operation.
+- **Global playlists** (`playlists/`): out of scope for `rename`, which has no
+  visibility outside the single album it is processing at a time. Instead,
+  `check` (§4.3) gains a new finding category — a playlist entry whose path no
+  longer resolves to a file on disk — surfaced for a manual fix pass, consistent
+  with `check`'s existing role as where library-wide drift gets flagged rather
+  than silently auto-corrected.
+
+### 7.11 Explicitly Out of Scope (For Now)
+
+- The `videos` library root (§6) is excluded from all sync operations; a
+  Rockbox-targeted video pipeline is tracked separately under §6.5 as a later
+  phase of this same work.
+- No dedicated sync-state database (SQLite or otherwise) — see §7.6.
+- The Navidrome/SMB use case is unaffected by any of the above and continues to
+  be handled entirely within Navidrome.
+
+## 8. Navidrome Playlist Sync (Design / Not Yet Implemented)
+
+This is distinct from §7: the Navidrome use case is SMB-mounted, so audio files
+are never copied by this tool — Navidrome reads the library live over its own
+(read-only, from Navidrome's side) mount. What needs syncing is playlist
+_membership_, bidirectionally — playlists authored locally in `playlists/`
+(§7.4) pushed to Navidrome, and playlists created or edited within Navidrome
+itself (e.g. from a phone) pulled back down. This section is not a `target` in
+the §7.2 sense and shares none of the audio-copy, transcode, or artwork-resize
+machinery from that section.
+
+### 8.1 Authentication
+
+Credentials (server URL and API token) cannot follow the "hardcode it in code"
+pattern used for §7.2 targets, since the repository is public. Instead, a
+dedicated `auth` command accepts and stores them in a local file under the XDG
+config directory, kept out of version control. Any Navidrome sync command errors
+out immediately if no credentials are stored, rather than the tool gaining a
+broader user-facing configuration system.
+
+### 8.2 Scan-Before-Sync
+
+Before any track resolution, sync triggers a manual library scan via
+`/rest/startScan` and polls `/rest/getScanStatus` until it reports complete.
+This guarantees Navidrome's view of the filesystem is current — recently added,
+renamed, or removed tracks resolve correctly — before any ID lookups run. This
+addresses scan staleness only; it is a separate concern from the
+playlist-membership handling in §8.5-8.6.
+
+### 8.3 Track Resolution
+
+Local tracks are identified by `(root, relative path)` (§7.1); Navidrome
+identifies tracks by an internal song ID, and Subsonic-API song objects carry a
+`path` field (relative to the configured music folder) alongside that ID.
+Resolution is a lookup in both directions:
+
+- **Push:** local relative path -> Navidrome song ID (search/browse by path).
+- **Pull:** Navidrome song ID -> local relative path (via the song's `path`
+  field).
+
+A track that fails to resolve in either direction (not yet scanned, filename
+drift, wrong library folder) is skipped with a warning rather than failing the
+whole sync — consistent with how per-file misses are handled elsewhere in this
+document (e.g. `rename`, `lyrics`).
+
+### 8.4 Local Playlist File Conventions
+
+Each locally-authored playlist file (§7.4) carries two extended-M3U comment
+lines at its top:
+
+- `#PLAYLIST:<name>` — the playlist's real display name, independent of its
+  (ASCII-sanitized, §3.2) filename. A standard extended-M3U directive, not a
+  `musicrename` invention.
+- `#NAVIDROME-ID:<id>` — the corresponding Navidrome playlist's internal ID,
+  once one exists; absent on a playlist that has never been pushed.
+
+Correlation between a local file and a remote playlist is by this ID, never by
+filename or display name — renaming a playlist locally does not orphan or
+duplicate its remote counterpart.
+
+### 8.5 Pull / Edit / Push as a Session, Not a Diff
+
+Sync is a deliberate two-step operation, run as one session: **pull** first,
+then — after any local edits — **push**. This is not a three-way diff against
+remembered prior state (contrast with the on-device sync in §7.6-7.7, where the
+device itself is self-describing): pull overwrites local playlist contents with
+whatever Navidrome currently holds; push overwrites the Navidrome side with
+whatever the local file now says. Because there is no diffing step, there is no
+ambiguity about which side a change originated from, and no persisted sync-state
+file is needed for the ordinary create/update case — consistent with §7.6's
+no-database principle.
+
+The tradeoff is explicit: this is a checkout/edit/check-in model, not a
+continuously-merged one. An edit made in the Navidrome app _during_ an open
+local pull-edit-push session is silently overwritten by that session's eventual
+push. Acceptable for a single-user personal tool; not a general-purpose
+multi-writer sync.
+
+### 8.6 Deletion Semantics
+
+Deletion is handled asymmetrically, and deliberately so — the two directions
+carry different amounts of information:
+
+- **Local file removed by hand (`rm`), not through `musicrename`:** the file and
+  its `#NAVIDROME-ID` are simply gone, so nothing distinguishes "this was
+  deliberately deleted" from "this was never pushed at all." The default is the
+  non-destructive read: the next **pull** treats the still-remote playlist as
+  newly discovered and recreates the local file (with its original ID comment
+  restored). An accidental `rm` self-heals rather than propagating; a genuine
+  deletion requires the explicit delete command (§8.7), never a bare `rm`.
+- **Playlist deleted directly on the Navidrome side** (mobile app, web UI): the
+  local file still has a concrete `#NAVIDROME-ID` to check. Pull looks that ID
+  up; a confirmed **404 / not-found** response is unambiguous — that playlist
+  existed and is now gone — so pull deletes the local file to match. This is
+  intentionally the more automatic of the two directions: a phone-side deletion
+  should "just work" without requiring a `musicrename`-enabled machine to also
+  go delete the file by hand.
+
+  This must trigger only on a confirmed not-found response, never on a generic
+  request failure (auth expired, network error, 5xx) — see §8.8. Dry-run always
+  surfaces a pending local deletion before it happens.
+
+### 8.7 Explicit Single-Playlist Operations
+
+A dedicated command allows pulling, pushing, or deleting one playlist by
+name/path directly, outside a full sync pass — primarily to correct an
+accidental deletion (re-push a playlist that pull just removed locally, or
+re-pull one mistakenly deleted remotely) without re-running the whole library
+sync. Explicit delete reads the `#NAVIDROME-ID` out of the local file before
+removing anything, deletes the remote playlist by that ID, then removes the
+local file — this is the only sanctioned way to perform a real, intended
+deletion.
+
+### 8.8 Server-Error Handling
+
+Any operation — bulk sync or the single-playlist commands in §8.7 — aborts
+immediately on a 5xx response from the server, especially for destructive
+actions (local or remote deletion). A server error must never be interpreted as
+a not-found/confirmed-absent result (§8.6); the two are handled completely
+differently, and conflating them risks real, unrecoverable local data loss —
+something nothing else in this document actually risks, since source library
+data is never at stake in the on-device sync design (§7). That makes this the
+one place strict error handling is non-negotiable rather than a nicety.
+
+### 8.9 Explicitly Out of Scope (For Now)
+
+- Continuous/live merging — see the session model in §8.5.
+- A general sync-state database for playlist correlation — the in-file
+  `#NAVIDROME-ID` comment (§8.4) is deliberately the only persisted correlation
+  mechanism.
+- Two local files sharing the same `#NAVIDROME-ID`, and a pulled playlist entry
+  that fails to resolve to a local track (§8.3), are surfaced as new `check`
+  (§4.3) finding categories rather than resolved automatically.
