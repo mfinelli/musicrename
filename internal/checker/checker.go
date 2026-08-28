@@ -37,7 +37,6 @@ package checker
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -583,28 +582,13 @@ func (r *PlaylistResult) HasWarnings() bool {
 // album directory) those follow CheckAlbum/CheckLibrary's per-album scope
 // model instead, via checkPlaylists.
 func CheckPlaylists(libraryRootRoot string) (*PlaylistResult, error) {
-	playlistsDir := filepath.Join(libraryRootRoot, "playlists")
 	result := &PlaylistResult{}
 
 	// id -> every playlist file path that declares it, for the duplicate
 	// #NAVIDROME-ID check below.
 	navidromeIDs := make(map[string][]string)
 
-	err := filepath.WalkDir(playlistsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) && path == playlistsDir {
-				// No playlists/ directory at all; nothing to check.
-				return nil
-			}
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if strings.ToLower(filepath.Ext(path)) != ".m3u8" {
-			return nil
-		}
-
+	err := playlist.WalkTree(libraryRootRoot, func(path string) error {
 		entries, err := playlist.ReadEntries(path)
 		if err != nil {
 			result.Warnings = append(result.Warnings, PlaylistWarning{
@@ -640,7 +624,7 @@ func CheckPlaylists(libraryRootRoot string) (*PlaylistResult, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("scanning playlists at %s: %w", playlistsDir, err)
+		return nil, err
 	}
 
 	for id, paths := range navidromeIDs {

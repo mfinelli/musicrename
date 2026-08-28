@@ -841,10 +841,10 @@ existing selection, sorted by `(DiscNumber, TrackNumber)` rather than
 filesystem/directory order (the two coincide after `rename`, but the sort is
 explicit rather than relying on that). Each row shows track number, disc number
 (only when the album has more than one disc), title, and — only when it differs
-from the album's resolved artist — that track's own artist. A track with no
-`TITLE` tag falls back to display by filename stem, since this command is
-expected to typically run _before_ the final `rename` pass, unlike most other
-commands in this document.
+from the album's resolved artist — that track's artist. A track with no `TITLE`
+tag falls back to display by filename stem, since this command is expected to
+typically run _before_ the final `rename` pass, unlike most other commands in
+this document.
 
 **Stale entries:** if the existing `{target}.m3u8` references a filename that no
 longer matches any track currently found in the album (renamed outside the tool,
@@ -1049,8 +1049,8 @@ CLI.
   only audio track filenames ever appear in a selection manifest.
 
   A track's rename rewriting a manifest's _content_ is a different case from the
-  track's own filename-only rename: the manifest file's bytes genuinely changed
-  (a line inside it was rewritten), so its own `sums.md5` entry, if it has one,
+  track's filename-only rename: the manifest file's bytes genuinely changed (a
+  line inside it was rewritten), so its own `sums.md5` entry, if it has one,
   needs a real rehash via `hasher.UpdateFile` — not a `RenameFile` filename swap
   — or `sums.md5` would record a stale hash for a file this same run just
   legitimately edited, producing a false corruption signal on the very next
@@ -1071,7 +1071,7 @@ CLI.
   for dangling entries, since — unlike album-local manifests — it has no
   per-album scope for `check`/`rename` to hook into.
 - **`video rename`** (§6): the same `sums.md5` filename-only update applies — a
-  video's own filename is title-derived and so can change independently of its
+  video's filename is title-derived and so can change independently of its
   directory move. This surfaced a related gap: `video rename`'s executor
   previously didn't move `sums.md5` along with the rest of a video directory's
   contents at all, orphaning it on any real move. Fixed as a prerequisite:
@@ -1244,16 +1244,16 @@ Built on
 [`github.com/supersonic-app/go-subsonic`](https://github.com/supersonic-app/go-subsonic)
 rather than a hand-rolled client for this and the playlist operations to follow
 (§8.3, §8.5-8.7) — an actively maintained library (used by the real Supersonic
-desktop client), GPL-3.0 (matching this project's own license), whose typed
-methods (`StartScan`, `GetScanStatus`, and later the playlist CRUD methods)
-avoid re-deriving several endpoints' exact JSON shapes from scratch, including
+desktop client), GPL-3.0 (matching this project's license), whose typed methods
+(`StartScan`, `GetScanStatus`, and later the playlist CRUD methods) avoid
+re-deriving several endpoints' exact JSON shapes from scratch, including
 handling the OpenSubsonic HTTP-POST-vs-GET extension automatically for longer
 requests. Its own `Authenticate` generates its salt with `math/rand` rather than
 `crypto/rand` — weaker than the `saltedToken`/`Ping` already built for `login`
 (§8.1) — and its `salt`/`token` fields are unexported, so there's no way to
 inject `saltedToken`'s output instead without forking the library. Accepted
 deliberately: the value is still unique per process run, never persisted, and
-travels over TLS: a minor, disclosed downside, not a serious one. `login`'s own
+travels over TLS: a minor, disclosed downside, not a serious one. `login`'s
 validation (§8.1) is unaffected — it doesn't use this library at all.
 
 `Scan`'s status is checked immediately after starting, before any waiting — the
@@ -1281,12 +1281,30 @@ identifies tracks by an internal song ID, and Subsonic-API song objects carry a
 `path` field (relative to the configured music folder) alongside that ID.
 Resolution is a lookup in both directions:
 
-- **Push:** local relative path -> Navidrome song ID (search/browse by path).
-- **Pull:** Navidrome song ID -> local relative path (via the song's `path`
-  field).
+- **Push (implemented):** local relative path -> Navidrome song ID. No direct
+  "get song by path" endpoint exists, so this enumerates the server's entire
+  song catalog once per push run — paginated `search3` calls with an _empty_
+  query string (`internal/navidromesync`, `buildSongIndex`) — into an in-memory
+  `path -> ID` map, rather than issuing one search per track. This isn't an
+  undocumented trick: Navidrome explicitly optimizes empty-query search3
+  pagination for exactly this case, describing it as the mechanism clients like
+  Symfonium already use to mirror a whole library. The index is built exactly
+  once per `push` invocation and reused across every entry in every playlist
+  being pushed in that run — a 1,000-track playlist costs a small, fixed number
+  of requests (page size 500) rather than 1,000 individual searches, and
+  `PushAll` pushing several playlists doesn't rebuild it per file.
+- **Pull (implemented):** turns out not to need a separate lookup at all — a
+  fetched playlist's `entry` list already carries each track's `path` directly
+  (`internal/navidromesync`, `applyRemotePlaylist`), so pull just checks that
+  path resolves to a real local file rather than searching for it. This relies
+  on an assumption this project can't verify or enforce: Navidrome's configured
+  music folder has to be the library-root-root itself (§7.1) — the same parent
+  directory `main`/`christmas`/etc. sit under — not, say, a separate music
+  folder per library root. If it's configured differently, every entry's `path`
+  would be relative to a different base and nothing would resolve. Worth
+  confirming on the Navidrome side before relying on this.
 
-A track that fails to resolve in either direction (not yet scanned, filename
-drift, wrong library folder) is skipped with a warning rather than failing the
+A track that fails to resolve is skipped with a warning rather than failing the
 whole sync — consistent with how per-file misses are handled elsewhere in this
 document (e.g. `rename`, `lyrics`).
 
@@ -1305,6 +1323,21 @@ its top:
   target." This is what lets one playlist file be scoped to more than one (but
   not all) targets without needing a second on-disk copy.
 
+**`#TARGETS:` is reconciled bidirectionally through Navidrome's `comment` field
+(implemented, `internal/navidromesync`, `comment.go`), not treated as local-only
+data.** Navidrome has no directive concept of its own, but does have a plain,
+human-editable comment field on every playlist — musicrename manages a
+recognizable _suffix_ of it, `[musicrename:targets=ipod,sdcard]`, rather than
+owning the whole field, so a real description can still live in the same
+comment. Push composes this suffix onto whatever human text is already there
+(fetched fresh each time, never assumed); pull parses it back out and uses it as
+the source of truth for local `#TARGETS:`, the same way name and entries are
+already treated — not preserved from the existing local file. Local `#TARGETS:`
+being removed reconciles onto the remote side correctly too: push simply stops
+appending a suffix, leaving the human text untouched, and a suffix removed from
+the remote side (by hand, in the Navidrome app, or by any other client)
+reconciles back to "no `#TARGETS:`" on the next pull.
+
 Correlation between a local file and a remote playlist is by the
 `#NAVIDROME-ID`, never by filename or display name — renaming a playlist locally
 does not orphan or duplicate its remote counterpart. Because there is exactly
@@ -1314,15 +1347,48 @@ an error unconditionally, not a heuristic.
 
 ### 8.5 Pull / Edit / Push as a Session, Not a Diff
 
-Sync is a deliberate two-step operation, run as one session: **pull** first,
-then — after any local edits — **push**. This is not a three-way diff against
-remembered prior state (contrast with the on-device sync in §7.6-7.7, where the
-device itself is self-describing): pull overwrites local playlist contents with
-whatever Navidrome currently holds; push overwrites the Navidrome side with
-whatever the local file now says. Because there is no diffing step, there is no
-ambiguity about which side a change originated from, and no persisted sync-state
-file is needed for the ordinary create/update case — consistent with §7.6's
-no-database principle.
+Sync is a deliberate two-step operation, run as one session: **pull** first
+(implemented, `internal/navidromesync`), then — after any local edits — **push**
+(also implemented). This is not a three-way diff against remembered prior state
+(contrast with the on-device sync in §7.6-7.7, where the device itself is
+self-describing): pull overwrites local playlist contents with whatever
+Navidrome currently holds; push overwrites the Navidrome side with whatever the
+local file now says. Because there is no diffing step, there is no ambiguity
+about which side a change originated from, and no persisted sync-state file is
+needed for the ordinary create/update case — consistent with §7.6's no-database
+principle.
+
+`PullAll` reconciles every playlist in one pass — for each remote playlist:
+overwrite an already-correlated local file's content (preserving its `#TARGETS:`
+directive, which Navidrome has no concept of and must never be silently stripped
+by a pull), or create one at `playlists/<sanitized-name>.m3u8` (flat, no
+`#TARGETS:`, per §9.1) if this is the first time it's been seen. `PullOne` does
+the same for a single already-correlated local file (§8.7), using a direct
+`getPlaylist` lookup instead of the bulk list. A per-playlist detail-fetch
+failure during a bulk pull is a warning, not a reason to abort the rest of the
+run; the initial `getPlaylists` list call failing outright, or an entry that
+can't be resolved locally (§8.3), are handled per that section's and §8.8's
+rules respectively.
+
+`PushAll`/`PushOne` mirror this for the opposite direction. A local file with no
+`#NAVIDROME-ID` is created remotely (name plus resolved tracks) via a
+create-then-populate sequence — `createPlaylist` with just a name, so the server
+hands back the new ID directly, then a separate call to add the resolved tracks
+— rather than trying to create-with-tracks in one shot, specifically so the new
+ID is available to write back into the local file without a second, ambiguous
+lookup-by-name. The `#TARGETS:`-as-comment-suffix (§8.4) is set via a follow-up
+`updatePlaylist` call too, since a `comment` param at creation time isn't
+reliably supported across Subsonic-compatible servers. An already-correlated
+file has its remote state fetched first (needed either way, to compare against
+local and decide whether anything needs to happen at all — comment included, so
+a `#TARGETS:`-only change still counts as a real difference, not silently
+ignored) and, if it differs, is brought in line in two steps: remove every
+existing track by index, then add the desired tracks back in order — since
+Subsonic's `updatePlaylist` has no single "replace all tracks" operation, and
+removals are index-based against whatever's already there while additions are
+simply appended, doing both in one call wouldn't reliably produce the exact
+local order. If remote name, comment, and entries already match local exactly,
+no request is made at all.
 
 The tradeoff is explicit: this is a checkout/edit/check-in model, not a
 continuously-merged one. An edit made in the Navidrome app _during_ an open
@@ -1353,6 +1419,19 @@ carry different amounts of information:
   This must trigger only on a confirmed not-found response, never on a generic
   request failure (wrong/stale credentials, network error, 5xx) — see §8.8.
   Dry-run always surfaces a pending local deletion before it happens.
+
+  Both halves are implemented (`internal/navidromesync`). `PullAll`'s "recreate
+  on rediscovery" behavior for the first case falls out of its general
+  reconciliation logic for free — an `rm`'d file is simply absent from the local
+  index, so a still-remote playlist looks exactly like one never pulled before
+  and gets a fresh local file (a new, sanitized-name file, since the original
+  filename itself isn't remembered — only the correlation by ID is restored, not
+  the exact prior name). `PullOne`'s confirmed-not-found detection for the
+  second case relies on parsing a Subsonic API error code out of the go-subsonic
+  library's error message (`internal/navidrome`, `ErrCode`/`ErrCodeNotFound`) —
+  the library discards the structured error object it parses internally and
+  returns only a formatted string, with no typed error otherwise available to
+  check.
 
 ### 8.7 Explicit Single-Playlist Operations
 
@@ -1396,8 +1475,8 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename playlist check [library-root-root]`            | **Implemented (§7.12).** Audits the `playlists/` tree for entries that don't resolve to a file, unrecognized `#TARGETS:` names, and duplicate `#NAVIDROME-ID` values across files. Read-only; exits non-zero on findings, matching `check`'s conventions. Album-local manifest findings live in `musicrename check` instead (§4.3, §7.12), not here.                                                 |
 | `musicrename sync ipod <device-path> [library-root-root]`   | Full reconciliation sync to an attached iPod (§7.7). `--dry-run`, `--verbose`.                                                                                                                                                                                                                                                                                                                       |
 | `musicrename sync sdcard <device-path> [library-root-root]` | Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                          |
-| `musicrename sync navidrome pull [playlist]`                | Pulls all playlists, or one by path if given (§8.5). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                         |
-| `musicrename sync navidrome push [playlist]`                | Mirror of `pull`. Same flags.                                                                                                                                                                                                                                                                                                                                                                        |
+| `musicrename sync navidrome pull [playlist]`                | **Implemented.** Pulls all playlists, or one by path if given (§8.5, §8.7). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                  |
+| `musicrename sync navidrome push [playlist]`                | **Implemented.** Mirror of `pull`: pushes all playlists, or one by path if given (§8.5, §8.7). Same flags. A file with no `#NAVIDROME-ID` yet gets one created and written back to the local file.                                                                                                                                                                                                   |
 | `musicrename sync navidrome delete <playlist>`              | Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete.                                                                          |
 
 ### 9.1 Shape Notes
