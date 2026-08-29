@@ -169,7 +169,15 @@ type sumEntry struct {
 // "<32-hex-hash><sep>" prefix) are skipped defensively rather than causing
 // the whole read to fail.
 func parseSumsFile(dir string) ([]sumEntry, bool, error) {
-	path := filepath.Join(dir, SumsFilename)
+	return parseNamedSumsFile(dir, SumsFilename)
+}
+
+// parseNamedSumsFile is [parseSumsFile] generalized to an arbitrary
+// filename within dir, sharing the same md5sum-compatible line format.
+// Used for reading {target}.src.md5 sidecars, which are structurally
+// identical to sums.md5 but live under a different name.
+func parseNamedSumsFile(dir, filename string) ([]sumEntry, bool, error) {
+	path := filepath.Join(dir, filename)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
@@ -253,6 +261,32 @@ func UpdateFile(dir, rel string) error {
 	}
 
 	return writeSumsEntries(dir, entries)
+}
+
+// ReadSums reads and parses a sums.md5-formatted file at dir/filename into
+// a map of recorded filename -> hash. Works for sums.md5 itself
+// (SumsFilename) and equally for a {target}.src.md5 sidecar, which shares
+// the exact same line format under a different name (callers needing the
+// latter should pass that filename directly rather than a new dedicated
+// function existing for it).
+//
+// existed is false, with a nil map and nil error, when the file doesn't
+// exist at all (this is not treated as an error, matching this package's
+// other read primitives).
+func ReadSums(dir, filename string) (sums map[string]string, existed bool, err error) {
+	entries, existed, err := parseNamedSumsFile(dir, filename)
+	if err != nil {
+		return nil, false, fmt.Errorf("reading %s: %w", filepath.Join(dir, filename), err)
+	}
+	if !existed {
+		return nil, false, nil
+	}
+
+	sums = make(map[string]string, len(entries))
+	for _, e := range entries {
+		sums[e.name] = e.hash
+	}
+	return sums, true, nil
 }
 
 // RenameFile updates dir/sums.md5 so the entry currently recorded under

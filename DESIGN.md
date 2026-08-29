@@ -970,6 +970,18 @@ machine rather than tied to one host's local state. This is expected to remain
 fast even at a library of tens of thousands of files; revisit only if it becomes
 a measured bottleneck.
 
+**This has a direct consequence worth being explicit about: if the _source_ side
+has no recorded hash to compare against** — the album's `sums.md5` was never
+generated (the documented workflow order is `rename → lyrics → check → sums`,
+but nothing enforces actually running `sums`), or exists but predates a newer
+file — **there is no fallback to consult.** No database means no "last known
+good" state to lean on when the primary source (source `sums.md5`) is simply
+absent. The only safe default is to treat that file as unverifiable and always
+resync it (§7.7 step 3) rather than ever assuming "probably unchanged" —
+silently skipping would mean a real source change could go undetected
+indefinitely, which is a far worse failure than an occasional unnecessary
+recopy.
+
 ### 7.7 Sync Reconciliation Algorithm
 
 1. **Desired-state computation (implemented):** union, across every library root
@@ -1004,10 +1016,27 @@ a measured bottleneck.
    else — not a distinct code path. An embedding target (`sdcard`) never gets an
    external artwork entry at all, per §7.2/§7.8.
 
-2. **Current-state discovery:** walk the device tree for the target; for each
-   album directory found, read its `sums.md5` (and `{target}.src.md5`, if
-   present) into a map of on-device relative path -> recorded hash(es). No
-   hashing is performed during this walk.
+2. **Current-state discovery (implemented):** walk the device tree for the
+   target (`internal/devicesync`, `CurrentState`); for each album directory
+   found (any directory containing a `sums.md5`), read it — and its
+   `{target}.src.md5`, if present — into a map keyed the same way as
+   `DesiredState`'s output (`DesiredEntry`, root plus relative path), so the two
+   are directly comparable in step 3. Each entry records the on-device
+   `sums.md5` hash (`DeviceEntry.Hash`, always present) and, only for a derived
+   file, the sidecar's recorded source hash
+   (`DeviceEntry.SrcHash`/`HasSrcHash`). No hashing is performed during this
+   walk — only `sums.md5`/`{target}.src.md5` are read, never the audio or
+   artwork files themselves. A device that hasn't been synced to before (the
+   mount path doesn't exist yet) isn't an error, just an empty result; a single
+   album's checksum files failing to read is a warning, not a reason to abort
+   discovery of the rest of the device — removable flash storage is exactly the
+   kind of thing that can have one corrupted file without the rest being
+   unusable. This needed two small additions to support it:
+   `internal/hasher.ReadSums(dir, filename)`, the first exported _read_
+   primitive for a checksum file (everything before this was targeted mutation —
+   `UpdateFile`/`RemoveFile`/`RenameFile`), generalized to work for
+   `{target}.src.md5` too since it shares the exact same format; and
+   `internal/target.SrcSumsFilename(name)` for the sidecar's filename.
 3. **Three-way diff**, per desired entry:
    - Not present on device -> **add**.
    - Present, passthrough file, device hash == source `sums.md5` hash -> skip.
@@ -1015,6 +1044,24 @@ a measured bottleneck.
      hash -> skip.
    - Present but hash mismatch (either case) -> **regenerate and recopy**
      (retranscode/rescale as needed).
+   - **Present, but no source hash is available to compare against at all**
+     (source `sums.md5` doesn't exist for that album, or exists but has no entry
+     for that specific file — e.g. added since the last real `sums` run) ->
+     treated exactly like a hash mismatch, **regenerate and recopy**, never
+     skip. There is no third option: without a recorded source hash there is
+     nothing to compare against, and no persisted history to fall back on either
+     (§7.6's whole design deliberately has none) — "assume unchanged" would mean
+     a real source change could go undetected forever, so "unverifiable" has to
+     fail toward "recopy," not "skip." This is reported as its own distinct
+     warning (not folded into an ordinary "content changed" notice, since it's
+     actionable in a way a real change isn't): something like "no sums.md5
+     recorded for `<file>`; run `musicrename sums`." It fires on every sync this
+     stays true, not just once, since the underlying gap is still real every
+     time. The cost is asymmetric depending on what the file needs: for a
+     passthrough file this is an extra copy (I/O only); for anything that needs
+     transcoding, it means a full re-transcode every single sync run until
+     `sums.md5` exists — the warning should say so, since it's a meaningfully
+     stronger reason to actually run `sums` than the passthrough case gives.
 
    Every on-device file _not_ in the desired set -> **delete**; directories left
    empty by deletions are removed too, bubbling upward but never above the

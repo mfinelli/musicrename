@@ -42,3 +42,8 @@ func TestValid(t *testing.T) {
 		assert.False(t, Valid(""))
 	})
 }
+
+func TestSrcSumsFilename(t *testing.T) {
+	assert.Equal(t, "ipod.src.md5", SrcSumsFilename("ipod"))
+	assert.Equal(t, "sdcard.src.md5", SrcSumsFilename("sdcard"))
+}

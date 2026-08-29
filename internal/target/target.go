@@ -33,3 +33,12 @@ func Valid(name string) bool {
 	}
 	return false
 }
+
+// SrcSumsFilename returns the on-device {target}.src.md5 sidecar filename
+// for the given target: the source-hash record for a derived file (transcoded
+// audio, resized artwork), sharing the same md5sum-compatible line format as
+// sums.md5 itself (internal/hasher.ReadSums) but keyed by which source
+// produced each on-device file, not the on-device file's own content.
+func SrcSumsFilename(name string) string {
+	return name + ".src.md5"
+}

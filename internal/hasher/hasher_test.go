@@ -373,6 +373,57 @@ func TestUpdateFile(t *testing.T) {
 	})
 }
 
+func TestReadSums(t *testing.T) {
+	t.Run("returns existed=false when the file does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		sums, existed, err := ReadSums(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.False(t, existed)
+		assert.Nil(t, sums)
+	})
+
+	t.Run("reads sums.md5 into a filename -> hash map", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "a")
+		makeFile(t, filepath.Join(dir, "02 track.flac"), "b")
+		require.NoError(t, Hash(dir, nil))
+
+		sums, existed, err := ReadSums(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.True(t, existed)
+		assert.Equal(t, md5hex("a"), sums["01 track.flac"])
+		assert.Equal(t, md5hex("b"), sums["02 track.flac"])
+		assert.Len(t, sums, 2)
+	})
+
+	t.Run("also reads an arbitrarily-named file sharing the same format (e.g. a {target}.src.md5 sidecar)", func(t *testing.T) {
+		dir := t.TempDir()
+		content := md5hex("original") + " *01 track.flac\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "ipod.src.md5"), []byte(content), 0644))
+
+		sums, existed, err := ReadSums(dir, "ipod.src.md5")
+		require.NoError(t, err)
+		assert.True(t, existed)
+		assert.Equal(t, md5hex("original"), sums["01 track.flac"])
+	})
+
+	t.Run("does not affect the real sums.md5 when reading a different filename", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "a")
+		require.NoError(t, Hash(dir, nil))
+
+		_, existed, err := ReadSums(dir, "nonexistent.src.md5")
+		require.NoError(t, err)
+		assert.False(t, existed)
+
+		// The real sums.md5 must still be intact and readable.
+		sums, realExisted, err := ReadSums(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.True(t, realExisted)
+		assert.Contains(t, sums, "01 track.flac")
+	})
+}
+
 func TestRenameFile(t *testing.T) {
 	t.Run("no-op when sums.md5 does not exist", func(t *testing.T) {
 		dir := t.TempDir()
