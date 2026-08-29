@@ -795,6 +795,11 @@ On-device, each library root is mirrored as its own top-level directory (e.g.
 roots on the device and keeps every path in this design root-qualified and
 unambiguous.
 
+Enumerating "every library root" for sync purposes (§7.7 step 1) is implemented
+as `internal/devicesync`, `LibraryRoots`: every direct subdirectory of the
+library-root-root except the reserved `playlists` (§7.4) and `videos` (§6)
+names, auto-discovered rather than configured.
+
 ### 7.2 Targets (Implemented)
 
 A "target" is a sync destination with its own constraints: which source audio
@@ -967,13 +972,38 @@ a measured bottleneck.
 
 ### 7.7 Sync Reconciliation Algorithm
 
-1. **Desired-state computation:** union, across every library root except
-   `videos`, of every album's `{target}.m3u8` entries plus every entry from a
-   playlist whose `#TARGETS:` directive includes that target, or has no
+1. **Desired-state computation (implemented):** union, across every library root
+   except `videos`, of every album's `{target}.m3u8` entries plus every entry
+   from a playlist whose `#TARGETS:` directive includes that target, or has no
    `#TARGETS:` directive at all (§7.4) — producing a flat list of
-   `(root, relative path)`. Implemented as a distinct planner (mirroring the
-   existing `planner`/`executor` split, e.g. `internal/sync`) so a plan can be
-   produced and dry-run-inspected before anything touches the device.
+   `(root, relative path)`. Lives in `internal/devicesync` (`DesiredState`),
+   alongside `PrepareTrack` (§7.9), rather than a separate `internal/sync`
+   package as originally sketched — this is the same package that will house the
+   rest of this algorithm as it's built out, not a distinct planner.
+   `LibraryRoots` enumerates the "every library root" part: every direct
+   subdirectory of the library-root-root except the reserved `playlists` (§7.4)
+   and `videos` (§6) names — auto-discovered, not configured, matching how those
+   two names are already reserved everywhere else in this project rather than
+   adding a third way to declare "here are my library roots." An entry that
+   doesn't resolve to an actual file (a stale manifest entry, an unresolvable
+   playlist entry) is skipped with a warning rather than included or failing the
+   whole computation, consistent with per-file misses elsewhere in this project
+   (§7.3, §7.12, §8.3); the same file reachable via both an album manifest and a
+   global playlist appears exactly once.
+
+   For a target that doesn't embed artwork (§7.2 — currently `ipod`), the
+   primary artwork file (§3.1's `CatPrimaryArt`: `folder.jpg`/`folder.jpeg`/
+   `folder.png`, never the animated forms) for any album with at least one
+   selected track is added to the desired set too — otherwise an external-art
+   target would never actually receive a folder image at all. This is also what
+   makes cleanup correct with no special-casing needed: an album with zero
+   selected tracks contributes no artwork entry either, so if every track from a
+   previously-synced album is later deselected, its on-device artwork simply
+   stops appearing in the desired set on the next sync and gets removed by step
+   3's ordinary "not in the desired set -> delete" rule along with everything
+   else — not a distinct code path. An embedding target (`sdcard`) never gets an
+   external artwork entry at all, per §7.2/§7.8.
+
 2. **Current-state discovery:** walk the device tree for the target; for each
    album directory found, read its `sums.md5` (and `{target}.src.md5`, if
    present) into a map of on-device relative path -> recorded hash(es). No
@@ -998,7 +1028,9 @@ a measured bottleneck.
    source-side `stat` calls made during planning, and space reclaimed by
    deletions is already known from the device-tree walk in step 2 — so the plan
    reports "requires X MB more, Y MB will be freed, Z MB available" without ever
-   touching `du`.
+   touching `du`. This step depends on step 3's diff to know how much needs
+   adding — it isn't independently useful on its own the way `Statfs`'s raw
+   free-space read is.
 5. **Output:** dry-run is always available first. Default output is a summary —
    counts and total bytes for add / regenerate / delete-file / delete-dir, plus
    the capacity delta from step 4. `--verbose` itemizes every add and regenerate
