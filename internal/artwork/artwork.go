@@ -37,22 +37,28 @@ import (
 // falls out of dimension and this quality setting, not an independent target.
 const jpegQuality = 85
 
-// Resize decodes the image in src JPEG or PNG (whichever primary
-// artwork format is actually present), scales it down to fit within
+// Resize decodes the image in src JPEG or PNG (whichever primary artwork
+// format is actually present), scales it down to fit within
 // maxDimension x maxDimension pixels while preserving aspect ratio, and
 // re-encodes it as JPEG at a fixed quality.
 //
 // An image already within maxDimension in both dimensions is never
-// upscaled (its existing dimensions are kept) but is still re-encoded as
-// JPEG at the fixed quality, rather than returning the original bytes
-// unchanged, so output is deterministic regardless of the source's format
-// or however it happened to already be encoded.
+// upscaled (its existing dimensions are kept). If it's also already a
+// JPEG, the original bytes are returned completely unchanged rather than
+// decoding and re-encoding. PNG source is still converted even when
+// already within bounds, since that's a genuine one-time format
+// conversion this project's artwork handling requires (Rockbox/embedding
+// support), not a resize with no reason to touch the bytes so the same
+// logic doesn't apply to it. However an unusually large (in bytes, not
+// dimensions) already-small JPEG is copied at its full size rather than
+// getting a smaller file out of the quality-85 re-encode it would otherwise
+// have gotten.
 func Resize(src []byte, maxDimension int) ([]byte, error) {
 	if maxDimension <= 0 {
 		return nil, fmt.Errorf("maxDimension must be positive, got %d", maxDimension)
 	}
 
-	img, _, err := image.Decode(bytes.NewReader(src))
+	img, format, err := image.Decode(bytes.NewReader(src))
 	if err != nil {
 		return nil, fmt.Errorf("decoding image: %w", err)
 	}
@@ -60,6 +66,12 @@ func Resize(src []byte, maxDimension int) ([]byte, error) {
 	bounds := img.Bounds()
 	srcW, srcH := bounds.Dx(), bounds.Dy()
 	dstW, dstH := fitDimensions(srcW, srcH, maxDimension)
+
+	if format == "jpeg" && dstW == srcW && dstH == srcH {
+		out := make([]byte, len(src))
+		copy(out, src)
+		return out, nil
+	}
 
 	// A JPEG-encoded destination has no alpha channel; flatten onto white
 	// first so a source PNG with transparency doesn't end up with

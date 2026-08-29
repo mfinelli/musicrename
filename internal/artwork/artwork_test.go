@@ -119,7 +119,7 @@ func TestResize(t *testing.T) {
 		assert.Equal(t, 400, h)
 	})
 
-	t.Run("an image already within bounds is not upscaled but is still re-encoded as jpeg", func(t *testing.T) {
+	t.Run("a png already within bounds is not upscaled but is still converted to jpeg", func(t *testing.T) {
 		src := makeTestImage(t, 100, 100, "png")
 		out, err := Resize(src, 400)
 		require.NoError(t, err)
@@ -127,6 +127,25 @@ func TestResize(t *testing.T) {
 		w, h := decodeDimensions(t, out)
 		assert.Equal(t, 100, w)
 		assert.Equal(t, 100, h)
+	})
+
+	t.Run("a jpeg already within bounds is returned completely unchanged, not re-encoded", func(t *testing.T) {
+		src := makeTestImage(t, 100, 100, "jpeg")
+		out, err := Resize(src, 400)
+		require.NoError(t, err)
+
+		assert.Equal(t, src, out, "an already-fitting JPEG source must never be lossily re-encoded")
+	})
+
+	t.Run("a jpeg exceeding bounds is still resized and re-encoded, not passed through", func(t *testing.T) {
+		src := makeTestImage(t, 1000, 500, "jpeg")
+		out, err := Resize(src, 400)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, src, out, "a genuine resize must still touch the bytes")
+		w, h := decodeDimensions(t, out)
+		assert.Equal(t, 400, w)
+		assert.Equal(t, 200, h)
 	})
 
 	t.Run("errors on invalid image data", func(t *testing.T) {

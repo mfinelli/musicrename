@@ -1037,23 +1037,27 @@ recopy.
    `UpdateFile`/`RemoveFile`/`RenameFile`), generalized to work for
    `{target}.src.md5` too since it shares the exact same format; and
    `internal/target.SrcSumsFilename(name)` for the sidecar's filename.
-3. **Three-way diff**, per desired entry:
+3. **Three-way diff (implemented)**, per desired entry (`internal/devicesync`,
+   `Diff`, taking `DesiredState`'s and `CurrentState`'s already-computed output
+   rather than recomputing either itself, plus `libraryRootRoot` directly — it
+   needs to read each entry's own source-side `sums.md5`, which is new I/O
+   neither prior step does):
    - Not present on device -> **add**.
-   - Present, passthrough file, device hash == source `sums.md5` hash -> skip.
-   - Present, derived file, sidecar source-hash == current source `sums.md5`
-     hash -> skip.
-   - Present but hash mismatch (either case) -> **regenerate and recopy**
+   - Present, and _either_ the device's `sums.md5` hash equals the source's
+     current `sums.md5` hash directly, _or_ the device's `{target}.src.md5`
+     sidecar's recorded source hash equals it -> skip.
+   - Present but neither of those matches -> **regenerate and recopy**
      (retranscode/rescale as needed).
    - **Present, but no source hash is available to compare against at all**
      (source `sums.md5` doesn't exist for that album, or exists but has no entry
      for that specific file — e.g. added since the last real `sums` run) ->
-     treated exactly like a hash mismatch, **regenerate and recopy**, never
-     skip. There is no third option: without a recorded source hash there is
-     nothing to compare against, and no persisted history to fall back on either
-     (§7.6's whole design deliberately has none) — "assume unchanged" would mean
-     a real source change could go undetected forever, so "unverifiable" has to
-     fail toward "recopy," not "skip." This is reported as its own distinct
-     warning (not folded into an ordinary "content changed" notice, since it's
+     treated exactly like a mismatch, **regenerate and recopy**, never skip.
+     There is no third option: without a recorded source hash there is nothing
+     to compare against, and no persisted history to fall back on either (§7.6's
+     whole design deliberately has none) — "assume unchanged" would mean a real
+     source change could go undetected forever, so "unverifiable" has to fail
+     toward "recopy," not "skip." This is reported as its own distinct warning
+     (not folded into an ordinary "content changed" notice, since it's
      actionable in a way a real change isn't): something like "no sums.md5
      recorded for `<file>`; run `musicrename sums`." It fires on every sync this
      stays true, not just once, since the underlying gap is still real every
@@ -1061,7 +1065,30 @@ recopy.
      passthrough file this is an extra copy (I/O only); for anything that needs
      transcoding, it means a full re-transcode every single sync run until
      `sums.md5` exists — the warning should say so, since it's a meaningfully
-     stronger reason to actually run `sums` than the passthrough case gives.
+     stronger reason to actually run `sums` than the passthrough case gives. A
+     missing _device_-side sidecar entry for a file that genuinely needs one (as
+     opposed to a missing _source_-side hash) falls into the same regenerate
+     bucket but gets no special warning — that's just normal
+     first-sync-of-this-target behavior, not an indication anything's wrong.
+
+   **Deciding "unchanged" is deliberately not based on first classifying an
+   entry as passthrough or derived from a static rule** (an accepted audio
+   format vs. everything else — an earlier version of this section, and the
+   first version of `Diff`, worked exactly this way). That static rule breaks
+   down specifically for artwork: once `Resize` can produce byte-identical
+   output for an already-small JPEG (§7.8), a "passthrough-ish" artwork entry
+   has no sidecar at all — nothing was derived about it — so a static rule that
+   forces artwork through a sidecar-only comparison would regenerate it on
+   _every_ sync even when nothing changed. Trying both checks and accepting
+   either one sidesteps needing to predict in advance which applies: a genuinely
+   transformed file's on-device hash can never coincidentally equal the source's
+   raw hash (a resize changes dimensions, a transcode changes format entirely),
+   so there's no risk of the direct check masking a real change for that kind of
+   file — it can only ever help the case a static rule would otherwise miss.
+
+   Each album's source `sums.md5` is read at most once per `Diff` call
+   regardless of how many of its files are desired, cached internally by album
+   directory.
 
    Every on-device file _not_ in the desired set -> **delete**; directories left
    empty by deletions are removed too, bubbling upward but never above the
@@ -1105,11 +1132,19 @@ recopy.
   constraint; file size is whatever falls out of dimension + quality, not an
   independent target. An image already within bounds in both dimensions is never
   upscaled.
-- Resized artwork is a derived file exactly like transcoded audio (§7.6): it
-  gets a `{target}.src.md5` sidecar entry keyed off the _source_ artwork file's
-  hash (already tracked in the album's real `sums.md5`), so a source artwork
-  change is detected and triggers a recopy of the resized artwork the same way a
-  source audio change triggers a recopy of that track.
+- Artwork that's actually resized (not the byte-identical-passthrough case just
+  above) is a derived file exactly like transcoded audio (§7.6): it gets a
+  `{target}.src.md5` sidecar entry keyed off the _source_ artwork file's hash
+  (already tracked in the album's real `sums.md5`), so a source artwork change
+  is detected and triggers a recopy of the resized artwork the same way a source
+  audio change triggers a recopy of that track. An artwork write that happens to
+  produce byte-identical output gets no sidecar entry at all — the same way an
+  ordinary audio passthrough never gets one — since §7.7 step 3's diff can
+  already confirm "unchanged" with a direct hash comparison in that case;
+  writing a sidecar anyway would just be redundant bookkeeping for a file that
+  isn't actually derived at all in the sense that matters (§7.6: "derived" means
+  on-device bytes aren't identical to source — a definition that's about actual
+  outcome, not file type).
 - For `sdcard`'s embedded artwork, an artwork change additionally requires
   re-embedding (re-tagging, not re-transcoding) every already-synced track in
   that album for that target — cheaper than a full retranscode, but still a real
