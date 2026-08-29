@@ -9,7 +9,8 @@ ifeq ($(shell uname), Darwin)
 endif
 
 SOURCES := $(wildcard *.go cmd/*.go internal/artwork/*.go \
-	   internal/checker/*.go internal/executor/*.go internal/hasher/*.go \
+	   internal/checker/*.go internal/devicesync/*.go \
+	   internal/executor/*.go internal/hasher/*.go \
 	   internal/lyrics/*.go internal/metadata/*.go \
 	   internal/navidrome/*.go internal/navidromesync/*.go \
 	   internal/planner/*.go internal/playlist/*.go \

@@ -1080,9 +1080,25 @@ a measured bottleneck.
   format-conversion heuristics happen to overlap with this project's own tag
   vocabulary — and avoids `ffmpeg` carrying over a stale, unresized embedded
   picture that a later artwork step would then need to detect and overwrite.
-  Reading the source tags before transcoding and writing them (plus resized
-  artwork) onto the output afterward is a later piece, not yet built — this
-  section covers the transcode call itself only.
+  This is tied together in `internal/devicesync`, `PrepareTrack` — the per-track
+  building block the not-yet-built reconciliation algorithm (§7.7) will call
+  once per file it decides needs syncing.
+- **Tags are migrated only on the transcode path, never for a passthrough
+  copy.** A passthrough file is meant to stay byte-for-byte identical to its
+  source (§7.6 — that identity is what lets on-device drift detection skip
+  rehashing entirely and just compare recorded hashes as strings). Rewriting
+  tags on it — even with already-correct values — means `taglib` re-serializing
+  the tag block, which is under no obligation to reproduce the source's exact
+  original bytes (frame ordering, padding, etc. can differ even with identical
+  values); doing that on a passthrough copy would silently break the
+  byte-identity guarantee for every passthrough track. A transcode needs tags
+  written regardless, since it strips them outright and the destination is
+  already a different file by construction — there's no byte-identity property
+  to protect there. Artwork embedding is not the same concern and applies on
+  both paths when the target embeds: for any `EmbedArt` target (`sdcard`),
+  on-device bytes were never meant to be identical to source in the first place,
+  and §7.6's derived-file handling (a `{target}.src.md5` sidecar) already
+  accounts for that.
 - Artwork resizing turned out not to need `ffmpeg` at all: Go's standard library
   (`image/jpeg`, `image/png`) plus `golang.org/x/image/draw` for the resize
   itself cover it, and `go.senan.xyz/taglib`'s `WriteImage` handles embedding
