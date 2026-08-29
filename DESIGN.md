@@ -1443,16 +1443,20 @@ carry different amounts of information:
   returns only a formatted string, with no typed error otherwise available to
   check.
 
-### 8.7 Explicit Single-Playlist Operations
+### 8.7 Explicit Single-Playlist Operations (Delete Implemented)
 
 A dedicated command allows pulling, pushing, or deleting one playlist by
 name/path directly, outside a full sync pass — primarily to correct an
 accidental deletion (re-push a playlist that pull just removed locally, or
 re-pull one mistakenly deleted remotely) without re-running the whole library
-sync. Explicit delete reads the `#NAVIDROME-ID` out of the local file before
-removing anything, deletes the remote playlist by that ID, then removes the
-local file — this is the only sanctioned way to perform a real, intended
-deletion.
+sync. Explicit delete (`internal/navidromesync`, `DeleteOne`) reads the
+`#NAVIDROME-ID` out of the local file before removing anything, deletes the
+remote playlist by that ID, then removes the local file — this is the only
+sanctioned way to perform a real, intended deletion. If the remote delete fails
+because the playlist is already gone (a confirmed not-found response, same sense
+as §8.6), the local file is still removed — that end state is already
+half-achieved — but any other remote failure (§8.8) aborts without touching the
+local file at all.
 
 ### 8.8 Server-Error Handling
 
@@ -1487,7 +1491,7 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename sync sdcard <device-path> [library-root-root]` | Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                          |
 | `musicrename sync navidrome pull [playlist]`                | **Implemented.** Pulls all playlists, or one by path if given (§8.5, §8.7). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                  |
 | `musicrename sync navidrome push [playlist]`                | **Implemented.** Mirror of `pull`: pushes all playlists, or one by path if given (§8.5, §8.7). Same flags. A file with no `#NAVIDROME-ID` yet gets one created and written back to the local file.                                                                                                                                                                                                   |
-| `musicrename sync navidrome delete <playlist>`              | Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete.                                                                          |
+| `musicrename sync navidrome delete <playlist>`              | **Implemented.** Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete. No library scan is triggered (§8.2 doesn't apply here). |
 
 ### 9.1 Shape Notes
 

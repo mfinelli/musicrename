@@ -1,0 +1,118 @@
+/*
+ * Copyright © 2026 Mario Finelli
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+package navidromesync
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/playlist"
+)
+
+func TestDeleteOne(t *testing.T) {
+	t.Run("errors when the file does not exist", func(t *testing.T) {
+		root := t.TempDir()
+		err := DeleteOne(testClient("http://unused"), filepath.Join(root, "playlists", "missing.m3u8"))
+		assert.Error(t, err)
+	})
+
+	t.Run("errors when the file has no #NAVIDROME-ID, without contacting the server", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "local-only.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Local Only", Entries: []string{"track.flac"},
+		}))
+
+		// An unreachable URL: if DeleteOne tried to contact the server at
+		// all here, this would fail with a network error, not the
+		// no-#NAVIDROME-ID error being asserted below.
+		err := DeleteOne(testClient("http://127.0.0.1:1"), path)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "#NAVIDROME-ID")
+
+		assert.FileExists(t, path, "the file must be left alone")
+	})
+
+	t.Run("deletes remotely then locally on success", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+			Entries: []string{"track.flac"},
+		}))
+
+		var deleteCalled bool
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Contains(t, r.URL.Path, "deletePlaylist")
+			assert.Equal(t, "id-1", r.URL.Query().Get("id"))
+			deleteCalled = true
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		}))
+		defer srv.Close()
+
+		err := DeleteOne(testClient(srv.URL), path)
+		require.NoError(t, err)
+		assert.True(t, deleteCalled)
+
+		_, statErr := os.Stat(path)
+		assert.True(t, os.IsNotExist(statErr))
+	})
+
+	t.Run("still removes the local file when the remote playlist is already gone", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "gone.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Gone", NavidromeID: "id-gone", HasNavidromeID: true,
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, notFoundJSON())
+		}))
+		defer srv.Close()
+
+		err := DeleteOne(testClient(srv.URL), path)
+		require.NoError(t, err)
+
+		_, statErr := os.Stat(path)
+		assert.True(t, os.IsNotExist(statErr))
+	})
+
+	t.Run("a generic remote failure aborts without touching the local file", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, genericErrorJSON())
+		}))
+		defer srv.Close()
+
+		err := DeleteOne(testClient(srv.URL), path)
+		assert.Error(t, err)
+		assert.FileExists(t, path, "a generic failure must never delete the local file")
+	})
+}
