@@ -795,32 +795,54 @@ On-device, each library root is mirrored as its own top-level directory (e.g.
 roots on the device and keeps every path in this design root-qualified and
 unambiguous.
 
-### 7.2 Targets
+### 7.2 Targets (Implemented)
 
 A "target" is a sync destination with its own constraints: which source audio
 formats it can play back as-is, how (and whether) it needs unsupported formats
 transcoded, and how it wants artwork delivered. Targets are a small, hardcoded
-set in code — the same philosophy as the manual sanitization overrides and
-`bucketOverrides` (§3.2, §3.1) — not a user-facing config file.
+set in code (`internal/target`) — the same philosophy as the manual sanitization
+overrides and `bucketOverrides` (§3.2, §3.1) — not a user-facing config file.
 
-| Property               | Description                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| Accepted audio formats | Source formats copied through unchanged (passthrough).                                               |
-| Transcode codec/params | Fixed encoder settings used for any source format outside the accepted set.                          |
-| Artwork max dimension  | Controlling constraint for resized artwork (see §7.8); no separate file-size cap.                    |
-| Artwork delivery       | External file only, or embedded in the audio file (embedding not used by any target yet — see §7.8). |
+A target's transcode setting names a format (`AudioFormat`, e.g. `"mp3"`), not
+raw encoder flags — the actual ffmpeg codec and arguments for a format live in
+one shared `EncodeParams` lookup (`internal/target`, `EncodeParamsFor`),
+separate from any target `Definition`. This keeps a target's own definition
+readable ("transcode to mp3") without needing to repeat or remember specific
+encoder settings, and means tuning or adding a format only ever touches one
+place, not every target that happens to use it.
+
+| Property               | Description                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| Accepted audio formats | Source formats copied through unchanged (passthrough).                                            |
+| Transcode format       | `AudioFormat` anything outside the accepted set gets transcoded to; empty means never transcodes. |
+| Artwork max dimension  | Controlling constraint for resized artwork, in pixels (see §7.8); no separate file-size cap.      |
+| Artwork delivery       | External file only, or embedded in the audio file — see §7.8.                                     |
 
 Initial targets:
 
-- **`ipod`:** passthrough for whatever formats Rockbox supports directly
-  (FLAC/MP3/M4A); external artwork only, resized to a fixed max dimension.
-- **`sdcard`:** MP3 only — anything else is transcoded to MP3 (libmp3lame, VBR
-  quality V0, via `ffmpeg`); external artwork, same resize treatment as `ipod`.
+- **`ipod`:** passthrough for FLAC/MP3/M4A — not a narrowed subset, just every
+  format this tool manages at all, so `ipod` never actually transcodes anything.
+  External artwork only, resized to 400px (the iPod's screen is 320x240; a
+  little headroom over that, not full source resolution).
+- **`sdcard`:** MP3 only — anything else is transcoded to MP3 (`libmp3lame`, VBR
+  quality V0, via `ffmpeg`). Artwork is _embedded_ rather than external (500px)
+  — more portable for a target that's about swapping storage between devices (a
+  car head unit) than living permanently in one library layout. Since the
+  external file becomes redundant once art travels with the audio file itself,
+  sync does not copy `folder.jpg`/`folder.png` to `sdcard` at all — only `ipod`
+  ever gets an external artwork file on-device.
 
 A target's accepted-format set only determines _whether_ a given track needs
 transcoding, not that the whole target always transcodes — a sync run against
 `sdcard` will copy an already-MP3 source track through untouched and transcode a
 FLAC track in the same run.
+
+The actual embedding mechanism for `sdcard` (§7.8) — whether via the
+`go.senan.xyz/taglib` library already used elsewhere in this project for tag
+writes, or via an `ffmpeg` remux — is an open implementation question for when
+that piece is built; a passthrough-format track needs art embedded without
+needing any transcoding, so this can't simply piggyback on the transcode step
+for every track.
 
 ### 7.3 Selection: Album-Local Manifests
 
@@ -987,9 +1009,11 @@ a measured bottleneck.
 
 ### 7.8 Artwork Handling
 
-- Both current targets (`ipod`, `sdcard`) use external artwork only; embedding
-  is a per-target option (§7.2) reserved for a future device that needs it, not
-  used today.
+- `ipod` uses external artwork only (400px); `sdcard` embeds artwork instead
+  (500px) rather than shipping it externally — more portable for a target that's
+  about swapping storage between devices than living permanently in one library
+  layout — and does not get an external `folder.jpg`/`folder.png` copied to it
+  at all as a result (§7.2).
 - On sync, external artwork is resized to the target's fixed max dimension via
   `ffmpeg`, at a fixed JPEG quality. Dimension is the controlling constraint;
   file size is whatever falls out of dimension + quality, not an independent
@@ -999,11 +1023,16 @@ a measured bottleneck.
   hash (already tracked in the album's real `sums.md5`), so a source artwork
   change is detected and triggers a recopy of the resized artwork the same way a
   source audio change triggers a recopy of that track.
-- If a target embeds artwork rather than shipping it externally (not currently
-  the case for `ipod`/`sdcard`), an artwork change additionally requires
+- For `sdcard`'s embedded artwork, an artwork change additionally requires
   re-embedding (re-tagging, not re-transcoding) every already-synced track in
   that album for that target — cheaper than a full retranscode, but still a real
-  pass over every file, gated entirely on the target's embed-artwork setting.
+  pass over every file. This applies unconditionally for `sdcard` now, rather
+  than being a hypothetical gated on some future target's setting.
+- The embedding mechanism itself — `go.senan.xyz/taglib` (already a dependency,
+  already used elsewhere in this project for tag writes) versus an `ffmpeg`
+  remux — is not yet decided; a passthrough-format track (already MP3) needs art
+  embedded without needing any transcoding, so embedding can't simply ride along
+  with the transcode step for every track the way it might seem to at first.
 
 ### 7.9 Transcoding
 
@@ -1014,8 +1043,11 @@ a measured bottleneck.
   non-minimal distro `ffmpeg` builds link `libmp3lame`, so this doesn't give up
   LAME's encoder, just calls it through `ffmpeg`'s CLI; worth confirming with
   `ffmpeg -encoders | grep libmp3lame` on the target build before relying on it.
-- Encode parameters are hardcoded per target (same philosophy as manual
-  sanitization overrides, §3.2) — e.g. `sdcard` uses libmp3lame VBR quality V0.
+- Encode parameters are hardcoded, but keyed by format (`AudioFormat`,
+  `EncodeParams`, `internal/target`) rather than duplicated per target — a
+  target's `Definition` only names the format it wants (e.g. `sdcard` wants
+  `mp3`); the actual `libmp3lame`/VBR-quality-V0 settings live once, in the
+  format lookup, not repeated per target.
 - A target only transcodes tracks whose source format falls outside its
   accepted-formats set (§7.2); accepted-format tracks pass through untouched, so
   a single sync run against a transcoding target can produce a mix of copied and
