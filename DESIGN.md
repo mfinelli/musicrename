@@ -1007,17 +1007,25 @@ a measured bottleneck.
    worst case of an unwanted deletion is a stale `{target}.m3u8`/playlist entry
    to fix and a re-sync.
 
-### 7.8 Artwork Handling
+### 7.8 Artwork Handling (Resize Implemented)
 
 - `ipod` uses external artwork only (400px); `sdcard` embeds artwork instead
   (500px) rather than shipping it externally — more portable for a target that's
   about swapping storage between devices than living permanently in one library
   layout — and does not get an external `folder.jpg`/`folder.png` copied to it
   at all as a result (§7.2).
-- On sync, external artwork is resized to the target's fixed max dimension via
-  `ffmpeg`, at a fixed JPEG quality. Dimension is the controlling constraint;
-  file size is whatever falls out of dimension + quality, not an independent
-  target.
+- On sync, external artwork is resized to the target's fixed max dimension in
+  pure Go (`internal/artwork`, `Resize`/`ResizeFile`) — `image/jpeg`,
+  `image/png`, and `golang.org/x/image/draw` for the scale itself (`CatmullRom`,
+  a quality resampler) — rather than `ffmpeg`; see §7.9 for why `ffmpeg`'s role
+  in this project ended up scoped to audio transcoding only. Output is always
+  re-encoded as JPEG at a fixed quality (85), even when the source was already
+  smaller than the target dimension or already a JPEG — deterministic output
+  regardless of the source's format or prior encoding, rather than a conditional
+  "sometimes pass through unchanged" special case. Dimension is the controlling
+  constraint; file size is whatever falls out of dimension + quality, not an
+  independent target. An image already within bounds in both dimensions is never
+  upscaled.
 - Resized artwork is a derived file exactly like transcoded audio (§7.6): it
   gets a `{target}.src.md5` sidecar entry keyed off the _source_ artwork file's
   hash (already tracked in the album's real `sums.md5`), so a source artwork
@@ -1028,11 +1036,14 @@ a measured bottleneck.
   that album for that target — cheaper than a full retranscode, but still a real
   pass over every file. This applies unconditionally for `sdcard` now, rather
   than being a hypothetical gated on some future target's setting.
-- The embedding mechanism itself — `go.senan.xyz/taglib` (already a dependency,
-  already used elsewhere in this project for tag writes) versus an `ffmpeg`
-  remux — is not yet decided; a passthrough-format track (already MP3) needs art
-  embedded without needing any transcoding, so embedding can't simply ride along
-  with the transcode step for every track the way it might seem to at first.
+- The embedding mechanism itself is `go.senan.xyz/taglib`'s `WriteImage`, not an
+  `ffmpeg` remux (confirmed against the library's actual source: it exposes
+  `WriteImage`/`WriteImageOptions`, backed by `taglib_file_write_image`,
+  handling the format-specific frame — ID3v2 `APIC`, FLAC `PICTURE`, MP4 `covr`
+  — behind one call). This also cleanly covers a passthrough-format track
+  (already MP3) needing art embedded without needing any transcoding, which a
+  "ride along with the transcode step" approach couldn't have handled uniformly.
+  Not yet implemented — this section covers artwork resizing only.
 
 ### 7.9 Transcoding (Audio Implemented)
 
