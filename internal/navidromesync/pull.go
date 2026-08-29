@@ -218,7 +218,7 @@ func applyRemotePlaylist(
 		if existing.Name == updated.Name &&
 			stringSlicesEqual(existing.Entries, updated.Entries) &&
 			existing.HasTargets == updated.HasTargets &&
-			stringSlicesEqual(existing.Targets, updated.Targets) {
+			stringSetsEqual(existing.Targets, updated.Targets) {
 			result.Unchanged = append(result.Unchanged, localPath)
 			return result, nil
 		}

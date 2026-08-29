@@ -124,6 +124,33 @@ func TestWriteGlobalPlaylist(t *testing.T) {
 		)
 	})
 
+	t.Run("sorts targets alphabetically regardless of input order", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+
+		require.NoError(t, WriteGlobalPlaylist(path, &GlobalPlaylist{
+			Targets: []string{"sdcard", "ipod", "car"}, HasTargets: true,
+			Entries: []string{"track.flac"},
+		}))
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(got), "#TARGETS:car,ipod,sdcard\n")
+	})
+
+	t.Run("sorting a nil-Targets input does not panic", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+
+		require.NoError(t, WriteGlobalPlaylist(path, &GlobalPlaylist{
+			HasTargets: true, Entries: []string{"track.flac"},
+		}))
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(got), "#TARGETS:\n")
+	})
+
 	t.Run("omits directives that are not set", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "list.m3u8")

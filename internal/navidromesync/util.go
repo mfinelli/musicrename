@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
@@ -84,4 +85,22 @@ func stringSlicesEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// stringSetsEqual reports whether a and b contain the same strings, in any
+// order. Used for comparing target lists: order there carries no meaning,
+// and since both sides may reflect content set by a hand edit (locally, or
+// remotely via the Navidrome UI/another client) rather than something
+// musicrename itself last wrote in its own canonical sorted order, an
+// order-sensitive comparison would flag a merely differently ordered but
+// otherwise identical list as "changed" and rewrite it for no real reason.
+func stringSetsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	sortedA := append([]string(nil), a...)
+	sortedB := append([]string(nil), b...)
+	sort.Strings(sortedA)
+	sort.Strings(sortedB)
+	return stringSlicesEqual(sortedA, sortedB)
 }

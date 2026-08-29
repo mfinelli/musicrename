@@ -84,3 +84,21 @@ func TestStringSlicesEqual(t *testing.T) {
 	assert.False(t, stringSlicesEqual([]string{"a", "b"}, []string{"b", "a"}))
 	assert.False(t, stringSlicesEqual([]string{"a"}, []string{"a", "b"}))
 }
+
+func TestStringSetsEqual(t *testing.T) {
+	assert.True(t, stringSetsEqual(nil, nil))
+	assert.True(t, stringSetsEqual([]string{}, nil))
+	assert.True(t, stringSetsEqual([]string{"a", "b"}, []string{"a", "b"}))
+	assert.True(t, stringSetsEqual([]string{"a", "b"}, []string{"b", "a"}),
+		"order must not matter")
+	assert.True(t, stringSetsEqual([]string{"sdcard", "ipod", "car"}, []string{"car", "ipod", "sdcard"}))
+	assert.False(t, stringSetsEqual([]string{"a"}, []string{"a", "b"}))
+	assert.False(t, stringSetsEqual([]string{"a", "a"}, []string{"a", "b"}))
+
+	t.Run("does not mutate its inputs", func(t *testing.T) {
+		a := []string{"b", "a"}
+		b := []string{"a", "b"}
+		stringSetsEqual(a, b)
+		assert.Equal(t, []string{"b", "a"}, a, "input slice order must be preserved")
+	})
+}

@@ -1338,6 +1338,16 @@ appending a suffix, leaving the human text untouched, and a suffix removed from
 the remote side (by hand, in the Navidrome app, or by any other client)
 reconciles back to "no `#TARGETS:`" on the next pull.
 
+Wherever a target list is written — the local `#TARGETS:` directive
+(`playlist.WriteGlobalPlaylist`) or the comment suffix (`composeComment`) — it's
+sorted alphabetically first, so the on-disk/on-server form is always canonical
+regardless of the order targets happened to be added or read in. Change
+detection on both sides compares target lists (or, on push, the fully-composed
+comment string) order-insensitively rather than as raw strings, precisely so a
+list that's semantically identical but happened to arrive in a different order —
+a hand edit, or content from a version predating this convention — doesn't
+register as "changed" and get rewritten for no real reason.
+
 Correlation between a local file and a remote playlist is by the
 `#NAVIDROME-ID`, never by filename or display name — renaming a playlist locally
 does not orphan or duplicate its remote counterpart. Because there is exactly

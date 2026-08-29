@@ -208,10 +208,16 @@ func pushOne(client *subsonic.Client, path string, dryRun bool, index map[string
 	// Preserve whatever human-authored text is already in the remote
 	// comment (only the musicrename-managed #TARGETS: suffix is ours to
 	// rewrite).
-	remoteHuman, _, _ := parseCommentTargets(remote.Comment)
+	remoteHuman, remoteTargets, remoteHasTargets := parseCommentTargets(remote.Comment)
 	desiredComment := composeComment(remoteHuman, gp.Targets, gp.HasTargets)
 
-	if remote.Name == name && remote.Comment == desiredComment && stringSlicesEqual(remotePaths, gp.Entries) {
+	// Compare against a canonically-recomposed version of the remote
+	// comment, not the raw string: a hand-edited or otherwise-unsorted
+	// remote suffix would otherwise register as "different" purely due to
+	// target order, triggering a needless update.
+	normalizedRemoteComment := composeComment(remoteHuman, remoteTargets, remoteHasTargets)
+
+	if remote.Name == name && normalizedRemoteComment == desiredComment && stringSlicesEqual(remotePaths, gp.Entries) {
 		result.Unchanged = append(result.Unchanged, path)
 		return result, nil
 	}

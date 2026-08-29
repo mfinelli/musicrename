@@ -100,6 +100,38 @@ func touchLocalFile(t *testing.T, root, relPath string) {
 }
 
 func TestPullAll(t *testing.T) {
+	t.Run("a remote #TARGETS: suffix reordered but set-equal to local is Unchanged", func(t *testing.T) {
+		root := t.TempDir()
+		touchLocalFile(t, root, "main/a/artist/album/01 track.flac")
+
+		localPath := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(localPath, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+			Targets: []string{"ipod", "sdcard"}, HasTargets: true,
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.Contains(r.URL.Path, "getPlaylists"):
+				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+			case strings.Contains(r.URL.Path, "getPlaylist"):
+				// Same targets, different (unsorted) order: must not
+				// register as a change.
+				fmt.Fprint(w, singlePlaylistJSONWithComment(
+					"id-1", "Road Trip", "[musicrename:targets=sdcard,ipod]",
+					[]string{"main/a/artist/album/01 track.flac"},
+				))
+			}
+		}))
+		defer srv.Close()
+
+		result, err := PullAll(testClient(srv.URL), root, false)
+		require.NoError(t, err)
+		require.Len(t, result.Unchanged, 1)
+		assert.Empty(t, result.Updated)
+	})
+
 	t.Run("creates a new local file for a remote playlist with no local correlation", func(t *testing.T) {
 		root := t.TempDir()
 		touchLocalFile(t, root, "main/a/artist/album/01 track.flac")

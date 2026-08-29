@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -121,8 +122,10 @@ func WriteGlobalPlaylist(path string, gp *GlobalPlaylist) error {
 		sb.WriteString("\n")
 	}
 	if gp.HasTargets {
+		sorted := append([]string(nil), gp.Targets...)
+		sort.Strings(sorted)
 		sb.WriteString(targetsPrefix)
-		sb.WriteString(strings.Join(gp.Targets, ","))
+		sb.WriteString(strings.Join(sorted, ","))
 		sb.WriteString("\n")
 	}
 	for _, e := range gp.Entries {

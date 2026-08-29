@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -340,6 +341,42 @@ func TestPushOne(t *testing.T) {
 		require.Len(t, result.Updated, 1)
 		require.True(t, commentSent)
 		assert.Equal(t, "Great mix", capturedComment, "the suffix must be gone but the human text kept")
+	})
+
+	t.Run("a remote #TARGETS: suffix reordered but set-equal to local is Unchanged, no update call made", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+			Targets: []string{"ipod", "sdcard"}, HasTargets: true,
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		var updatePlaylistCalls int32
+		mux := http.NewServeMux()
+		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
+			// Same targets, different (unsorted) order in the remote
+			// comment: must not register as a change.
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+				`"comment":"[musicrename:targets=sdcard,ipod]",`+
+				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&updatePlaylistCalls, 1)
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Unchanged, 1)
+		assert.Empty(t, result.Updated)
+		assert.Equal(t, int32(0), atomic.LoadInt32(&updatePlaylistCalls))
 	})
 
 	t.Run("a comment-only difference is enough to classify as Updated, not Unchanged", func(t *testing.T) {

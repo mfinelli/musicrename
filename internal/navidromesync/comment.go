@@ -20,6 +20,7 @@ package navidromesync
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -79,7 +80,10 @@ func composeComment(human string, targets []string, hasTargets bool) string {
 		return human
 	}
 
-	suffix := fmt.Sprintf("[musicrename:targets=%s]", strings.Join(targets, ","))
+	sorted := append([]string(nil), targets...)
+	sort.Strings(sorted)
+
+	suffix := fmt.Sprintf("[musicrename:targets=%s]", strings.Join(sorted, ","))
 	if human == "" {
 		return suffix
 	}

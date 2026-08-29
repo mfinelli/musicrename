@@ -82,6 +82,11 @@ func TestComposeComment(t *testing.T) {
 			composeComment("Great road trip mix", []string{"ipod", "sdcard"}, true))
 	})
 
+	t.Run("sorts targets alphabetically regardless of input order", func(t *testing.T) {
+		assert.Equal(t, "[musicrename:targets=car,ipod,sdcard]",
+			composeComment("", []string{"sdcard", "ipod", "car"}, true))
+	})
+
 	t.Run("targets with no human text: just the suffix", func(t *testing.T) {
 		assert.Equal(t, "[musicrename:targets=ipod]", composeComment("", []string{"ipod"}, true))
 	})
