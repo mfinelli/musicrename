@@ -1034,15 +1034,18 @@ a measured bottleneck.
   embedded without needing any transcoding, so embedding can't simply ride along
   with the transcode step for every track the way it might seem to at first.
 
-### 7.9 Transcoding
+### 7.9 Transcoding (Audio Implemented)
 
-- Implemented by shelling out to `ffmpeg`, mirroring the existing `yt-dlp`
-  shell-out pattern used for music video fetching (§6), rather than calling
-  dedicated encoder binaries (`lame`, `flac`) directly — one external dependency
-  instead of several, and already required for future video work (§6.5). Most
-  non-minimal distro `ffmpeg` builds link `libmp3lame`, so this doesn't give up
-  LAME's encoder, just calls it through `ffmpeg`'s CLI; worth confirming with
-  `ffmpeg -encoders | grep libmp3lame` on the target build before relying on it.
+- Implemented by shelling out to `ffmpeg` (`internal/transcode`, `Audio`),
+  mirroring the existing `yt-dlp` shell-out pattern used for music video
+  fetching (§6) — including the same injectable-runner test structure, so the
+  surrounding logic is testable without a real `ffmpeg` binary — rather than
+  calling dedicated encoder binaries (`lame`, `flac`) directly: one external
+  dependency instead of several, and already required regardless for future
+  video work (§6.5). Most non-minimal distro `ffmpeg` builds link `libmp3lame`,
+  so this doesn't give up LAME's encoder, just calls it through `ffmpeg`'s CLI;
+  worth confirming with `ffmpeg -encoders | grep libmp3lame` on the target build
+  before relying on it.
 - Encode parameters are hardcoded, but keyed by format (`AudioFormat`,
   `EncodeParams`, `internal/target`) rather than duplicated per target — a
   target's `Definition` only names the format it wants (e.g. `sdcard` wants
@@ -1052,10 +1055,30 @@ a measured bottleneck.
   accepted-formats set (§7.2); accepted-format tracks pass through untouched, so
   a single sync run against a transcoding target can produce a mix of copied and
   transcoded output.
-- The `ffmpeg`-invoking wrapper (progress callback, exit-status handling) is
-  expected to be shared between audio transcode and future artwork/video
-  `ffmpeg` calls, parameterized per call site, rather than maintained as
-  separate code paths.
+- **Tags and artwork are deliberately excluded from the transcode call itself**
+  — `-map_metadata -1` strips whatever `ffmpeg` would otherwise try to carry
+  over, and `-vn` drops any embedded picture stream, rather than trusting
+  `ffmpeg`'s own Vorbis-comment-to-ID3v2 mapping to cover every tag this project
+  cares about. Both are migrated afterward as separate, deliberate steps using
+  this project's existing tag mechanism (`go.senan.xyz/taglib`, already used
+  everywhere else tags are read or written — `WriteTags` with the same
+  normalized cross-format tag representation `check`/`inspect`/`lyrics` already
+  use, and `WriteImage` for artwork, §7.8). This guarantees every tag the rest
+  of the tool already recognizes migrates consistently through one
+  representation, rather than depending on however completely `ffmpeg`'s own
+  format-conversion heuristics happen to overlap with this project's own tag
+  vocabulary — and avoids `ffmpeg` carrying over a stale, unresized embedded
+  picture that a later artwork step would then need to detect and overwrite.
+  Reading the source tags before transcoding and writing them (plus resized
+  artwork) onto the output afterward is a later piece, not yet built — this
+  section covers the transcode call itself only.
+- Artwork resizing turned out not to need `ffmpeg` at all: Go's standard library
+  (`image/jpeg`, `image/png`) plus `golang.org/x/image/draw` for the resize
+  itself cover it, and `go.senan.xyz/taglib`'s `WriteImage` handles embedding
+  directly — TagLib's own format-specific frame handling (ID3v2 `APIC`, FLAC
+  `PICTURE`, MP4 `covr`) sits behind one uniform call, so no new dependency or
+  `ffmpeg` invocation is needed for either half of artwork handling (§7.8).
+  `ffmpeg` in this project ends up scoped to audio transcoding only.
 
 ### 7.10 Interaction with `rename`
 

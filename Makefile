@@ -13,7 +13,8 @@ SOURCES := $(wildcard *.go cmd/*.go internal/checker/*.go \
 	   internal/metadata/*.go internal/navidrome/*.go \
 	   internal/navidromesync/*.go internal/planner/*.go \
 	   internal/playlist/*.go internal/renamesync/*.go \
-	   internal/sanitize/*.go internal/target/*.go internal/video/*.go)
+	   internal/sanitize/*.go internal/target/*.go \
+	   internal/transcode/*.go internal/video/*.go)
 
 VERSION ?= $(shell $(GREP) -P "^\tVersion:" cmd/root.go | awk -F\" '{print $$2}')
 TODAY ?= $(shell date +%Y-%m-%d)
