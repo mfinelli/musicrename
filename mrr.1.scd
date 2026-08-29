@@ -7,7 +7,10 @@ mrr - normalize and organize a local music library
 # SYNOPSIS
 
 *mrr* <command> [options] [_path_]++
-*mrr video* <command> [options] [_path_]
+*mrr video* <command> [options] [_path_]++
+*mrr playlist* <command> [options] [_path_]++
+*mrr sync navidrome* <command> [options] [_playlist_]++
+*mrr login|logout* [options]
 
 # DESCRIPTION
 
@@ -27,6 +30,9 @@ directory. Mode is auto-detected from the path: a directory containing audio
 files directly is treated as a single album; a directory without audio files
 directly inside is treated as a library root and processed recursively; some
 commands also accept a path to a single audio file.
+
+Device-target playlist selection and Navidrome sync are a separate, optional
+workflow; see *PLAYLISTS* and *NAVIDROME SYNC* below.
 
 Music videos are managed as a separate command family and directory tree; see
 *VIDEO SUPPORT* below.
@@ -70,6 +76,9 @@ Each album directory may contain the following:
 :  High-resolution scans
 |  extras/
 :  All other files
+
+*{target}.m3u8* files (e.g. *ipod.m3u8*) carry special meaning; see
+*PLAYLISTS* below.
 
 # COMMANDS
 
@@ -145,6 +154,98 @@ Displays the raw tag values for a single audio file alongside the sanitized
 forms that *rename* would use for path construction. Accepts *.flac*, *.mp3*,
 and *.m4a* files only. Read-only; makes no filesystem changes.
 
+## mrr login [options]
+
+Stores Navidrome server credentials, used by *sync navidrome* commands (see
+*NAVIDROME SYNC* below). *--url* and *--username* are prompted for
+interactively if omitted; the password is never accepted as a flag — it's
+prompted for (masked) by default, or read from stdin with *--password-stdin*
+for scripting, e.g. piping from a password manager:
+
+	pass show navidrome | mrr login --url https://nav.example.com \
+		--username mario --password-stdin
+
+Credentials are validated against the server before anything is saved.
+Stored at *$XDG_CONFIG_HOME/musicrename/navidrome.json*, mode *0600*. Only one
+server can be configured at a time; running *login* again replaces it.
+
+*--url* _url_
+	Navidrome server URL.
+*--username* _name_
+	Navidrome username.
+*--password-stdin*
+	Read the password from stdin instead of prompting.
+
+## mrr logout
+
+Clears stored Navidrome credentials. Not an error if not currently logged
+in.
+
+## mrr playlist select <_target_> [_album-path_]
+
+Interactively selects which tracks from an album are included for a device
+sync target (currently *ipod* or *sdcard*), writing the selection to
+*{target}.m3u8* in the album directory. If every track ends up unselected,
+the manifest file is deleted rather than left behind empty.
+
+If _album-path_ is omitted it defaults to the current directory.
+
+*--skip-md5*
+	Do not update *sums.md5* even if one already exists in the album.
+
+## mrr playlist check [_library-root-root_]
+
+Audits the library-wide *playlists/* tree (see *PLAYLISTS* below) for
+broken entries, unrecognized names in a *#TARGETS:* directive, and
+duplicate *#NAVIDROME-ID* values across files. Read-only; exits non-zero if
+any findings are present.
+
+Findings for album-local *{target}.m3u8* manifests (the ones *playlist
+select* writes) are reported by *mrr check* instead, not here.
+
+If _library-root-root_ is omitted it defaults to the current directory.
+
+## mrr sync navidrome pull [_playlist_]
+
+Pulls playlists from the configured Navidrome server (*mrr login*) into the
+*playlists/* tree, overwriting local content with whatever the server
+currently holds. See *NAVIDROME SYNC* below for the intended workflow.
+
+With no argument, pulls every playlist. With _playlist_ given (a path to an
+existing local playlist file), pulls just that one; if the server confirms
+it no longer exists there, the local file is deleted to match.
+
+*--dry-run*
+	Print what would happen without changing any files.
+*--skip-scan*
+	Skip the library scan normally triggered before pulling.
+
+## mrr sync navidrome push [_playlist_]
+
+Pushes playlists from the *playlists/* tree to the configured Navidrome
+server, overwriting remote content with whatever the local file currently
+says. A local playlist with no *#NAVIDROME-ID* yet is created on the
+server, and the assigned ID is written back into the local file.
+
+With no argument, pushes every playlist under *playlists/*. With _playlist_
+given, pushes just that one.
+
+*--dry-run*
+	Print what would happen without changing anything, locally or remotely.
+*--skip-scan*
+	Skip the library scan normally triggered before pushing.
+
+## mrr sync navidrome delete <_playlist_>
+
+Permanently deletes one playlist: removes it from the Navidrome server,
+then removes the local file. _playlist_ must already have a
+*#NAVIDROME-ID* (i.e. it's been pushed at least once); this command errors
+immediately, without deleting anything, otherwise. Prompts for confirmation
+unless *--yes* is passed (this cannot be undone).
+
+*--yes*
+	Skip the confirmation prompt.
+
 # METADATA
 
 *Album artist*
@@ -169,6 +270,68 @@ and *.m4a* files only. Read-only; makes no filesystem changes.
 	*TITLE* falls back to the original filename stem. A missing *TRACKNUMBER*
 	sorts the file alphabetically among its untracked peers. Missing both
 	*ARTIST* and *ALBUMARTIST* is a fatal error for that album.
+
+# PLAYLISTS
+
+Two distinct kinds of playlist exist.
+
+*Album-local target manifests* are *{target}.m3u8* files (e.g. *ipod.m3u8*,
+*sdcard.m3u8*) living inside an album directory, listing which tracks from
+that album are selected for a given device sync target. Managed with *mrr
+playlist select*. Entry order carries no meaning.
+
+*Library-wide playlists* live under a top-level *playlists/* directory which
+is a sibling of the library root(s), and can span albums and library roots.
+Entry order is meaningful (playback order). Each file may carry these directive
+lines at its top:
+
+[[ *Directive*
+:[ *Meaning*
+|  #PLAYLIST:_name_
+:  Display name, independent of the (sanitized) filename
+|  #NAVIDROME-ID:_id_
+:  Correlated Navidrome playlist ID; absent if never pushed
+|  #TARGETS:_target_,_target_,...
+:  Which sync targets this applies to; absent means every target
+
+Entries below the directives are plain paths, one per line, relative to the
+*playlists/* directory's parent (the directory that contains the library
+root(s)).
+
+Use *mrr playlist check* to audit this tree. Subdirectories under
+*playlists/* carry no special meaning and are fine to use for your own
+organization.
+
+# NAVIDROME SYNC
+
+*mrr* can sync the library-wide *playlists/* tree with a Navidrome
+(https://navidrome.org) server over its Subsonic-compatible API. Run *mrr
+login* once to store credentials, then use *mrr sync navidrome
+pull*|*push*|*delete*.
+
+The intended workflow is pull, edit, push, run as one session:
+
+	mrr sync navidrome pull    # bring playlists/ up to date from the server++
+	                            # ... make local edits ...++
+	mrr sync navidrome push    # send those edits back
+
+Both directions overwrite the side being synced *to*, completely: pull
+replaces local file content with the server's, push replaces the server's
+content with the local file's. Editing a playlist on the server (e.g. from
+a phone) *during* an open pull-edit-push session gets silently overwritten
+by the eventual push: treat this as a checkout/check-in, not a continuous
+merge.
+
+A *#TARGETS:* directive is synced through the Navidrome playlist's comment
+field, appended as a *[musicrename:targets=...]* suffix so a normal,
+human-written description can still live in the same field.
+
+Deleting a playlist outside of *mrr sync navidrome delete* is handled
+gracefully on the next pull: a playlist removed on the server disappears
+locally too, while a playlist file removed locally by hand (e.g. plain
+*rm*) simply reappears on the next pull instead of being treated as
+intentional. *mrr sync navidrome delete* is the only way to perform a real,
+permanent deletion.
 
 # VIDEO SUPPORT
 
