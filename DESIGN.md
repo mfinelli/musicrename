@@ -1223,13 +1223,38 @@ handles every `ActionAdd`/`ActionRegenerate`/`ActionDelete` change (only
   (`UpdateFile`/`RemoveFile`/`RenameFile`) needed to do, since those only ever
   update an _existing_ source album's `sums.md5`.
 
-5. **Output:** dry-run is always available first. Default output is a summary —
-   counts and total bytes for add / regenerate / delete-file / delete-dir, plus
-   the capacity delta from step 4. `--verbose` itemizes every add and regenerate
-   individually; deletions are only itemized under `--verbose` even then, since
-   deletion only affects the device copy — source data is never touched, so the
-   worst case of an unwanted deletion is a stale `{target}.m3u8`/playlist entry
-   to fix and a re-sync.
+5. **Output (implemented):** `mrr sync ipod <device-path> [library-root]` /
+   `mrr sync sdcard <device-path> [library-root]`. Orchestration lives in
+   `internal/devicesync`, not `cmd` — `Plan` (`plan.go`) runs steps 1-4 in
+   sequence (`DesiredState` → `CurrentState` → `Diff` → `CheckCapacity`) and
+   aggregates their warnings into one list, and `CountChanges`/`FormatBytes` are
+   the pure tallying/formatting helpers the CLI layer needs for its summary line
+   and confirmation prompt. This mirrors the project's existing
+   `internal/planner` + `internal/executor` split for `rename` exactly — a first
+   draft put this orchestration directly in `cmd` instead, in a dedicated
+   `cmd/sync_device.go` file shared by both target commands; caught in review as
+   inconsistent with that established convention (`cmd` holds user interaction,
+   not business logic, and a whole file built specifically to be shared across
+   commands is a strong sign the logic inside it isn't really CLI-layer at all)
+   and moved into `internal/devicesync` before this was ever committed, where
+   it's also properly testable — which it wasn't as `cmd`-layer code (see the
+   note on `cmd`'s dependency weight, below).
+
+   What's left in `cmd/sync_ipod.go`/`cmd/sync_sdcard.go` genuinely is CLI glue:
+   argument/flag parsing, the `huh.Confirm` prompt (matching
+   `sync navidrome delete`'s existing pattern), and terminal output formatting —
+   `sync ipod`'s file also holds the shared `runSyncDevice` function itself and
+   its print helpers, with `sync sdcard`'s file calling into it, rather than
+   each duplicating the same flow — the same "define once, call from the other
+   command" pattern `cmd/rename.go`'s own small per-command helpers already use,
+   just applied across two files instead of within one, since both targets need
+   the identical flow. `--dry-run` shows the plan without touching anything;
+   default output is a summary — counts for
+   add/regenerate/delete/already-up-to-date, plus the capacity delta;
+   `--verbose` itemizes every change instead. Insufficient capacity is a hard
+   error for a real (non-dry-run) sync, checked before any prompt or write; a
+   dry-run still reports the shortfall as part of the summary rather than
+   failing, since nothing would actually be written anyway.
 
 ### 7.8 Artwork Handling (Resize Implemented)
 
