@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/target"
@@ -117,10 +118,28 @@ type DiffResult struct {
 // detected mismatch: regenerate, never skip. This case gets its own distinct
 // warning, since (unlike an ordinary regenerate) it's actionable: it
 // means `sums` was never run for that album.
+//
+// For a target that embeds artwork (currently `sdcard`), an audio entry that
+// passes the checks above is *additionally* required to match on its album's
+// artwork: the recorded artwork hash from current.AlbumArtHash (read from the
+// {target}.src.md5 sidecar's entry for the artwork filename, e.g.,
+// "folder.jpg", only ever populated for an embedding target) must equal the
+// artwork's current source hash ([findArtworkHash] against the same cached
+// per-album source sums used for the audio comparison, so no extra I/O).
+// If they differ (including the case where one side has artwork recorded
+// and the other doesn't) the entry regenerates even though the audio
+// itself is unchanged, since embedding is what makes the artwork part of
+// the file at all: without this, an artwork-only change would be
+// completely invisible to a diff that only ever compared each track's
+// audio hash. This check is skipped entirely (both for cost and because it
+// doesn't apply) whenever the audio comparison above already failed (there's
+// no reason to also check artwork when the entry's going to regenerate
+// regardless) and for a non-embedding target, where it never runs at all.
 func Diff(
 	libraryRootRoot, targetName string, desired *DesiredStateResult, current *CurrentStateResult,
 ) (*DiffResult, error) {
-	if !target.Valid(targetName) {
+	def, ok := target.DefinitionFor(targetName)
+	if !ok {
 		return nil, fmt.Errorf("unknown target %q", targetName)
 	}
 
@@ -180,6 +199,15 @@ func Diff(
 
 		unchanged := dev.Hash == srcHash || (dev.HasSrcHash && dev.SrcHash == srcHash)
 
+		if unchanged && def.EmbedArt {
+			albumDir := filepath.Dir(filepath.Join(libraryRootRoot, entry.Root, entry.Rel))
+			albumKey := AlbumKey{Root: entry.Root, Dir: filepath.ToSlash(filepath.Dir(entry.Rel))}
+
+			currentArt, _ := findArtworkHash(sourceHashCache[albumDir])
+			recordedArt := current.AlbumArtHash[albumKey]
+			unchanged = recordedArt == currentArt
+		}
+
 		action := ActionRegenerate
 		if unchanged {
 			action = ActionSkip
@@ -201,4 +229,27 @@ func Diff(
 	})
 
 	return result, nil
+}
+
+// findArtworkHash looks up the recorded hash of whichever primary artwork
+// file is present in sums (a filename -> hash map, either a parsed sums.md5
+// or a parsed {target}.src.md5, so this is a pure lookup, no extra I/O beyond
+// whatever already read that map). Matching is case-insensitive, with a
+// deterministic first-match-in-primaryArtFilenames-order tie-break for
+// the rare case where more than one candidate exists (which is already its
+// own `check` finding) mirroring [findPrimaryArt]'s exact same matching and
+// tie-break rules, just operating on an already-parsed map instead of a
+// directory listing. A nil sums map (the file didn't exist at all) is handled
+// the same as an empty one: not found, no error.
+func findArtworkHash(sums map[string]string) (hash string, found bool) {
+	lowerSums := make(map[string]string, len(sums))
+	for name, h := range sums {
+		lowerSums[strings.ToLower(name)] = h
+	}
+	for _, artName := range primaryArtFilenames {
+		if h, ok := lowerSums[artName]; ok {
+			return h, true
+		}
+	}
+	return "", false
 }

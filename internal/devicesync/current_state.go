@@ -53,10 +53,42 @@ type DeviceEntry struct {
 	Size int64
 }
 
+// AlbumKey identifies one album directory: a library root name plus the
+// album's path relative to that root, forward-slash separated.
+type AlbumKey struct {
+	Root string
+	Dir  string
+}
+
 // CurrentStateResult is the output of [CurrentState].
 type CurrentStateResult struct {
-	Entries  map[DesiredEntry]DeviceEntry
-	Warnings []string
+	Entries map[DesiredEntry]DeviceEntry
+	// AlbumArtHash records, per album, the source artwork hash last used
+	// to embed art into that album's tracks (read from the
+	// {target}.src.md5 sidecar's entry for the artwork filename e.g.,
+	// "folder.jpg"). That entry has no corresponding on-device file for
+	// an embedding target because the artwork lives inside each track,
+	// not as a file of its own but is still a legitimate,
+	// correctly-formatted line recording provenance, the same way every
+	// other entry in that file already does (every {target}.src.md5 line
+	// cross-references a *source* hash, not the on-device file's hash,
+	// so this isn't a new kind of impurity).
+	//
+	// Only ever populated for a target whose Definition has EmbedArt set
+	// (currently `sdcard`), even though nothing would actually break if
+	// it weren't gated this way: a non-embedding target's artwork already
+	// gets its own ordinary DesiredEntry (a real external file) and is
+	// tracked through the same Hash/SrcHash mechanism as any other file,
+	// including whenever that artwork was resized which would leave a
+	// perfectly normal-looking "folder.jpg" entry in that target's
+	// {target}.src.md5 too. Without this gate, AlbumArtHash would end up
+	// incidentally populated for a non-embedding target's albums whenever
+	// their artwork happened to be resized, which [Diff] would never
+	// actually read (that lookup only runs for EmbedArt targets), but
+	// leaving the field's presence ambiguous about what it means serves
+	// no one.
+	AlbumArtHash map[AlbumKey]string
+	Warnings     []string
 }
 
 // CurrentState walks devicePath (the target's mount point) and returns
@@ -73,11 +105,15 @@ type CurrentStateResult struct {
 // device: removable flash storage is exactly the kind of thing that can
 // have one corrupted file without the rest of the device being unusable.
 func CurrentState(devicePath, targetName string) (*CurrentStateResult, error) {
-	if !target.Valid(targetName) {
+	def, ok := target.DefinitionFor(targetName)
+	if !ok {
 		return nil, fmt.Errorf("unknown target %q", targetName)
 	}
 
-	result := &CurrentStateResult{Entries: make(map[DesiredEntry]DeviceEntry)}
+	result := &CurrentStateResult{
+		Entries:      make(map[DesiredEntry]DeviceEntry),
+		AlbumArtHash: make(map[AlbumKey]string),
+	}
 
 	rootEntries, err := os.ReadDir(devicePath)
 	if err != nil {
@@ -126,6 +162,13 @@ func CurrentState(devicePath, targetName string) (*CurrentStateResult, error) {
 			if relErr != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %v", albumDir, relErr))
 				return nil
+			}
+
+			if def.EmbedArt {
+				if artHash, ok := findArtworkHash(srcSums); ok {
+					albumKey := AlbumKey{Root: root, Dir: filepath.ToSlash(albumRel)}
+					result.AlbumArtHash[albumKey] = artHash
+				}
 			}
 
 			for name, hash := range sums {

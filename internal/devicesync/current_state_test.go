@@ -186,4 +186,70 @@ func TestCurrentState(t *testing.T) {
 		assert.Empty(t, result.Entries)
 		assert.Empty(t, result.Warnings)
 	})
+
+	t.Run("populates AlbumArtHash for an embedding target, from the src.md5 bookkeeping entry", func(t *testing.T) {
+		device := t.TempDir()
+		album := filepath.Join(device, "main", "a", "artist", "album")
+		artHash := strings.Repeat("c", 32)
+		writeSums(t, album, hasher.SumsFilename, map[string]string{
+			"01 track.mp3": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		})
+		writeSums(t, album, "sdcard.src.md5", map[string]string{
+			"01 track.mp3": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			"folder.jpg":   artHash, // bookkeeping-only entry
+		})
+
+		result, err := CurrentState(device, "sdcard")
+		require.NoError(t, err)
+
+		key := AlbumKey{Root: "main", Dir: "a/artist/album"}
+		require.Contains(t, result.AlbumArtHash, key)
+		assert.Equal(t, artHash, result.AlbumArtHash[key])
+	})
+
+	t.Run("an album with no artwork bookkeeping entry has no AlbumArtHash entry", func(t *testing.T) {
+		device := t.TempDir()
+		album := filepath.Join(device, "main", "a", "artist", "album")
+		writeSums(t, album, hasher.SumsFilename, map[string]string{
+			"01 track.mp3": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		})
+		writeSums(t, album, "sdcard.src.md5", map[string]string{
+			"01 track.mp3": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		})
+
+		result, err := CurrentState(device, "sdcard")
+		require.NoError(t, err)
+
+		key := AlbumKey{Root: "main", Dir: "a/artist/album"}
+		assert.NotContains(t, result.AlbumArtHash, key)
+	})
+
+	t.Run("never populates AlbumArtHash for a non-embedding target, even if its own src.md5 has an artwork entry", func(t *testing.T) {
+		device := t.TempDir()
+		album := filepath.Join(device, "main", "a", "artist", "album")
+		artHash := strings.Repeat("c", 32)
+		writeSums(t, album, hasher.SumsFilename, map[string]string{
+			"01 track.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"folder.jpg":    strings.Repeat("d", 32),
+		})
+		// ipod's sidecar, populated as it would be if ipod's artwork
+		// were genuinely resized (not a byte-identical passthrough).
+		writeSums(t, album, "ipod.src.md5", map[string]string{
+			"folder.jpg": artHash,
+		})
+
+		result, err := CurrentState(device, "ipod")
+		require.NoError(t, err)
+
+		key := AlbumKey{Root: "main", Dir: "a/artist/album"}
+		assert.NotContains(t, result.AlbumArtHash, key,
+			"ipod's artwork drift is tracked via its own ordinary DesiredEntry, not AlbumArtHash")
+
+		// The artwork's entry, however, must still come through the
+		// normal per-file mechanism exactly like any other derived file.
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/folder.jpg"}
+		require.Contains(t, result.Entries, entry)
+		assert.True(t, result.Entries[entry].HasSrcHash)
+		assert.Equal(t, artHash, result.Entries[entry].SrcHash)
+	})
 }

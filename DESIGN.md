@@ -1167,6 +1167,37 @@ recopy.
   that album for that target — cheaper than a full retranscode, but still a real
   pass over every file. This applies unconditionally for `sdcard` now, rather
   than being a hypothetical gated on some future target's setting.
+
+  This requirement needed a real mechanism, not just a stated intent: §7.7 step
+  3's diff has no separate desired entry for `sdcard`'s artwork to compare on
+  its own account (embedding targets never get one, per this section), so an
+  artwork-only change — the audio itself untouched — would otherwise be
+  invisible to a diff that only ever compared each track's own audio hash.
+  `CurrentState`'s `AlbumArtHash` (`internal/devicesync`) solves this: a
+  per-album record of the artwork hash last used to embed, read from the
+  `{target}.src.md5` sidecar's own entry for the artwork filename (e.g.
+  `folder.jpg`) — a genuinely valid, correctly-formatted line even though no
+  such file exists on-device for an embedding target (the artwork lives inside
+  each track, not as a file of its own). This isn't a new kind of impurity:
+  every `{target}.src.md5` entry already cross-references a _source_ hash rather
+  than the on-device file's own hash, so one more provenance-only line fits the
+  same established pattern. `Diff` compares this against the artwork's current
+  source hash in addition to the audio's own comparison — both must match for a
+  track to be skipped.
+
+  `AlbumArtHash` is deliberately only ever populated for a target whose
+  `Definition` has `EmbedArt` set. Nothing would actually break without that
+  gate — a non-embedding target's artwork already gets its own ordinary desired
+  entry and is tracked through the normal `Hash`/`SrcHash` mechanism like any
+  other file, so the field would just sit there unused for `ipod` — but leaving
+  it ungated meant it could get incidentally populated whenever a non-embedding
+  target's artwork happened to be genuinely resized (which leaves an entirely
+  normal-looking `folder.jpg` line in _that_ target's own `{target}.src.md5`
+  too), making the field's presence ambiguous about what it actually meant.
+  Caught during review after an initial version's doc comment claimed the field
+  was "absent... for a non-embedding target, which never writes this entry at
+  all" — a claim the code, as first written, didn't actually satisfy.
+
 - The embedding mechanism itself is `go.senan.xyz/taglib`'s `WriteImage`, not an
   `ffmpeg` remux (confirmed against the library's actual source: it exposes
   `WriteImage`/`WriteImageOptions`, backed by `taglib_file_write_image`,

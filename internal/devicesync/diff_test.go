@@ -235,4 +235,195 @@ func TestDiff(t *testing.T) {
 		assert.Empty(t, result.Changes)
 		assert.Empty(t, result.Warnings)
 	})
+
+	t.Run("embed target: an artwork-only change still triggers regenerate for an unchanged track", func(t *testing.T) {
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.mp3"))
+		touch(t, filepath.Join(album, "folder.jpg"))
+		writeSums(t, album, "sums.md5", map[string]string{
+			"01 track.mp3": fakeHash(1),
+			"folder.jpg":   fakeHash(2), // new artwork hash
+		})
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
+		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
+		current := &CurrentStateResult{
+			Entries: map[DesiredEntry]DeviceEntry{
+				// Audio itself is unchanged (SrcHash matches fakeHash(1)).
+				entry: {Hash: fakeHash(99), HasSrcHash: true, SrcHash: fakeHash(1)},
+			},
+			AlbumArtHash: map[AlbumKey]string{
+				// But the recorded artwork hash is stale (fakeHash(9), not fakeHash(2)).
+				{Root: "main", Dir: "a/artist/album"}: fakeHash(9),
+			},
+		}
+
+		result, err := Diff(root, "sdcard", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, ActionRegenerate, result.Changes[0].Action,
+			"an artwork-only change must still force a re-embed, even though the audio itself matches")
+	})
+
+	t.Run("embed target: unchanged audio AND unchanged artwork is a skip", func(t *testing.T) {
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.mp3"))
+		touch(t, filepath.Join(album, "folder.jpg"))
+		writeSums(t, album, "sums.md5", map[string]string{
+			"01 track.mp3": fakeHash(1),
+			"folder.jpg":   fakeHash(2),
+		})
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
+		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
+		current := &CurrentStateResult{
+			Entries: map[DesiredEntry]DeviceEntry{
+				entry: {Hash: fakeHash(99), HasSrcHash: true, SrcHash: fakeHash(1)},
+			},
+			AlbumArtHash: map[AlbumKey]string{
+				{Root: "main", Dir: "a/artist/album"}: fakeHash(2), // matches current artwork hash
+			},
+		}
+
+		result, err := Diff(root, "sdcard", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, ActionSkip, result.Changes[0].Action)
+	})
+
+	t.Run("embed target: artwork newly added to a previously art-less album triggers regenerate", func(t *testing.T) {
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.mp3"))
+		touch(t, filepath.Join(album, "folder.jpg"))
+		writeSums(t, album, "sums.md5", map[string]string{
+			"01 track.mp3": fakeHash(1),
+			"folder.jpg":   fakeHash(2), // now has artwork
+		})
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
+		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
+		current := &CurrentStateResult{
+			Entries: map[DesiredEntry]DeviceEntry{
+				entry: {Hash: fakeHash(99), HasSrcHash: true, SrcHash: fakeHash(1)},
+			},
+			AlbumArtHash: map[AlbumKey]string{}, // nothing recorded: no artwork last time
+		}
+
+		result, err := Diff(root, "sdcard", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, ActionRegenerate, result.Changes[0].Action)
+	})
+
+	t.Run("embed target: artwork removed from a previously-art album triggers regenerate", func(t *testing.T) {
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.mp3"))
+		// No artwork file this time.
+		writeSums(t, album, "sums.md5", map[string]string{
+			"01 track.mp3": fakeHash(1),
+		})
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
+		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
+		current := &CurrentStateResult{
+			Entries: map[DesiredEntry]DeviceEntry{
+				entry: {Hash: fakeHash(99), HasSrcHash: true, SrcHash: fakeHash(1)},
+			},
+			AlbumArtHash: map[AlbumKey]string{
+				{Root: "main", Dir: "a/artist/album"}: fakeHash(9), // previously had art
+			},
+		}
+
+		result, err := Diff(root, "sdcard", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, ActionRegenerate, result.Changes[0].Action)
+	})
+
+	t.Run("embed target: an album that never had artwork, on either side, is unaffected", func(t *testing.T) {
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.mp3"))
+		writeSums(t, album, "sums.md5", map[string]string{
+			"01 track.mp3": fakeHash(1),
+		})
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
+		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
+		current := &CurrentStateResult{
+			Entries: map[DesiredEntry]DeviceEntry{
+				entry: {Hash: fakeHash(99), HasSrcHash: true, SrcHash: fakeHash(1)},
+			},
+			AlbumArtHash: map[AlbumKey]string{}, // never had art, still doesn't
+		}
+
+		result, err := Diff(root, "sdcard", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, ActionSkip, result.Changes[0].Action)
+	})
+
+	t.Run("non-embed target: artwork changes never affect an audio entry's own comparison", func(t *testing.T) {
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.flac"))
+		touch(t, filepath.Join(album, "folder.jpg"))
+		writeSums(t, album, "sums.md5", map[string]string{
+			"01 track.flac": fakeHash(1),
+			"folder.jpg":    fakeHash(2),
+		})
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
+		current := &CurrentStateResult{Entries: map[DesiredEntry]DeviceEntry{
+			entry: {Hash: fakeHash(1)}, // ipod: plain passthrough hash match
+		}}
+
+		result, err := Diff(root, "ipod", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, ActionSkip, result.Changes[0].Action)
+	})
+}
+
+func TestFindArtworkHash(t *testing.T) {
+	t.Run("finds folder.jpg", func(t *testing.T) {
+		sums := map[string]string{"01 track.flac": fakeHash(1), "folder.jpg": fakeHash(2)}
+		hash, found := findArtworkHash(sums)
+		assert.True(t, found)
+		assert.Equal(t, fakeHash(2), hash)
+	})
+
+	t.Run("matches case-insensitively", func(t *testing.T) {
+		sums := map[string]string{"Folder.JPG": fakeHash(2)}
+		hash, found := findArtworkHash(sums)
+		assert.True(t, found)
+		assert.Equal(t, fakeHash(2), hash)
+	})
+
+	t.Run("no artwork present: not found", func(t *testing.T) {
+		sums := map[string]string{"01 track.flac": fakeHash(1)}
+		_, found := findArtworkHash(sums)
+		assert.False(t, found)
+	})
+
+	t.Run("a nil map is not found, not a panic", func(t *testing.T) {
+		_, found := findArtworkHash(nil)
+		assert.False(t, found)
+	})
+
+	t.Run("prefers jpg over jpeg over png when more than one is present, deterministically", func(t *testing.T) {
+		sums := map[string]string{
+			"folder.png":  fakeHash(3),
+			"folder.jpeg": fakeHash(2),
+			"folder.jpg":  fakeHash(1),
+		}
+		hash, found := findArtworkHash(sums)
+		assert.True(t, found)
+		assert.Equal(t, fakeHash(1), hash)
+	})
 }
