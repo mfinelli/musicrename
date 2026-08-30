@@ -1516,6 +1516,64 @@ throughout this document — per-album vs. library-wide:
   consistent with `check`'s existing behavior, exiting non-zero when findings
   are present.
 
+### 7.13 Renaming Playlists (Implemented)
+
+`musicrename playlist rename [library-root-root]` (§9) is the write counterpart
+to `playlist check` (§7.12): same scope (the `playlists/` tree, walked
+recursively via `WalkTree`), but instead of auditing, it renames each file's own
+filename to match its human-readable `#PLAYLIST:` name.
+
+A playlist's filename and its `#PLAYLIST:` directive value can drift apart — the
+directive is edited by hand or via Navidrome's own UI (round-tripped back
+locally by `sync navidrome pull`, §8.5) while the filename, chosen once at
+creation time (`playlists/<sanitized-name>.m3u8`, §8.5), never gets revisited.
+This command closes that gap on demand rather than trying to keep the two in
+sync automatically on every write, which would mean every playlist-writing code
+path (`sync navidrome pull`/`push`, and any future one) needing to duplicate the
+same rename-and-collision-check logic.
+
+The sanitization itself reuses the exact same pipeline already used everywhere
+else in this project — `sanitize.CleanString` with `TrackOverride`, then
+`sanitize.Truncate` to 40 characters — the same limit used for other root-level
+filenames (§3.1) and the same pipeline already used to choose a brand-new
+pulled-from-remote playlist's filename (§8.5). Unlike that pull-time naming,
+though, this command never falls back to a generic `"playlist"` stem for an
+empty-after-sanitizing name, nor does it auto-disambiguate a collision with a
+numeric suffix: a brand-new file pulled from an unrelated remote playlist that
+happens to collide with an existing name is expected and unremarkable, but two
+files already living in the tree sanitizing down to an identical name is far
+more likely to indicate a real naming clash the person should notice and resolve
+by hand, not something to silently paper over.
+
+Split into `internal/playlist` (`PlanRenames`/`ExecuteRenames`), mirroring the
+existing `internal/planner`/`internal/executor` split for the main `rename`
+command:
+
+- **`PlanRenames`** walks the tree once, reading each file via the existing
+  `ReadGlobalPlaylist` (§8.4) and computing its sanitized destination filename,
+  in the same directory as the source (a playlist never moves _between_
+  `playlists/` and a target subdirectory, only renames within wherever it
+  already lives). A file with no `#PLAYLIST:` directive at all, or whose
+  directive value sanitizes to an empty string, is skipped and reported rather
+  than erroring the whole run — a hand-created file may simply not have the
+  directive set yet, and one bad file shouldn't block renaming every other valid
+  one. A file already at its correctly-sanitized name is silently dropped from
+  the plan; there's nothing to do. Same-destination collisions (two files'
+  directives sanitizing to the same filename) are detected during the walk
+  itself and abort immediately with an error on the first conflict found —
+  deliberately fail-fast, matching `planner.PlanLibrary`'s behavior for the
+  analogous album/track rename, rather than collecting every collision in the
+  tree before reporting.
+- **`ExecuteRenames`** performs the planned renames via `os.Rename`. A
+  destination that has appeared on the filesystem since planning (e.g. a
+  concurrent process) is treated as a race condition — skipped with a warning,
+  not an error — again matching `executor.Execute`'s existing behavior for the
+  main `rename` command's equivalent check. A genuine rename failure (e.g. a
+  permissions error) still stops the run immediately.
+
+`--dry-run` prints the planned renames without touching the filesystem, the same
+flag name and behavior as the main `rename` command.
+
 ## 8. Navidrome Playlist Sync (Implemented)
 
 This is distinct from §7: the Navidrome use case is SMB-mounted, so audio files
@@ -1875,15 +1933,18 @@ one place strict error handling is non-negotiable rather than a nicety.
 - **`playlist select` only touches album-local manifests** (`{target}.m3u8`,
   §7.3) — a single album's checkbox-selected track list. It does not touch the
   global `playlists/` tree (§7.4), which stays hand-authored text files using
-  the `#PLAYLIST:`/`#NAVIDROME-ID:` header conventions (§8.4).
+  the `#PLAYLIST:`/`#NAVIDROME-ID:` header conventions (§8.4) —
+  `playlist rename` (§7.13) is the one exception, and it only ever touches the
+  filename, never the file's content.
 
 ### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
 
-Tooling beyond `playlist select` for the global `playlists/` tree (§7.4) — e.g.
-`playlist create <name> [--targets]` to scaffold a new file with correctly
-formatted `#PLAYLIST:`/`#TARGETS:` headers, reordering, editing a playlist's
-`#TARGETS:` scope, or repairing malformed headers — is deferred as a later phase
-of this same work, alongside the video/Rockbox pipeline (§6.5) and the on-device
-sync mechanism (§7) itself. `playlist select`'s narrower album-manifest scope
-covers the immediate need; the global-playlist authoring experience remains
+Tooling beyond `playlist select`/`playlist rename` for the global `playlists/`
+tree (§7.4) — e.g. `playlist create <name> [--targets]` to scaffold a new file
+with correctly formatted `#PLAYLIST:`/`#TARGETS:` headers, reordering, editing a
+playlist's `#TARGETS:` scope, or repairing malformed headers — is deferred as a
+later phase of this same work, alongside the video/Rockbox pipeline (§6.5) and
+the on-device sync mechanism (§7) itself. `playlist select`'s narrower
+album-manifest scope, plus `playlist rename`'s narrow filename-only scope, cover
+the immediate need; the rest of the global-playlist authoring experience remains
 manual (a text editor) until this phase is picked up.

@@ -208,6 +208,20 @@ select* writes) are reported by *mrr check* instead, not here.
 
 If _library-root-root_ is omitted it defaults to the current directory.
 
+## mrr playlist rename [_library-root-root_]
+
+Scans the same *playlists/* tree as *playlist check* and renames each file
+to a filesystem-safe name derived from its *#PLAYLIST:* directive.
+
+A file with no *#PLAYLIST:* directive, or one whose name sanitizes to an
+empty string, is skipped and reported rather than treated as an error. A
+file already at its correctly-sanitized name produces no output at all.
+
+If _library-root-root_ is omitted it defaults to the current directory.
+
+*--dry-run*
+	Preview all planned renames without touching the filesystem.
+
 ## mrr sync ipod <_device-path_> [_path_]
 
 Syncs the library to an iPod running Rockbox (https://www.rockbox.org)
