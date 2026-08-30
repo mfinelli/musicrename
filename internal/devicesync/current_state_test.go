@@ -83,6 +83,38 @@ func TestCurrentState(t *testing.T) {
 		assert.False(t, got.HasSrcHash, "a passthrough file must have no sidecar entry")
 	})
 
+	t.Run("populates Size from the actual on-device file, not the sums.md5 entry", func(t *testing.T) {
+		device := t.TempDir()
+		album := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(album, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(album, "01 track.flac"), []byte("0123456789"), 0644))
+		writeSums(t, album, hasher.SumsFilename, map[string]string{
+			"01 track.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		})
+
+		result, err := CurrentState(device, "ipod")
+		require.NoError(t, err)
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		require.Contains(t, result.Entries, entry)
+		assert.EqualValues(t, 10, result.Entries[entry].Size)
+	})
+
+	t.Run("a file listed in sums.md5 but missing from disk gets a zero Size, not an error", func(t *testing.T) {
+		device := t.TempDir()
+		album := filepath.Join(device, "main", "a", "artist", "album")
+		writeSums(t, album, hasher.SumsFilename, map[string]string{
+			"01 track.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		})
+
+		result, err := CurrentState(device, "ipod")
+		require.NoError(t, err)
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		require.Contains(t, result.Entries, entry)
+		assert.EqualValues(t, 0, result.Entries[entry].Size)
+	})
+
 	t.Run("a derived file's sidecar src hash is attached alongside its device hash", func(t *testing.T) {
 		device := t.TempDir()
 		album := filepath.Join(device, "main", "a", "artist", "album")

@@ -1095,16 +1095,33 @@ recopy.
    root's top-level device directory — mirroring `rename`'s existing
    empty-directory cleanup (§4.2).
 
-4. **Capacity check:** no `du` is needed anywhere. Free space on the device is
-   read via a single `Statfs` call (`golang.org/x/sys/unix.Statfs`, portable
-   across Linux and macOS's BSD-family syscall with a small per-OS build-tag
-   split if needed); the size of additions/regenerations is already known from
-   source-side `stat` calls made during planning, and space reclaimed by
-   deletions is already known from the device-tree walk in step 2 — so the plan
-   reports "requires X MB more, Y MB will be freed, Z MB available" without ever
-   touching `du`. This step depends on step 3's diff to know how much needs
-   adding — it isn't independently useful on its own the way `Statfs`'s raw
-   free-space read is.
+4. **Capacity check (implemented):** no `du` is needed anywhere.
+   `internal/devicesync`, `CheckCapacity` builds a `CapacityReport` from three
+   numbers, none requiring a directory-size walk: `NeededBytes` sums each
+   add/regenerate entry's _source_ file size (a deliberate approximation — the
+   eventual on-device size for a transcode or resize isn't known without doing
+   the work, and this tends to overestimate for transcoding targets, which is
+   the conservative direction to be wrong in); `FreedBytes` sums each delete
+   entry's already-known on-device size (`CurrentState`'s own `os.Stat` during
+   its walk, extended with a `Size` field for exactly this); `AvailableBytes`
+   comes from one `Statfs` call against the device
+   (`golang.org/x/sys/unix.Statfs`, restricted to `linux || darwin` via a build
+   tag). `Sufficient()` credits space freed by the plan's own deletions against
+   what's needed, since deletions always happen before anything needing that
+   room. This step depends on step 3's diff to know how much needs adding — it
+   isn't independently useful on its own the way `Statfs`'s raw free-space read
+   is.
+
+   `unix.Statfs_t`'s field names (`Bavail`, `Bsize`) are the same on Linux and
+   macOS, but their underlying integer types differ by platform, so explicit
+   conversions — not a per-OS file split — are what make one implementation safe
+   for both; confirmed against a real, shipped cross-platform tool using this
+   identical pattern (the `lf` file manager's `df_statfs.go`), and the Linux
+   path specifically was compiled and actually run against a real filesystem
+   during development, not just reasoned about from documentation. The Darwin
+   path is unverified here (no macOS available) but shares the same code, not a
+   separate, less-tested implementation.
+
 5. **Output:** dry-run is always available first. Default output is a summary —
    counts and total bytes for add / regenerate / delete-file / delete-dir, plus
    the capacity delta from step 4. `--verbose` itemizes every add and regenerate

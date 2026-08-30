@@ -46,6 +46,11 @@ type DeviceEntry struct {
 	// passthrough file, or for a derived file whose sidecar entry is
 	// itself missing or stale).
 	HasSrcHash bool
+	// Size is the on-device file's actual size in bytes, from a plain
+	// os.Stat during the same walk that reads sums.md5 (not from the
+	// hash file itself, which doesn't record size). Used for capacity
+	// planning to know how much space a deletion would actually free.
+	Size int64
 }
 
 // CurrentStateResult is the output of [CurrentState].
@@ -134,6 +139,9 @@ func CurrentState(devicePath, targetName string) (*CurrentStateResult, error) {
 				if srcHash, ok := srcSums[name]; ok {
 					de.SrcHash = srcHash
 					de.HasSrcHash = true
+				}
+				if info, statErr := os.Stat(filepath.Join(albumDir, name)); statErr == nil {
+					de.Size = info.Size()
 				}
 				result.Entries[entry] = de
 			}
