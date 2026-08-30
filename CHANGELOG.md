@@ -4,6 +4,26 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v4.0.0 — 2026-08-30
+
+Add playlist management. Album-local `{target}.m3u8` manifests (managed with the
+new `playlist select`) mark which tracks in an album are included for a device
+sync target; library-wide playlists under a new `playlists/` tree can span
+albums and library roots. `playlist check` audits the latter for broken
+references, unrecognized targets, and duplicate IDs.
+
+Add Navidrome sync. `login`/`logout` store server credentials, and
+`sync navidrome pull`/`push`/`delete` keep the `playlists/` tree in sync with a
+Navidrome server bidirectionally, over the Subsonic-compatible API.
+
+Add device sync. `sync ipod` and `sync sdcard` copy tracks selected via
+`playlist select` onto a mounted iPod or SD card, keeping the device in sync
+with the library (adding, updating, and removing files as needed) without ever
+touching the library itself. `ipod` copies audio through unchanged and ships
+artwork separately; `sdcard` transcodes to MP3 and embeds artwork directly, for
+players that need it. Checks free space and asks for confirmation before
+changing anything; `--dry-run` and `--verbose` are both supported.
+
 ## v3.4.0 — 2026-08-27
 
 Add support for managing music videos as a completely separate library, with its
