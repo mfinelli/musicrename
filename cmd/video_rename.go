@@ -35,23 +35,29 @@ var videoRenameCmd = &cobra.Command{
 	Use:   "rename [video-root]",
 	Short: "Reconcile video locations with their musicvideo.nfo metadata",
 	Long: `Scans video-root for videos, reads each musicvideo.nfo, and moves any
-video — along with its nfo and info.txt, if present — whose current location
-no longer matches its Artist/Title. This picks up drift from 'video edit'
-changing artist/title, a video that was placed (or its nfo created) by hand,
-or a bucket-override/sanitization rule changing.
+video along with its nfo, info.txt (if present), and sums.md5 (if present)
+whose current location no longer matches its Artist/Title. This picks up
+drift from 'video edit' changing artist/title, a video that was placed (or
+its nfo created) by hand, or a bucket-override/sanitization rule changing.
 
 A video directory with no musicvideo.nfo, or with more than one video file,
 is skipped with a warning rather than guessed at.
 
 If video-root is omitted it defaults to the current working directory.
 
-With --dry-run, prints the planned moves without touching any files.`,
+With --dry-run, prints the planned moves without touching any files.
+
+sums.md5 always travels along with a moved video directory. If the video's
+filename also changed (title-driven, so it can differ from the directory
+move) and sums.md5 exists, that one entry's filename is updated
+in place. Pass --skip-md5 to still move sums.md5 but leave its content alone.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runVideoRename,
 }
 
 func init() {
 	videoRenameCmd.Flags().Bool("dry-run", false, "Print planned moves without making any changes")
+	videoRenameCmd.Flags().Bool("skip-md5", false, "Move sums.md5 along with the directory but do not update its entries")
 	videoCmd.AddCommand(videoRenameCmd)
 }
 
@@ -81,6 +87,8 @@ func runVideoRename(cmd *cobra.Command, args []string) error {
 
 	printVideoRunPlan(out, plan)
 
+	skipMD5, _ := cmd.Flags().GetBool("skip-md5")
+
 	// On an interactive terminal, print a \r progress line for each move so
 	// the user has live feedback during execution. On a non-TTY (redirected
 	// output, etc) the callback is nil and no progress is written.
@@ -91,7 +99,7 @@ func runVideoRename(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	result, err := video.Execute(plan, absRoot, progress)
+	result, err := video.Execute(plan, absRoot, skipMD5, progress)
 	if err != nil {
 		return fmt.Errorf("executing moves: %w", err)
 	}

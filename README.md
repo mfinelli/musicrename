@@ -138,6 +138,133 @@ mrr inspect "01 back in black.flac"
   character determines the directory bucket (`b/` for "Beatles, The") while the
   folder name still comes from `ALBUMARTIST` ("the beatles").
 
+## Playlists & Sync
+
+Two kinds of playlist exist. **Album-local target manifests** (`ipod.m3u8`,
+`sdcard.m3u8`) live inside an album directory and list which tracks are selected
+for a device sync target; managed with `playlist select`. **Library-wide
+playlists** live under a top-level `playlists/` directory (a sibling of the
+library root, not inside it) and can span albums and library roots.
+
+### Playlist File Format
+
+Library-wide playlist files carry optional directive lines at the top, followed
+by one path per line (relative to the directory containing the library root):
+
+```
+#PLAYLIST:Road Trip
+#NAVIDROME-ID:abc-123
+#TARGETS:ipod,sdcard
+main/b/beyonce/[2003] dangerously in love/01 crazy in love.flac
+christmas/m/mariah carey/[1994] merry christmas/01 all i want for christmas is you.flac
+```
+
+| Directive          | Meaning                                                       |
+| ------------------ | ------------------------------------------------------------- |
+| `#PLAYLIST:name`   | Display name, independent of the sanitized filename           |
+| `#NAVIDROME-ID:id` | Correlated Navidrome playlist ID; absent if never pushed      |
+| `#TARGETS:...`     | Which sync targets this applies to; absent means every target |
+
+### Device Sync Workflow
+
+```sh
+mrr playlist select ipod        # choose which tracks to include, per album
+mrr sync ipod /media/you/IPOD   # copy them to the device
+```
+
+Only tracks selected for a target are copied to it. Each sync compares the
+library against whatever's already on the device, adds anything missing, updates
+anything changed, and removes anything no longer selected (removals only ever
+affect the device copy, never the source library). Free space on the device is
+checked and confirmation is required before anything changes.
+
+`ipod` copies FLAC/MP3/M4A through unchanged and ships artwork as a separate
+file; `sdcard` transcodes anything that isn't already MP3 and embeds artwork
+directly into each track, since car head units commonly can't play FLAC or show
+an external cover file at all.
+
+### Navidrome Sync Workflow
+
+```sh
+mrr login                    # store server credentials, once
+mrr sync navidrome pull      # bring playlists/ up to date from the server
+#  ... edit playlists locally ...
+mrr sync navidrome push      # send those edits back
+```
+
+Both directions overwrite the side being synced _to_, completely (treat pull ->
+edit -> push as a checkout/check-in, not a continuous merge). Editing a playlist
+on the server while a pull-edit-push session is open gets overwritten by the
+eventual push.
+
+### Playlist & Sync Commands
+
+#### `login` / `logout`
+
+Stores or clears Navidrome server credentials. The password is prompted (masked)
+by default, or piped via `--password-stdin`.
+
+```sh
+mrr login --url https://nav.example.com --username mario
+pass show navidrome | mrr login --url https://nav.example.com --username mario --password-stdin
+mrr logout
+```
+
+#### `playlist select`
+
+Interactive checkbox editor for an album's `{target}.m3u8`. Pre-checks
+whatever's already selected; a stale entry (no longer matching a track in the
+album) shows up flagged and can be unchecked to remove it.
+
+```sh
+mrr playlist select ipod ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
+```
+
+#### `playlist check`
+
+Audits the `playlists/` tree for broken entries, unrecognized `#TARGETS:` names,
+and duplicate `#NAVIDROME-ID` values. Read-only; exits non-zero on findings.
+(Findings for album-local `{target}.m3u8` manifests are reported by `mrr check`
+instead.)
+
+```sh
+mrr playlist check ~/music
+```
+
+#### `sync ipod` / `sync sdcard`
+
+Compares the library against the device, checks free space, then asks for
+confirmation before adding, updating, or removing anything. `--dry-run` previews
+without changing anything; `--verbose` lists every file instead of just totals;
+`--yes` skips the confirmation prompt.
+
+```sh
+mrr sync ipod /media/you/IPOD
+mrr sync sdcard /media/you/SDCARD --dry-run
+```
+
+#### `sync navidrome pull` / `push`
+
+Pull overwrites `playlists/` with the server's current content; push overwrites
+the server with local content. Both accept an optional single playlist path to
+operate on just one instead of everything.
+
+```sh
+mrr sync navidrome pull
+mrr sync navidrome push --dry-run
+mrr sync navidrome pull playlists/road-trip.m3u8
+```
+
+#### `sync navidrome delete`
+
+Permanently deletes one playlist, remotely and locally. Requires the playlist to
+already have a `#NAVIDROME-ID` (i.e. it's been pushed at least once). Prompts
+for confirmation unless `--yes` is passed.
+
+```sh
+mrr sync navidrome delete playlists/old-mix.m3u8
+```
+
 ## Video Support
 
 Music videos (one video per track) are managed as a tree completely separate

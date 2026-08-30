@@ -834,3 +834,268 @@ func TestCheckTrack(t *testing.T) {
 		assert.Nil(t, findWarning(ar, "filename does not match spec"))
 	})
 }
+
+func TestCheckPlaylists(t *testing.T) {
+	t.Run("manifest for an unrecognized target produces a warning", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "xbox.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte("01 track.flac\n"), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		w := findWarning(ar, "unrecognized target")
+		require.NotNil(t, w)
+		assert.Equal(t, manifestPath, w.Path)
+		assert.Contains(t, w.Message, `"xbox"`)
+	})
+
+	t.Run("recognized target with a stale entry produces a warning", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte(
+			"01 track.flac\n02 renamed since.flac\n",
+		), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		w := findWarning(ar, "stale entry")
+		require.NotNil(t, w)
+		assert.Equal(t, manifestPath, w.Path)
+		assert.Contains(t, w.Message, `"02 renamed since.flac"`)
+		// The still-valid entry must not also be flagged.
+		assert.Nil(t, findWarning(ar, `stale entry "01 track.flac"`))
+	})
+
+	t.Run("recognized target with every entry matching a track: no warnings", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte("01 track.flac\n"), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("unrecognized target manifest is not also checked for stale entries", func(t *testing.T) {
+		dir := t.TempDir()
+		manifestPath := filepath.Join(dir, "xbox.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte("nonexistent.flac\n"), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist", nil,
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		// Exactly one warning (the unrecognized-target one), not a second
+		// "stale entry" warning piled on top.
+		require.Len(t, ar.Warnings, 1)
+		assert.Contains(t, ar.Warnings[0].Message, "unrecognized target")
+	})
+
+	t.Run("non-.m3u8 root text files are ignored", func(t *testing.T) {
+		dir := t.TempDir()
+		album := makeCheckerAlbum(dir, "Artist", nil, map[metadata.FileCategory][]string{
+			metadata.CatRootText: {filepath.Join(dir, "notes.txt")},
+		})
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("album with no manifests produces no warnings", func(t *testing.T) {
+		dir := t.TempDir()
+		album := makeCheckerAlbum(dir, "Artist", nil, nil)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+}
+
+func TestCheckPlaylistsGlobal(t *testing.T) {
+	t.Run("no playlists/ directory at all is not an error", func(t *testing.T) {
+		root := t.TempDir()
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("empty playlists/ directory produces no warnings", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("entry resolving to a real file produces no warning", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "main", "a", "artist", "album"), 0o755))
+		trackRel := filepath.Join("main", "a", "artist", "album", "01 track.flac")
+		require.NoError(t, os.WriteFile(filepath.Join(root, trackRel), []byte("audio"), 0o644))
+
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "roadtrip.m3u8"),
+			[]byte("#PLAYLIST:Road Trip\n"+filepath.ToSlash(trackRel)+"\n"),
+			0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("entry that does not resolve to any file produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte(
+			"main/a/artist/album/01 does not exist.flac\n",
+		), 0o644))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "does not resolve")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+	})
+
+	t.Run("checks target-specific subdirectories too", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists", "ipod"), 0o755))
+		path := filepath.Join(root, "playlists", "ipod", "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("missing.flac\n"), 0o644))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		require.NotNil(t, findPlaylistWarning(result, "does not resolve"))
+	})
+
+	t.Run("duplicate #NAVIDROME-ID across two files warns on both", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		pathA := filepath.Join(root, "playlists", "a.m3u8")
+		pathB := filepath.Join(root, "playlists", "b.m3u8")
+		require.NoError(t, os.WriteFile(pathA, []byte("#NAVIDROME-ID:dup123\n"), 0o644))
+		require.NoError(t, os.WriteFile(pathB, []byte("#NAVIDROME-ID:dup123\n"), 0o644))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+
+		wa := findPlaylistWarning(result, "duplicate #NAVIDROME-ID")
+		require.NotNil(t, wa)
+
+		var paths []string
+		for _, w := range result.Warnings {
+			if strings.Contains(w.Message, "duplicate #NAVIDROME-ID") {
+				paths = append(paths, w.Path)
+			}
+		}
+		assert.ElementsMatch(t, []string{pathA, pathB}, paths)
+	})
+
+	t.Run("unique #NAVIDROME-ID values across files produce no warning", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "a.m3u8"), []byte("#NAVIDROME-ID:one\n"), 0o644,
+		))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "b.m3u8"), []byte("#NAVIDROME-ID:two\n"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Nil(t, findPlaylistWarning(result, "duplicate"))
+	})
+
+	t.Run("non-.m3u8 files in playlists/ are ignored", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "README.md"), []byte("not a playlist"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("unrecognized name in #TARGETS: produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#TARGETS:ipod,xbox\n"), 0o644))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "unrecognized target")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+		assert.Contains(t, w.Message, `"xbox"`)
+	})
+
+	t.Run("every #TARGETS: name recognized produces no warning", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#TARGETS:ipod,sdcard\n"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("no #TARGETS: directive at all produces no warning", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("subdirectories under playlists/ are walked recursively", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists", "roadtrips"), 0o755))
+		path := filepath.Join(root, "playlists", "roadtrips", "summer.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#TARGETS:xbox\n"), 0o644))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "unrecognized target")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+	})
+}
+
+func findPlaylistWarning(result *PlaylistResult, substr string) *PlaylistWarning {
+	for i, w := range result.Warnings {
+		if strings.Contains(w.Message, substr) {
+			return &result.Warnings[i]
+		}
+	}
+	return nil
+}

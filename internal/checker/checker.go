@@ -39,12 +39,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"go.senan.xyz/taglib"
 
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
+	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/target"
 )
 
 // Warning represents a single finding discovered during a check run.
@@ -165,6 +169,7 @@ func checkAlbum(album *metadata.Album, libraryRoot string) (*AlbumResult, error)
 	checkIntegrity(album, ar)
 	checkUnknownFiles(album, ar)
 	checkNaming(album, libraryRoot, ar)
+	checkPlaylists(album, ar)
 
 	return ar, nil
 }
@@ -479,4 +484,177 @@ func checkNaming(album *metadata.Album, libraryRoot string, ar *AlbumResult) {
 			})
 		}
 	}
+}
+
+// checkPlaylists warns about album-local target selection manifests
+// ({target}.m3u8) found in the album:
+//
+//   - A manifest for an unrecognized target name (e.g. a stray "xbox.m3u8"
+//     which is most likely a typo or leftover cruft, since target names are a
+//     small, hardcoded set, internal/target).
+//   - For a manifest whose target name *is* recognized, any entry that no
+//     longer matches a filename among the tracks currently found in the
+//     album (the same "stale entry" condition `playlist select` detects
+//     interactively, surfaced here as a passive audit finding instead). Not
+//     checked for an unrecognized-target manifest, since that manifest is
+//     already flagged as a whole.
+//
+// This does not check the library-wide playlists/ tree which has no
+// per-album scope and is audited separately by `musicrename playlist check`
+// instead.
+func checkPlaylists(album *metadata.Album, ar *AlbumResult) {
+	trackNames := make(map[string]bool, len(album.Tracks))
+	for _, t := range album.Tracks {
+		trackNames[filepath.Base(t.Path)] = true
+	}
+
+	for _, path := range album.Assets[metadata.CatRootText] {
+		if strings.ToLower(filepath.Ext(path)) != ".m3u8" {
+			continue
+		}
+
+		targetName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+
+		if !target.Valid(targetName) {
+			ar.Warnings = append(ar.Warnings, Warning{
+				Path:    path,
+				Message: fmt.Sprintf("playlist manifest for unrecognized target %q", targetName),
+			})
+			continue
+		}
+
+		names, err := playlist.ReadManifest(album.RootPath, targetName)
+		if err != nil {
+			ar.Warnings = append(ar.Warnings, Warning{
+				Path:    path,
+				Message: fmt.Sprintf("could not read manifest: %v", err),
+			})
+			continue
+		}
+
+		for _, n := range names {
+			if !trackNames[n] {
+				ar.Warnings = append(ar.Warnings, Warning{
+					Path:    path,
+					Message: fmt.Sprintf("stale entry %q: no matching track found in album", n),
+				})
+			}
+		}
+	}
+}
+
+// PlaylistWarning represents a single finding discovered while auditing the
+// library-wide playlists/ tree, via [CheckPlaylists].
+type PlaylistWarning struct {
+	// Path is the absolute path of the playlist file the finding relates to.
+	Path string
+	// Message describes the finding in human-readable form.
+	Message string
+}
+
+// PlaylistResult is the complete output of a [CheckPlaylists] run.
+type PlaylistResult struct {
+	Warnings []PlaylistWarning
+}
+
+// HasWarnings reports whether any findings were discovered.
+func (r *PlaylistResult) HasWarnings() bool {
+	return len(r.Warnings) > 0
+}
+
+// CheckPlaylists audits the library-wide playlists/ tree rooted at
+// libraryRootRoot: walked recursively, since playlists live flat as
+// playlists/*.m3u8 and any subdirectories are purely organizational
+// and reports:
+//
+//   - An entry whose path (relative to libraryRootRoot) does not resolve to
+//     an actual file anywhere under it.
+//   - An unrecognized target name inside a #TARGETS: directive.
+//   - Two or more playlist files sharing the same #NAVIDROME-ID directive.
+//     Under the one-file-per-playlist structure this is never legitimate, so
+//     any duplicate is reported unconditionally (target scope is expressed
+//     via the #TARGETS: directive inside a single canonical file).
+//
+// A libraryRootRoot with no playlists/ directory at all is not an error; it
+// simply produces an empty PlaylistResult.
+//
+// This does not check album-local target manifests ({target}.m3u8 inside an
+// album directory) those follow CheckAlbum/CheckLibrary's per-album scope
+// model instead, via checkPlaylists.
+func CheckPlaylists(libraryRootRoot string) (*PlaylistResult, error) {
+	result := &PlaylistResult{}
+
+	// id -> every playlist file path that declares it, for the duplicate
+	// #NAVIDROME-ID check below.
+	navidromeIDs := make(map[string][]string)
+
+	err := playlist.WalkTree(libraryRootRoot, func(path string) error {
+		entries, err := playlist.ReadEntries(path)
+		if err != nil {
+			result.Warnings = append(result.Warnings, PlaylistWarning{
+				Path:    path,
+				Message: fmt.Sprintf("could not read playlist: %v", err),
+			})
+			return nil
+		}
+		for _, entry := range entries {
+			if _, statErr := os.Stat(filepath.Join(libraryRootRoot, entry)); statErr != nil {
+				result.Warnings = append(result.Warnings, PlaylistWarning{
+					Path:    path,
+					Message: fmt.Sprintf("entry %q does not resolve to a file", entry),
+				})
+			}
+		}
+
+		if id, ok, err := playlist.ReadNavidromeID(path); err == nil && ok {
+			navidromeIDs[id] = append(navidromeIDs[id], path)
+		}
+
+		if names, ok, err := playlist.ReadTargets(path); err == nil && ok {
+			for _, name := range names {
+				if !target.Valid(name) {
+					result.Warnings = append(result.Warnings, PlaylistWarning{
+						Path:    path,
+						Message: fmt.Sprintf("#TARGETS: references unrecognized target %q", name),
+					})
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for id, paths := range navidromeIDs {
+		if len(paths) < 2 {
+			continue
+		}
+		sort.Strings(paths)
+		for _, p := range paths {
+			others := make([]string, 0, len(paths)-1)
+			for _, other := range paths {
+				if other != p {
+					others = append(others, other)
+				}
+			}
+			result.Warnings = append(result.Warnings, PlaylistWarning{
+				Path: p,
+				Message: fmt.Sprintf(
+					"duplicate #NAVIDROME-ID %s also used by %s",
+					id, strings.Join(others, ", "),
+				),
+			})
+		}
+	}
+
+	sort.Slice(result.Warnings, func(i, j int) bool {
+		if result.Warnings[i].Path != result.Warnings[j].Path {
+			return result.Warnings[i].Path < result.Warnings[j].Path
+		}
+		return result.Warnings[i].Message < result.Warnings[j].Message
+	})
+
+	return result, nil
 }

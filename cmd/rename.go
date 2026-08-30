@@ -32,6 +32,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/executor"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
+	"github.com/mfinelli/musicrename/internal/renamesync"
 )
 
 // Lipgloss styles for the dry-run output. Defined at package level so they are
@@ -58,13 +59,24 @@ and moves them into a normalized directory hierarchy.
 
 If library-root is omitted it defaults to the current working directory.
 
-With --dry-run, prints the planned moves without touching any files.`,
+With --dry-run, prints the planned moves without touching any files.
+
+After a real (non-dry-run) run, for every file whose path relative to its
+own album root actually changed (a real filename change, or a case-only
+rename), sums.md5 is updated in place if it exists. Pass --skip-md5 to avoid
+this behavior.
+
+For renamed audio tracks specifically, any {target}.m3u8 selection manifest
+(e.g. ipod.m3u8) referencing the old filename is updated to the new one the
+same way. Pass --skip-playlists to leave these alone instead.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runRename,
 }
 
 func init() {
 	renameCmd.Flags().Bool("dry-run", false, "Print planned moves without making any changes")
+	renameCmd.Flags().Bool("skip-md5", false, "Do not update sums.md5 entries for renamed files")
+	renameCmd.Flags().Bool("skip-playlists", false, "Do not update {target}.m3u8 entries for renamed audio files")
 	rootCmd.AddCommand(renameCmd)
 }
 
@@ -128,6 +140,10 @@ func runRename(cmd *cobra.Command, args []string) error {
 	if progress != nil {
 		fmt.Fprint(out, "\r\033[K")
 	}
+
+	skipMD5, _ := cmd.Flags().GetBool("skip-md5")
+	skipPlaylists, _ := cmd.Flags().GetBool("skip-playlists")
+	execWarnings = append(execWarnings, renamesync.Sync(plan, skipMD5, skipPlaylists)...)
 
 	// Phase 2: surface all warnings (planner + executor) and the summary line.
 	printRunSummary(out, plan, execWarnings)
