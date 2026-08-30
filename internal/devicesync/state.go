@@ -118,6 +118,71 @@ func findPrimaryArt(albumDir string) (name string, found bool, err error) {
 	return "", false, nil
 }
 
+// deviceRelFor returns the on-device relative path for a desired entry's
+// source-relative path rel, given def (which may differ from rel itself
+// whenever the on-device file's extension isn't the same as the source's).
+//
+// This exists because a desired entry's own Rel always reflects the
+// *source* file (e.g., "01 track.flac"), not the target-specific result
+// of producing it but two of this project's established behaviors mean the
+// two can differ:
+//
+//   - An audio file whose source extension isn't in def's accepted formats
+//     gets transcoded to def's TranscodeFormat, which very often has a
+//     different extension (a FLAC source destined for `sdcard` becomes an
+//     .mp3 on-device).
+//   - Any primary artwork file always ends up as a JPEG on-device
+//     (internal/artwork.Resize always outputs JPEG, even for an
+//     already-fitting source and a PNG source is always converted), so
+//     a "folder.png" source becomes "folder.jpg" on-device.
+//
+// Without translating between the two, nothing that compares a source-keyed
+// desired entry against an on-device-keyed current entry  could ever match a
+// transcoded or format-converted file, no matter how correctly it's already
+// synced and so every such file would look permanently missing and,
+// simultaneously, its real on-device file would look like an orphan to be
+// deleted.
+func deviceRelFor(rel string, def target.Definition) string {
+	base := filepath.Base(rel)
+
+	if isArtworkName(base) {
+		// The stem is always effectively "folder" case-insensitively (that's
+		// what isArtworkName just confirmed) so canonicalize the whole
+		// filename, not just the extension, so a source named e.g.
+		// "Folder.JPG" doesn't produce a different on-device filename than
+		// one already named "folder.jpg" would.
+		return filepath.ToSlash(filepath.Join(filepath.Dir(rel), "folder.jpg"))
+	}
+
+	ext := strings.ToLower(filepath.Ext(rel))
+	if def.Accepts(ext) {
+		return rel
+	}
+
+	params, ok := target.EncodeParamsFor(def.TranscodeFormat)
+	if !ok {
+		// Shouldn't happen for a valid Definition (every TranscodeFormat a
+		// real target names has matching EncodeParams, enforced by
+		// internal/target's tests) but fall back to the source name
+		// rather than guessing or panicking.
+		return rel
+	}
+	stem := strings.TrimSuffix(rel, filepath.Ext(rel))
+	return stem + params.Ext
+}
+
+// isArtworkName reports whether name (a bare filename, not a path) is a
+// primary artwork filename (case-insensitive).
+func isArtworkName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, artName := range primaryArtFilenames {
+		if lower == artName {
+			return true
+		}
+	}
+	return false
+}
+
 // DesiredState computes the full desired-state set for targetName: the union,
 // across every library root ([LibraryRoots]), of every album's {target}.m3u8
 // entries, plus every entry from a library-wide playlist whose #TARGETS:

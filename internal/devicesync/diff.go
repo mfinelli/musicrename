@@ -135,6 +135,18 @@ type DiffResult struct {
 // doesn't apply) whenever the audio comparison above already failed (there's
 // no reason to also check artwork when the entry's going to regenerate
 // regardless) and for a non-embedding target, where it never runs at all.
+//
+// current.Entries is looked up by [deviceRelFor]'s translation of each
+// desired entry, not the entry itself (a desired entry's Rel always
+// reflects its *source* file, but the on-device file it corresponds to can
+// have a different extension like a transcoded audio file, or artwork that
+// went through a PNG-to-JPEG conversion). Comparing untranslated would mean
+// a correctly-synced transcoded file could never be recognized as present:
+// it would look permanently missing (added again) while its real,
+// already-correct on-device file looks orphaned (deleted) on every
+// single sync. PlannedChange.Entry itself stays source-keyed regardless
+// (callers locating the source file need that), only the lookup key
+// changes.
 func Diff(
 	libraryRootRoot, targetName string, desired *DesiredStateResult, current *CurrentStateResult,
 ) (*DiffResult, error) {
@@ -144,7 +156,9 @@ func Diff(
 	}
 
 	result := &DiffResult{}
-	desiredSet := make(map[DesiredEntry]bool, len(desired.Entries))
+	// Keyed by the translated on-device entry ([deviceRelFor]), not the
+	// raw desired entry.
+	desiredDeviceSet := make(map[DesiredEntry]bool, len(desired.Entries))
 
 	// album directory -> (filename -> source hash), read at most once per
 	// album regardless of how many of its files are desired.
@@ -171,9 +185,18 @@ func Diff(
 	}
 
 	for _, entry := range desired.Entries {
-		desiredSet[entry] = true
+		// current.Entries is keyed by whatever's actually on the device,
+		// which is not always entry itself: a transcoded audio file or a
+		// format-converted artwork file ends up under a different
+		// extension on-device than its source has. Comparing against the
+		// untranslated entry would mean a correctly-synced transcoded
+		// file could never match resulting in permanently looking both
+		// missing (so it gets added again) and orphaned (so its real,
+		// correct on-device file gets deleted) on every single sync.
+		deviceEntry := DesiredEntry{Root: entry.Root, Rel: deviceRelFor(entry.Rel, def)}
+		desiredDeviceSet[deviceEntry] = true
 
-		dev, onDevice := current.Entries[entry]
+		dev, onDevice := current.Entries[deviceEntry]
 		if !onDevice {
 			result.Changes = append(result.Changes, PlannedChange{Entry: entry, Action: ActionAdd})
 			continue
@@ -216,7 +239,7 @@ func Diff(
 	}
 
 	for entry := range current.Entries {
-		if !desiredSet[entry] {
+		if !desiredDeviceSet[entry] {
 			result.Changes = append(result.Changes, PlannedChange{Entry: entry, Action: ActionDelete})
 		}
 	}

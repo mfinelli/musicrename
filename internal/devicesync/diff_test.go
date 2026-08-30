@@ -114,12 +114,15 @@ func TestDiff(t *testing.T) {
 		writeSums(t, album, "sums.md5", map[string]string{"01 track.flac": fakeHash(1)})
 
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		// sdcard transcodes .flac -> .mp3, so the on-device key differs
+		// from the source-keyed desired entry.
+		deviceEntry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
 		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
 		current := &CurrentStateResult{Entries: map[DesiredEntry]DeviceEntry{
 			// Device hash (the transcoded/resized bytes) never matches
 			// source's raw hash, only the sidecar comparison can confirm
 			// this is unchanged.
-			entry: {Hash: fakeHash(99), SrcHash: fakeHash(1), HasSrcHash: true},
+			deviceEntry: {Hash: fakeHash(99), SrcHash: fakeHash(1), HasSrcHash: true},
 		}}
 
 		result, err := Diff(root, "sdcard", desired, current)
@@ -135,9 +138,12 @@ func TestDiff(t *testing.T) {
 		writeSums(t, album, "sums.md5", map[string]string{"01 track.flac": fakeHash(2)}) // source changed
 
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		// sdcard transcodes .flac -> .mp3, so the on-device key differs
+		// from the source-keyed desired entry.
+		deviceEntry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
 		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
 		current := &CurrentStateResult{Entries: map[DesiredEntry]DeviceEntry{
-			entry: {Hash: fakeHash(99), SrcHash: fakeHash(1), HasSrcHash: true}, // recorded for the OLD source
+			deviceEntry: {Hash: fakeHash(99), SrcHash: fakeHash(1), HasSrcHash: true}, // recorded for the OLD source
 		}}
 
 		result, err := Diff(root, "sdcard", desired, current)
@@ -154,9 +160,10 @@ func TestDiff(t *testing.T) {
 		writeSums(t, album, "sums.md5", map[string]string{"01 track.flac": fakeHash(1)})
 
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		deviceEntry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
 		desired := &DesiredStateResult{Entries: []DesiredEntry{entry}}
 		current := &CurrentStateResult{Entries: map[DesiredEntry]DeviceEntry{
-			entry: {Hash: fakeHash(99), HasSrcHash: false}, // neither check can succeed
+			deviceEntry: {Hash: fakeHash(99), HasSrcHash: false}, // neither check can succeed
 		}}
 
 		result, err := Diff(root, "sdcard", desired, current)
@@ -387,6 +394,54 @@ func TestDiff(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, result.Changes, 1)
 		assert.Equal(t, ActionSkip, result.Changes[0].Action)
+	})
+
+	t.Run("a correctly-synced transcoded track is recognized as skip, not perpetually re-added", func(t *testing.T) {
+		// Regression test: entry.Rel always reflects the SOURCE file
+		// ("...01 track.flac"), but a transcoding target's on-device file
+		// has a different extension ("...01 track.mp3"). Before
+		// deviceRelFor's fix, this comparison always missed, since
+		// current.Entries is keyed by the real on-device filename.
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.flac"))
+		writeSums(t, album, "sums.md5", map[string]string{"01 track.flac": fakeHash(1)})
+
+		desiredEntry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		deviceEntry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
+
+		desired := &DesiredStateResult{Entries: []DesiredEntry{desiredEntry}}
+		current := &CurrentStateResult{Entries: map[DesiredEntry]DeviceEntry{
+			// Correctly synced already: sidecar's recorded source hash
+			// matches the current source hash.
+			deviceEntry: {Hash: fakeHash(99), HasSrcHash: true, SrcHash: fakeHash(1)},
+		}}
+
+		result, err := Diff(root, "sdcard", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1, "the correctly-synced .mp3 must not ALSO show up as a delete")
+		assert.Equal(t, ActionSkip, result.Changes[0].Action)
+		assert.Equal(t, desiredEntry, result.Changes[0].Entry, "PlannedChange.Entry stays source-keyed")
+	})
+
+	t.Run("a real change to a transcoded track is still detected as regenerate, not masked by the extension fix", func(t *testing.T) {
+		root := t.TempDir()
+		album := filepath.Join(root, "main", "a", "artist", "album")
+		touch(t, filepath.Join(album, "01 track.flac"))
+		writeSums(t, album, "sums.md5", map[string]string{"01 track.flac": fakeHash(2)}) // source changed
+
+		desiredEntry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		deviceEntry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
+
+		desired := &DesiredStateResult{Entries: []DesiredEntry{desiredEntry}}
+		current := &CurrentStateResult{Entries: map[DesiredEntry]DeviceEntry{
+			deviceEntry: {Hash: fakeHash(99), HasSrcHash: true, SrcHash: fakeHash(1)}, // stale
+		}}
+
+		result, err := Diff(root, "sdcard", desired, current)
+		require.NoError(t, err)
+		require.Len(t, result.Changes, 1)
+		assert.Equal(t, ActionRegenerate, result.Changes[0].Action)
 	})
 }
 

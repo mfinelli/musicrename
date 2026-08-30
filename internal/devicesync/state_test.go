@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/target"
 )
 
 func mkdirs(t *testing.T, root string, dirs ...string) {
@@ -407,4 +408,39 @@ func TestDesiredState(t *testing.T) {
 		}
 		assert.Equal(t, 1, artCount)
 	})
+}
+
+func TestDeviceRelFor(t *testing.T) {
+	ipod, _ := target.DefinitionFor("ipod")
+	sdcard, _ := target.DefinitionFor("sdcard")
+
+	t.Run("an accepted audio format is unchanged", func(t *testing.T) {
+		assert.Equal(t, "a/artist/album/01 track.flac", deviceRelFor("a/artist/album/01 track.flac", ipod))
+	})
+
+	t.Run("an unaccepted audio format gets the transcode target's extension", func(t *testing.T) {
+		assert.Equal(t, "a/artist/album/01 track.mp3", deviceRelFor("a/artist/album/01 track.flac", sdcard))
+	})
+
+	t.Run("an already-accepted format for the transcoding target is unchanged", func(t *testing.T) {
+		assert.Equal(t, "a/artist/album/01 track.mp3", deviceRelFor("a/artist/album/01 track.mp3", sdcard))
+	})
+
+	t.Run("artwork always ends up as .jpg regardless of source extension", func(t *testing.T) {
+		assert.Equal(t, "a/artist/album/folder.jpg", deviceRelFor("a/artist/album/folder.png", ipod))
+		assert.Equal(t, "a/artist/album/folder.jpg", deviceRelFor("a/artist/album/folder.jpeg", ipod))
+	})
+
+	t.Run("an already-jpg artwork file is unchanged, including case normalization", func(t *testing.T) {
+		assert.Equal(t, "a/artist/album/folder.jpg", deviceRelFor("a/artist/album/folder.jpg", ipod))
+		assert.Equal(t, "a/artist/album/folder.jpg", deviceRelFor("a/artist/album/Folder.JPG", ipod))
+	})
+}
+
+func TestIsArtworkName(t *testing.T) {
+	assert.True(t, isArtworkName("folder.jpg"))
+	assert.True(t, isArtworkName("Folder.JPG"))
+	assert.True(t, isArtworkName("folder.png"))
+	assert.False(t, isArtworkName("01 track.flac"))
+	assert.False(t, isArtworkName("other.jpg"))
 }

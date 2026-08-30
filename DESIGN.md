@@ -1086,6 +1086,38 @@ recopy.
    so there's no risk of the direct check masking a real change for that kind of
    file — it can only ever help the case a static rule would otherwise miss.
 
+   **Matching a desired entry against `current.Entries` is not a direct lookup
+   by the entry itself — it's translated through `deviceRelFor` first, a real
+   correctness fix caught during review, not a design decision made up front.**
+   A desired entry's `Rel` always reflects its _source_ file (e.g.
+   `01 track.flac`), but the on-device file it corresponds to can have a
+   different extension: a transcoded audio file (a FLAC source destined for
+   `sdcard` becomes an on-device `.mp3`, never `.flac`), or artwork that went
+   through PNG-to-JPEG conversion (`internal/artwork.Resize` always outputs
+   JPEG, §7.8). `current.Entries` is keyed by whatever's actually on the device
+   — the real, transcoded/converted filename — so comparing against the
+   untranslated source-keyed entry directly meant a correctly-synced transcoded
+   file could never be recognized as present at all: it looked permanently
+   missing (added again every sync) while its own real, already- correct
+   on-device file simultaneously looked orphaned (deleted every sync) — for as
+   long as this went unnoticed, every sync of a transcoding target would have
+   churned forever, and this was already true of the originally-shipped `Diff`,
+   not something this rewrite introduced. Confirmed directly, not just reasoned
+   about: setting up a full local build with a real `ffmpeg`, a real
+   `go.senan.xyz/taglib` (vendored from its actual `github.com/deluan/go-taglib`
+   source plus `wazero`, straight from GitHub, no module-proxy access available
+   in this development sandbox), and running the genuine end-to-end
+   transcode-and-compare test suite is exactly what surfaced it — every earlier
+   test had used matching extensions by construction, so nothing before this had
+   actually exercised the mismatch. `deviceRelFor` also fully canonicalizes an
+   artwork filename (e.g. an oddly-cased source `Folder.JPG` becomes on-device
+   `folder.jpg`, not just `Folder.jpg`) rather than only fixing the extension,
+   since the stem is already effectively fixed (`folder`) once something's
+   confirmed to be primary artwork at all. `PlannedChange.Entry` itself stays
+   source-keyed regardless of this translation — only the lookup key and the
+   delete- detection set change — since locating the source file (for
+   `sourceHashFor`, and later for execution) still needs the untranslated path.
+
    Each album's source `sums.md5` is read at most once per `Diff` call
    regardless of how many of its files are desired, cached internally by album
    directory.
@@ -1121,6 +1153,53 @@ recopy.
    during development, not just reasoned about from documentation. The Darwin
    path is unverified here (no macOS available) but shares the same code, not a
    separate, less-tested implementation.
+
+**Execution (implemented):** applying the plan — not one of the original five
+numbered steps above (step 5, "Output," is about CLI presentation, not file
+writes), but a real piece needed between capacity checking and presenting
+results, added here rather than left implicit. `internal/devicesync`, `Execute`
+handles every `ActionAdd`/`ActionRegenerate` change (deletion and
+empty-directory cleanup remain a separate, later piece — `ActionDelete` and
+`ActionSkip` entries are simply ignored):
+
+- Changes are grouped by album before anything runs, so that an embedding
+  target's artwork is resized once per album and reused for every track that
+  needs it (not once per track), and each album's `sums.md5`/ `{target}.src.md5`
+  are read once, updated in memory for every changed entry in that album, and
+  written back once — not one read-modify-write round trip per file.
+- An audio entry goes through `PrepareTrack` (§7.9); an artwork entry (only ever
+  the external kind, since an embedding target's artwork never appears as its
+  own entry, §7.1) goes through `artwork.ResizeFile` directly. Either way, the
+  destination path uses `deviceRelFor`'s translated filename, not the source's
+  own — the same translation `Diff` uses to look entries up in the first place,
+  computed independently rather than threaded through `PlannedChange` as an
+  extra field, since both sides can derive it identically from just
+  `(entry.Rel, def)`.
+- After writing, the output file's hash is computed directly (`hasher.HashFile`,
+  a new export — nothing before this needed to hash a single file from outside
+  `internal/hasher`) and compared against the source hash already known from
+  that album's `sums.md5`. Equal means an ordinary passthrough: no
+  `{target}.src.md5` entry is written, and a stale one from a previous derived
+  write is actively removed, or the next `Diff` run would find a leftover
+  `SrcHash` that no longer reflects how the file was actually produced.
+  Different means a real transform: the source hash is recorded in the sidecar.
+  This mirrors `Diff`'s own dual-check exactly, just on the write side instead
+  of the read side — neither side needs to predict in advance which case
+  applies.
+- For an embedding target with artwork, the per-album bookkeeping entry
+  (`current.AlbumArtHash`'s counterpart on the write side, §7.8) is written
+  using the source artwork's own recorded hash, once per album regardless of how
+  many tracks needed it.
+- A single entry failing (a missing source file, a transcode error) produces a
+  warning and moves on to the next entry, in the same album or a different one —
+  consistent with how every other per-file failure in this project is handled,
+  rather than aborting a whole sync over one bad file.
+- `internal/hasher` gained `WriteSums` (the write-side counterpart to
+  `ReadSums`, added earlier for `Diff`) — writes a complete map in one pass,
+  creating the destination album directory if it doesn't exist yet, which none
+  of this package's existing targeted single-entry primitives
+  (`UpdateFile`/`RemoveFile`/`RenameFile`) needed to do, since those only ever
+  update an _existing_ source album's `sums.md5`.
 
 5. **Output:** dry-run is always available first. Default output is a summary —
    counts and total bytes for add / regenerate / delete-file / delete-dir, plus

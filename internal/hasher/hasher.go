@@ -135,6 +135,15 @@ func collectFiles(dir string) ([]string, error) {
 	return files, nil
 }
 
+// HashFile computes the lowercase hex MD5 digest of the file at path, in
+// the same format every other hash in this package records and compares.
+// Exported for callers outside this package that need to hash a single
+// on-device file directly rather than through one of this package's
+// read/update primitives.
+func HashFile(path string) (string, error) {
+	return hashFile(path)
+}
+
 // hashFile returns the lowercase hex MD5 digest of the file at path.
 func hashFile(path string) (string, error) {
 	f, err := os.Open(path)
@@ -205,6 +214,17 @@ func parseNamedSumsFile(dir, filename string) ([]sumEntry, bool, error) {
 // (not by the raw line, which would sort by hash first and destroy the
 // stable, diffable filename ordering.
 func writeSumsEntries(dir string, entries []sumEntry) error {
+	return writeNamedSumsEntries(dir, SumsFilename, entries)
+}
+
+// writeNamedSumsEntries is [writeSumsEntries] generalized to an arbitrary
+// filename within dir, the write-side counterpart to
+// [parseNamedSumsFile]/[ReadSums]. Creates dir itself if it doesn't
+// already exist which is unlike every other write in this package that only
+// ever update an *existing* album's checksum file, this is also used to
+// write a brand-new on-device album's sums.md5 on its very first sync,
+// where the destination directory may not exist yet at all.
+func writeNamedSumsEntries(dir, filename string, entries []sumEntry) error {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
 
 	var sb strings.Builder
@@ -216,11 +236,29 @@ func writeSumsEntries(dir string, entries []sumEntry) error {
 		}
 	}
 
-	dest := filepath.Join(dir, SumsFilename)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("creating %s: %w", dir, err)
+	}
+	dest := filepath.Join(dir, filename)
 	if err := os.WriteFile(dest, []byte(sb.String()), 0644); err != nil {
 		return fmt.Errorf("writing %s: %w", dest, err)
 	}
 	return nil
+}
+
+// WriteSums writes sums to dir/filename in the same md5sum-compatible
+// format [ReadSums] parses, sorted by filename (the inverse of ReadSums).
+// Works for sums.md5 itself and equally for a {target}.src.md5 sidecar.
+// Creates dir/filename (and dir itself) if it doesn't already exist, or
+// overwrites it completely if it does (this always writes sums in full,
+// there is no targeted single-entry variant the way [UpdateFile] is for
+// sums.md5 specifically).
+func WriteSums(dir, filename string, sums map[string]string) error {
+	entries := make([]sumEntry, 0, len(sums))
+	for name, hash := range sums {
+		entries = append(entries, sumEntry{hash: hash, name: name})
+	}
+	return writeNamedSumsEntries(dir, filename, entries)
 }
 
 // UpdateFile recomputes the MD5 digest for the single file dir/rel and
