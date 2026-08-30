@@ -138,7 +138,7 @@ mrr inspect "01 back in black.flac"
   character determines the directory bucket (`b/` for "Beatles, The") while the
   folder name still comes from `ALBUMARTIST` ("the beatles").
 
-## Playlists & Navidrome Sync
+## Playlists & Sync
 
 Two kinds of playlist exist. **Album-local target manifests** (`ipod.m3u8`,
 `sdcard.m3u8`) live inside an album directory and list which tracks are selected
@@ -164,6 +164,24 @@ christmas/m/mariah carey/[1994] merry christmas/01 all i want for christmas is y
 | `#PLAYLIST:name`   | Display name, independent of the sanitized filename           |
 | `#NAVIDROME-ID:id` | Correlated Navidrome playlist ID; absent if never pushed      |
 | `#TARGETS:...`     | Which sync targets this applies to; absent means every target |
+
+### Device Sync Workflow
+
+```sh
+mrr playlist select ipod        # choose which tracks to include, per album
+mrr sync ipod /media/you/IPOD   # copy them to the device
+```
+
+Only tracks selected for a target are copied to it. Each sync compares the
+library against whatever's already on the device, adds anything missing, updates
+anything changed, and removes anything no longer selected (removals only ever
+affect the device copy, never the source library). Free space on the device is
+checked and confirmation is required before anything changes.
+
+`ipod` copies FLAC/MP3/M4A through unchanged and ships artwork as a separate
+file; `sdcard` transcodes anything that isn't already MP3 and embeds artwork
+directly into each track, since car head units commonly can't play FLAC or show
+an external cover file at all.
 
 ### Navidrome Sync Workflow
 
@@ -211,6 +229,18 @@ instead.)
 
 ```sh
 mrr playlist check ~/music
+```
+
+#### `sync ipod` / `sync sdcard`
+
+Compares the library against the device, checks free space, then asks for
+confirmation before adding, updating, or removing anything. `--dry-run` previews
+without changing anything; `--verbose` lists every file instead of just totals;
+`--yes` skips the confirmation prompt.
+
+```sh
+mrr sync ipod /media/you/IPOD
+mrr sync sdcard /media/you/SDCARD --dry-run
 ```
 
 #### `sync navidrome pull` / `push`
