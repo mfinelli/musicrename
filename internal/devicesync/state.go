@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -175,12 +176,7 @@ func deviceRelFor(rel string, def target.Definition) string {
 // primary artwork filename (case-insensitive).
 func isArtworkName(name string) bool {
 	lower := strings.ToLower(name)
-	for _, artName := range primaryArtFilenames {
-		if lower == artName {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(primaryArtFilenames, lower)
 }
 
 // DesiredState computes the full desired-state set for targetName: the union,
@@ -348,10 +344,5 @@ func DesiredState(libraryRootRoot, targetName string) (*DesiredStateResult, erro
 }
 
 func containsString(s []string, v string) bool {
-	for _, e := range s {
-		if e == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, v)
 }

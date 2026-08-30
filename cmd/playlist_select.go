@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -285,12 +286,7 @@ func formatTrackLabel(t *metadata.Track, hasMultiDisc bool, albumArtist string) 
 // existingNamesContains reports whether name is present in names. Used to
 // determine each checkbox's initial pre-selected state.
 func existingNamesContains(names []string, name string) bool {
-	for _, n := range names {
-		if n == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(names, name)
 }
 
 // pluralTracks returns "track" or "tracks" depending on n.

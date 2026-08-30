@@ -328,7 +328,7 @@ func TestUpdateFile(t *testing.T) {
 		assert.Contains(t, after, md5hex("01 track.flac\n02 track.flac\n")+"  ipod.m3u8\n")
 		// The audio file's line must be byte-for-byte identical to before
 		// which is the whole point: UpdateFile must never rehash it.
-		for _, line := range strings.Split(strings.TrimRight(before, "\n"), "\n") {
+		for line := range strings.SplitSeq(strings.TrimRight(before, "\n"), "\n") {
 			if strings.HasSuffix(line, "01 track.flac") {
 				assert.Contains(t, after, line)
 			}

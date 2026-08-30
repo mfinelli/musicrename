@@ -32,9 +32,9 @@ import (
 
 func TestBuildSongIndex(t *testing.T) {
 	t.Run("empty catalog produces an empty index in one request", func(t *testing.T) {
-		var calls int32
+		var calls atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{}}}`)
 		}))
 		defer srv.Close()
@@ -42,13 +42,13 @@ func TestBuildSongIndex(t *testing.T) {
 		index, err := buildSongIndex(testClient(srv.URL))
 		require.NoError(t, err)
 		assert.Empty(t, index)
-		assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
+		assert.Equal(t, int32(1), calls.Load())
 	})
 
 	t.Run("a single short page terminates after one request", func(t *testing.T) {
-		var calls int32
+		var calls atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"s1","path":"a.flac"},{"id":"s2","path":"b.flac"}]}}}`)
 		}))
@@ -57,7 +57,7 @@ func TestBuildSongIndex(t *testing.T) {
 		index, err := buildSongIndex(testClient(srv.URL))
 		require.NoError(t, err)
 		assert.Equal(t, map[string]string{"a.flac": "s1", "b.flac": "s2"}, index)
-		assert.Equal(t, int32(1), atomic.LoadInt32(&calls),
+		assert.Equal(t, int32(1), calls.Load(),
 			"a page shorter than the page size must not trigger a second request")
 	})
 
@@ -72,14 +72,8 @@ func TestBuildSongIndex(t *testing.T) {
 			offset, _ := strconv.Atoi(r.URL.Query().Get("songOffset"))
 			offsetsSeen = append(offsetsSeen, offset)
 
-			remaining := total - offset
-			if remaining < 0 {
-				remaining = 0
-			}
-			n := remaining
-			if n > songIndexPageSize {
-				n = songIndexPageSize
-			}
+			remaining := max(total-offset, 0)
+			n := min(remaining, songIndexPageSize)
 
 			var songs []string
 			for i := 0; i < n; i++ {

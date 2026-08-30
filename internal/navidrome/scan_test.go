@@ -77,13 +77,13 @@ func TestScan(t *testing.T) {
 	})
 
 	t.Run("polls until done, reporting progress for every still-running check", func(t *testing.T) {
-		var statusCalls int32
+		var statusCalls atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "startScan"):
 				fmt.Fprint(w, scanResponse(true, 0))
 			case strings.Contains(r.URL.Path, "getScanStatus"):
-				n := atomic.AddInt32(&statusCalls, 1)
+				n := statusCalls.Add(1)
 				if n < 3 {
 					fmt.Fprint(w, scanResponse(true, int64(n)*10))
 				} else {

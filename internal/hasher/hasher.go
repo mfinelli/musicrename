@@ -196,7 +196,7 @@ func parseNamedSumsFile(dir, filename string) ([]sumEntry, bool, error) {
 	}
 
 	var entries []sumEntry
-	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(string(data), "\n"), "\n") {
 		if line == "" {
 			continue
 		}

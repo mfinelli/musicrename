@@ -352,7 +352,7 @@ func TestPushOne(t *testing.T) {
 			Entries: []string{"main/a/artist/album/01 track.flac"},
 		}))
 
-		var updatePlaylistCalls int32
+		var updatePlaylistCalls atomic.Int32
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
@@ -366,7 +366,7 @@ func TestPushOne(t *testing.T) {
 				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
-			atomic.AddInt32(&updatePlaylistCalls, 1)
+			updatePlaylistCalls.Add(1)
 			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
@@ -376,7 +376,7 @@ func TestPushOne(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, result.Unchanged, 1)
 		assert.Empty(t, result.Updated)
-		assert.Equal(t, int32(0), atomic.LoadInt32(&updatePlaylistCalls))
+		assert.Equal(t, int32(0), updatePlaylistCalls.Load())
 	})
 
 	t.Run("a comment-only difference is enough to classify as Updated, not Unchanged", func(t *testing.T) {

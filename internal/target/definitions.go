@@ -17,6 +17,8 @@
 
 package target
 
+import "slices"
+
 // AudioFormat identifies a target audio format independent of the specific
 // ffmpeg codec/encoder used to produce it so a target's Definition only ever
 // needs to say "I want mp3," not remember specific encoder flags. The zero
@@ -108,10 +110,5 @@ func DefinitionFor(target string) (def Definition, ok bool) {
 // extension should be copied through to this target unchanged rather than
 // transcoded).
 func (d Definition) Accepts(ext string) bool {
-	for _, e := range d.AcceptedFormats {
-		if e == ext {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(d.AcceptedFormats, ext)
 }

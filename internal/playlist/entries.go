@@ -87,8 +87,8 @@ func ReadNavidromeID(path string) (id string, ok bool, err error) {
 	}
 
 	for _, line := range lines {
-		if strings.HasPrefix(line, navidromeIDPrefix) {
-			return strings.TrimSpace(strings.TrimPrefix(line, navidromeIDPrefix)), true, nil
+		if after, ok0 := strings.CutPrefix(line, navidromeIDPrefix); ok0 {
+			return strings.TrimSpace(after), true, nil
 		}
 	}
 	return "", false, nil
@@ -120,7 +120,7 @@ func ReadTargets(path string) (names []string, ok bool, err error) {
 		}
 
 		names = []string{}
-		for _, p := range strings.Split(raw, ",") {
+		for p := range strings.SplitSeq(raw, ",") {
 			p = strings.TrimSpace(p)
 			if p != "" {
 				names = append(names, p)

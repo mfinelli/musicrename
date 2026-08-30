@@ -20,18 +20,15 @@
 // personally-curated list lives in code rather than behind a config file.
 package target
 
+import "slices"
+
 // Names lists every valid target name, in a stable order for display
 // (e.g. in error messages and command help text).
 var Names = []string{"ipod", "sdcard"}
 
 // Valid reports whether name is a recognized target.
 func Valid(name string) bool {
-	for _, n := range Names {
-		if n == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(Names, name)
 }
 
 // SrcSumsFilename returns the on-device {target}.src.md5 sidecar filename

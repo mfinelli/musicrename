@@ -55,7 +55,7 @@ func parseCommentTargets(comment string) (human string, targets []string, hasTar
 		return human, []string{}, true
 	}
 
-	for _, p := range strings.Split(raw, ",") {
+	for p := range strings.SplitSeq(raw, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			targets = append(targets, p)

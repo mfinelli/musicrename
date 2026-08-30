@@ -83,7 +83,7 @@ func ReadGlobalPlaylist(path string) (*GlobalPlaylist, error) {
 			gp.Targets = []string{}
 			raw := strings.TrimSpace(strings.TrimPrefix(line, targetsPrefix))
 			if raw != "" {
-				for _, p := range strings.Split(raw, ",") {
+				for p := range strings.SplitSeq(raw, ",") {
 					p = strings.TrimSpace(p)
 					if p != "" {
 						gp.Targets = append(gp.Targets, p)
