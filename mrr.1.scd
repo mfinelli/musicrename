@@ -9,6 +9,7 @@ mrr - normalize and organize a local music library
 *mrr* <command> [options] [_path_]++
 *mrr video* <command> [options] [_path_]++
 *mrr playlist* <command> [options] [_path_]++
+*mrr sync ipod|sdcard* [options] <_device-path_> [_path_]++
 *mrr sync navidrome* <command> [options] [_playlist_]++
 *mrr login|logout* [options]
 
@@ -31,8 +32,9 @@ files directly is treated as a single album; a directory without audio files
 directly inside is treated as a library root and processed recursively; some
 commands also accept a path to a single audio file.
 
-Device-target playlist selection and Navidrome sync are a separate, optional
-workflow; see *PLAYLISTS* and *NAVIDROME SYNC* below.
+Device-target playlist selection, syncing to a device, and Navidrome sync are
+a separate, optional workflow; see *PLAYLISTS*, *DEVICE SYNC*, and *NAVIDROME
+SYNC* below.
 
 Music videos are managed as a separate command family and directory tree; see
 *VIDEO SUPPORT* below.
@@ -205,6 +207,58 @@ select* writes) are reported by *mrr check* instead, not here.
 
 If _library-root-root_ is omitted it defaults to the current directory.
 
+## mrr sync ipod <_device-path_> [_path_]
+
+Syncs the library to an iPod running Rockbox (https://www.rockbox.org)
+mounted at _device-path_ (e.g. */media/you/IPOD*). Only tracks selected
+with *mrr playlist select ipod* are copied; see *DEVICE SYNC* below for
+the full workflow.
+
+FLAC, MP3, and M4A tracks are copied through unchanged; nothing is
+transcoded for this target. Album artwork is resized to fit within 400
+pixels and shipped as a separate file alongside the tracks.
+
+Compares the library against whatever is already on the device, checks
+that there's enough free space for the changes, then asks for
+confirmation before adding, updating, or removing anything on the
+device (removals only ever affect the device copy, your library files
+are never touched).
+
+If _path_ is omitted it defaults to the current directory.
+
+*--dry-run*
+	Preview what would happen without changing anything.
+*--yes*
+	Skip the confirmation prompt.
+*--verbose*
+	List every file added, updated, or removed instead of just totals.
+
+## mrr sync sdcard <_device-path_> [_path_]
+
+Syncs the library to an SD card (e.g. for a car head unit) mounted at
+_device-path_. Only tracks selected with *mrr playlist select sdcard*
+are copied; see *DEVICE SYNC* below for the full workflow.
+
+Only MP3 is supported on this target; anything else (FLAC, M4A) is
+transcoded automatically. Album artwork is resized to fit within 500
+pixels and embedded directly into each track rather than shipped as a
+separate file (changing an album's artwork alone re-embeds it into
+every already-synced track for that album, even if none of the audio
+itself changed).
+
+Otherwise behaves exactly like *mrr sync ipod*: compares the library
+against the device, checks free space, and asks for confirmation
+before changing anything.
+
+If _path_ is omitted it defaults to the current directory.
+
+*--dry-run*
+	Preview what would happen without changing anything.
+*--yes*
+	Skip the confirmation prompt.
+*--verbose*
+	List every file added, updated, or removed instead of just totals.
+
 ## mrr sync navidrome pull [_playlist_]
 
 Pulls playlists from the configured Navidrome server (*mrr login*) into the
@@ -301,6 +355,35 @@ root(s)).
 Use *mrr playlist check* to audit this tree. Subdirectories under
 *playlists/* carry no special meaning and are fine to use for your own
 organization.
+
+# DEVICE SYNC
+
+*mrr* can copy a curated subset of the library onto removable storage
+mounted directly on this machine: an iPod running Rockbox
+(https://www.rockbox.org), or a generic MP3-only SD card for something
+like a car head unit.
+
+The workflow is select, then sync:
+
+	mrr playlist select ipod        # choose which tracks to include, per album++
+	mrr sync ipod /media/you/IPOD   # copy them to the device
+
+Only tracks explicitly selected for a target (see *PLAYLISTS* above) are
+ever copied to it. Each sync compares the library against whatever the
+device already has, adds anything missing, updates anything that's
+changed, and removes anything no longer selected (removals only ever
+affect the device copy, never your library). Before making any changes,
+*mrr* checks that the device has enough free space and asks for
+confirmation; pass *--yes* to skip the prompt, *--dry-run* to preview
+without changing anything, or *--verbose* to list every file instead of
+just totals.
+
+*ipod* and *sdcard* differ only in what happens to the files themselves:
+*ipod* copies FLAC/MP3/M4A through unchanged and ships artwork as a
+separate file; *sdcard* transcodes anything that isn't already MP3 and
+embeds artwork directly into each track, since car head units commonly
+can't play FLAC and may not show an external cover file at all. See *mrr
+sync ipod* and *mrr sync sdcard* above for details.
 
 # NAVIDROME SYNC
 
