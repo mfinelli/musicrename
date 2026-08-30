@@ -1158,15 +1158,17 @@ recopy.
 numbered steps above (step 5, "Output," is about CLI presentation, not file
 writes), but a real piece needed between capacity checking and presenting
 results, added here rather than left implicit. `internal/devicesync`, `Execute`
-handles every `ActionAdd`/`ActionRegenerate` change (deletion and
-empty-directory cleanup remain a separate, later piece — `ActionDelete` and
+handles every `ActionAdd`/`ActionRegenerate`/`ActionDelete` change (only
 `ActionSkip` entries are simply ignored):
 
 - Changes are grouped by album before anything runs, so that an embedding
   target's artwork is resized once per album and reused for every track that
-  needs it (not once per track), and each album's `sums.md5`/ `{target}.src.md5`
-  are read once, updated in memory for every changed entry in that album, and
-  written back once — not one read-modify-write round trip per file.
+  needs it (not once per track, and not at all for a delete-only album, which
+  has nothing to embed art into), and each album's `sums.md5`/
+  `{target}.src.md5` are read once, updated in memory for every changed entry in
+  that album — additions, regenerations, and deletions together, since an album
+  can have all three in the same sync — and written back once, not one
+  read-modify-write round trip per file.
 - An audio entry goes through `PrepareTrack` (§7.9); an artwork entry (only ever
   the external kind, since an embedding target's artwork never appears as its
   own entry, §7.1) goes through `artwork.ResizeFile` directly. Either way, the
@@ -1190,10 +1192,30 @@ empty-directory cleanup remain a separate, later piece — `ActionDelete` and
   (`current.AlbumArtHash`'s counterpart on the write side, §7.8) is written
   using the source artwork's own recorded hash, once per album regardless of how
   many tracks needed it.
-- A single entry failing (a missing source file, a transcode error) produces a
-  warning and moves on to the next entry, in the same album or a different one —
-  consistent with how every other per-file failure in this project is handled,
-  rather than aborting a whole sync over one bad file.
+- A delete removes the on-device file directly — its `Entry` is already
+  device-keyed (it came from `current.Entries` via `Diff`'s own delete-detection
+  loop, unlike add/regenerate, which are source-keyed), so no translation is
+  needed. The file already being gone (removed by hand, or a previous run that
+  got interrupted after removing the file but before updating `sums.md5`) is not
+  an error — the end state is what's being asserted, not the specific
+  transition, matching how `RenameFile`/`RemoveFile` already treat a
+  since-vanished entry elsewhere in this project.
+- An album left with zero files after its deletions is removed as a whole —
+  including its now-pointless `sums.md5`/`{target}.src.md5` — rather than left
+  behind holding an empty checksum file, with any now-empty parent directories
+  cleaned up too, bubbling upward but never above the target's root-level device
+  directory (mirroring `rename`'s existing empty-directory cleanup, §4.2, and
+  using the exact same "stop at, never remove, the root" boundary). This also
+  closed a latent gap in the add/regenerate-only path from before: an album that
+  used to have derived files but no longer does (all deleted, or every remaining
+  file happens to now be passthrough) now gets its stale `{target}.src.md5`
+  actively removed too, rather than left behind recording entries that no longer
+  correspond to anything current.
+- A single entry failing (a missing source file, a transcode error, a
+  permission-denied removal) produces a warning and moves on to the next entry,
+  in the same album or a different one — consistent with how every other
+  per-file failure in this project is handled, rather than aborting a whole sync
+  over one bad file.
 - `internal/hasher` gained `WriteSums` (the write-side counterpart to
   `ReadSums`, added earlier for `Diff`) — writes a complete map in one pass,
   creating the destination album directory if it doesn't exist yet, which none

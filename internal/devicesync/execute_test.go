@@ -25,6 +25,7 @@ import (
 	"image/jpeg"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -317,19 +318,275 @@ func TestExecute(t *testing.T) {
 		assert.FileExists(t, filepath.Join(device, "main", "a", "artist", "album", "02 track.flac"))
 	})
 
-	t.Run("skip and delete actions are ignored entirely", func(t *testing.T) {
+	t.Run("skip actions are ignored entirely", func(t *testing.T) {
 		root := t.TempDir()
 		device := t.TempDir()
 
 		diff := &DiffResult{Changes: []PlannedChange{
 			{Entry: DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}, Action: ActionSkip},
-			{Entry: DesiredEntry{Root: "main", Rel: "a/artist/album/02 track.flac"}, Action: ActionDelete},
 		}}
 
 		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
 		require.NoError(t, err)
 		assert.Empty(t, result.Created)
 		assert.Empty(t, result.Updated)
+		assert.Empty(t, result.Deleted)
 		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("delete: removes the file, leaves the album directory when other files remain", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		deviceAlbum := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(deviceAlbum, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "01 gone.flac"), []byte("x"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "02 stays.flac"), []byte("y"), 0644))
+		require.NoError(t, hasher.WriteSums(deviceAlbum, hasher.SumsFilename, map[string]string{
+			"01 gone.flac":  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"02 stays.flac": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		}))
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.flac"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
+
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		require.NoError(t, err)
+		require.Len(t, result.Deleted, 1)
+		assert.Equal(t, entry, result.Deleted[0])
+
+		_, statErr := os.Stat(filepath.Join(deviceAlbum, "01 gone.flac"))
+		assert.True(t, os.IsNotExist(statErr))
+		assert.FileExists(t, filepath.Join(deviceAlbum, "02 stays.flac"), "the other file must be untouched")
+		assert.DirExists(t, deviceAlbum, "the album directory must remain since it still has content")
+
+		sums, _, err := hasher.ReadSums(deviceAlbum, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotContains(t, sums, "01 gone.flac")
+		assert.Contains(t, sums, "02 stays.flac")
+	})
+
+	t.Run("delete: the last file in an album removes the whole album directory, including sums.md5", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		deviceAlbum := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(deviceAlbum, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "01 gone.flac"), []byte("x"), 0644))
+		require.NoError(t, hasher.WriteSums(deviceAlbum, hasher.SumsFilename, map[string]string{
+			"01 gone.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}))
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.flac"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
+
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		require.NoError(t, err)
+		require.Len(t, result.Deleted, 1)
+
+		_, statErr := os.Stat(deviceAlbum)
+		assert.True(t, os.IsNotExist(statErr), "the whole album directory must be removed, not left with an empty sums.md5")
+	})
+
+	t.Run("delete: empty parent directories are cleaned up, bubbling upward, but the root-level device directory is never removed", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		// main/a/artist/album -- "a" and "artist" have no other children.
+		deviceAlbum := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(deviceAlbum, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "01 gone.flac"), []byte("x"), 0644))
+		require.NoError(t, hasher.WriteSums(deviceAlbum, hasher.SumsFilename, map[string]string{
+			"01 gone.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}))
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.flac"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
+
+		_, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		require.NoError(t, err)
+
+		_, err = os.Stat(filepath.Join(device, "main", "a", "artist"))
+		assert.True(t, os.IsNotExist(err), "the now-empty 'artist' directory must be cleaned up")
+		_, err = os.Stat(filepath.Join(device, "main", "a"))
+		assert.True(t, os.IsNotExist(err), "the now-empty 'a' directory must be cleaned up too, bubbling upward")
+
+		assert.DirExists(t, filepath.Join(device, "main"), "the root-level device directory must never be removed")
+	})
+
+	t.Run("delete: a sibling album under the same letter directory prevents that directory from being removed", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		goneAlbum := filepath.Join(device, "main", "a", "artist-gone", "album")
+		staysAlbum := filepath.Join(device, "main", "a", "artist-stays", "album")
+		require.NoError(t, os.MkdirAll(goneAlbum, 0755))
+		require.NoError(t, os.MkdirAll(staysAlbum, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(goneAlbum, "01 gone.flac"), []byte("x"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(staysAlbum, "01 stays.flac"), []byte("y"), 0644))
+		require.NoError(t, hasher.WriteSums(goneAlbum, hasher.SumsFilename, map[string]string{
+			"01 gone.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}))
+		require.NoError(t, hasher.WriteSums(staysAlbum, hasher.SumsFilename, map[string]string{
+			"01 stays.flac": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		}))
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist-gone/album/01 gone.flac"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
+
+		_, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		require.NoError(t, err)
+
+		_, err = os.Stat(filepath.Join(device, "main", "a", "artist-gone"))
+		assert.True(t, os.IsNotExist(err))
+		assert.DirExists(t, filepath.Join(device, "main", "a"), "'a' must remain: it still has artist-stays as a child")
+		assert.DirExists(t, staysAlbum)
+	})
+
+	t.Run("delete: removes a stale src.md5 sidecar entirely once no derived entries remain", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		deviceAlbum := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(deviceAlbum, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "01 gone.mp3"), []byte("x"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "02 stays.flac"), []byte("y"), 0644))
+		require.NoError(t, hasher.WriteSums(deviceAlbum, hasher.SumsFilename, map[string]string{
+			"01 gone.mp3":   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"02 stays.flac": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		}))
+		// 01 was a derived (transcoded) file; 02 is passthrough (no entry).
+		require.NoError(t, hasher.WriteSums(deviceAlbum, "sdcard.src.md5", map[string]string{
+			"01 gone.mp3": strings.Repeat("c", 32),
+		}))
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.mp3"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
+
+		result, err := Execute(context.Background(), root, device, "sdcard", diff, false)
+		require.NoError(t, err)
+		require.Len(t, result.Deleted, 1)
+
+		_, srcExisted, err := hasher.ReadSums(deviceAlbum, "sdcard.src.md5")
+		require.NoError(t, err)
+		assert.False(t, srcExisted, "the sidecar must be removed entirely once no derived entries remain")
+
+		assert.FileExists(t, filepath.Join(deviceAlbum, "02 stays.flac"))
+	})
+
+	t.Run("delete: dry run reports what would be deleted without touching anything", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		deviceAlbum := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(deviceAlbum, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "01 track.flac"), []byte("x"), 0644))
+		require.NoError(t, hasher.WriteSums(deviceAlbum, hasher.SumsFilename, map[string]string{
+			"01 track.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}))
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
+
+		result, err := Execute(context.Background(), root, device, "ipod", diff, true)
+		require.NoError(t, err)
+		require.Len(t, result.Deleted, 1)
+
+		assert.FileExists(t, filepath.Join(deviceAlbum, "01 track.flac"), "dry run must not actually remove the file")
+	})
+
+	t.Run("delete: a file already gone (e.g. removed by hand) is not a warning", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		deviceAlbum := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(deviceAlbum, 0755))
+		require.NoError(t, hasher.WriteSums(deviceAlbum, hasher.SumsFilename, map[string]string{
+			"01 already-gone.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}))
+		// Note: the file itself was never actually created on disk.
+
+		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 already-gone.flac"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
+
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+		require.Len(t, result.Deleted, 1)
+	})
+
+	t.Run("add and delete in the same album are both applied correctly", func(t *testing.T) {
+		root := t.TempDir()
+		device := t.TempDir()
+		sourceAlbum := filepath.Join(root, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(sourceAlbum, 0755))
+		newSrc := makeAudioFile(t, sourceAlbum, "02 new.flac", nil)
+		newHash, err := hasher.HashFile(newSrc)
+		require.NoError(t, err)
+		require.NoError(t, hasher.WriteSums(sourceAlbum, hasher.SumsFilename, map[string]string{
+			"02 new.flac": newHash,
+		}))
+
+		deviceAlbum := filepath.Join(device, "main", "a", "artist", "album")
+		require.NoError(t, os.MkdirAll(deviceAlbum, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(deviceAlbum, "01 old.flac"), []byte("stale"), 0644))
+		require.NoError(t, hasher.WriteSums(deviceAlbum, hasher.SumsFilename, map[string]string{
+			"01 old.flac": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}))
+
+		diff := &DiffResult{Changes: []PlannedChange{
+			{Entry: DesiredEntry{Root: "main", Rel: "a/artist/album/01 old.flac"}, Action: ActionDelete},
+			{Entry: DesiredEntry{Root: "main", Rel: "a/artist/album/02 new.flac"}, Action: ActionAdd},
+		}}
+
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		require.NoError(t, err)
+		require.Len(t, result.Deleted, 1)
+		require.Len(t, result.Created, 1)
+
+		_, statErr := os.Stat(filepath.Join(deviceAlbum, "01 old.flac"))
+		assert.True(t, os.IsNotExist(statErr))
+		assert.FileExists(t, filepath.Join(deviceAlbum, "02 new.flac"))
+
+		sums, _, err := hasher.ReadSums(deviceAlbum, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.Len(t, sums, 1, "the final sums.md5 must reflect only the surviving file")
+		assert.Contains(t, sums, "02 new.flac")
+	})
+}
+
+func TestCleanupEmptyParents(t *testing.T) {
+	t.Run("removes an empty directory and its empty parent, stopping at stopAt", func(t *testing.T) {
+		root := t.TempDir()
+		nested := filepath.Join(root, "main", "a", "artist")
+		require.NoError(t, os.MkdirAll(nested, 0755))
+
+		require.NoError(t, cleanupEmptyParents(nested, filepath.Join(root, "main")))
+
+		_, err := os.Stat(nested)
+		assert.True(t, os.IsNotExist(err))
+		_, err = os.Stat(filepath.Join(root, "main", "a"))
+		assert.True(t, os.IsNotExist(err))
+		assert.DirExists(t, filepath.Join(root, "main"))
+	})
+
+	t.Run("stops as soon as a directory is non-empty", func(t *testing.T) {
+		root := t.TempDir()
+		nested := filepath.Join(root, "main", "a", "artist")
+		require.NoError(t, os.MkdirAll(nested, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "main", "a", "keep.txt"), []byte("x"), 0644))
+
+		require.NoError(t, cleanupEmptyParents(nested, filepath.Join(root, "main")))
+
+		_, err := os.Stat(nested)
+		assert.True(t, os.IsNotExist(err), "the empty leaf directory is still removed")
+		assert.DirExists(t, filepath.Join(root, "main", "a"), "but its non-empty parent must survive")
+	})
+
+	t.Run("a nonexistent starting directory is not an error", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, cleanupEmptyParents(filepath.Join(root, "does", "not", "exist"), root))
+	})
+
+	t.Run("stopAt itself is never removed, even if empty", func(t *testing.T) {
+		root := t.TempDir()
+		stopAt := filepath.Join(root, "main")
+		require.NoError(t, os.MkdirAll(stopAt, 0755))
+
+		require.NoError(t, cleanupEmptyParents(stopAt, stopAt))
+		assert.DirExists(t, stopAt)
 	})
 }
