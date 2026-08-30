@@ -517,6 +517,37 @@ func TestPlanLibrary_Assets(t *testing.T) {
 		assert.NotContains(t, op.NewPath, "artwork")
 	})
 
+	t.Run("folder.jpeg is normalized to folder.jpg", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum(src, "Artist", []*metadata.Track{
+			{Path: src + "/01.flac", Title: "T", Album: "A", Year: "2000", TrackNumber: new(1)},
+		}, map[metadata.FileCategory][]string{
+			metadata.CatPrimaryArt: {src + "/folder.jpeg"},
+		})
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], src+"/folder.jpeg")
+		require.NotNil(t, op)
+		assert.True(t, strings.HasSuffix(op.NewPath, "folder.jpg"))
+		assert.False(t, strings.HasSuffix(op.NewPath, "folder.jpeg"))
+		assert.NotContains(t, op.NewPath, "artwork")
+	})
+
+	t.Run("folder.jpg and folder.jpeg together collide after normalization", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum(src, "Artist", []*metadata.Track{
+			{Path: src + "/01.flac", Title: "T", Album: "A", Year: "2000", TrackNumber: new(1)},
+		}, map[metadata.FileCategory][]string{
+			metadata.CatPrimaryArt: {src + "/folder.jpg", src + "/folder.jpeg"},
+		})
+
+		_, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "collision")
+	})
+
 	t.Run("animated webp primary art is renamed to folder.webp", func(t *testing.T) {
 		lib := t.TempDir()
 		album := makeAlbum(src, "Artist", []*metadata.Track{

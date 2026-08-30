@@ -89,7 +89,8 @@ Each album directory may contain the following:
 Reads metadata tags and moves files into the normalized hierarchy. Unknown
 files (those that don't match any recognized category) are left in place and
 reported as warnings. The *extras/* subdirectory acts as a catch-all for known
-non-audio assets and opts out of the unknown-file check.
+non-audio assets and opts out of the unknown-file check. Primary artwork named
+*folder.jpeg* is renamed to *folder.jpg*.
 
 Collision detection runs before any files are moved. If two source files
 resolve to the same destination path, or if any destination path already exists

@@ -357,8 +357,14 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 			case metadata.CatPrimaryArt, metadata.CatPrimaryArtAnimated:
 				// Primary art (static or animated) is always renamed to
 				// folder.{ext}; no sanitization of the stem is needed because
-				// the name is hardcoded.
-				newPath = filepath.Join(fullAlbumDir, "folder"+ext)
+				// the name is hardcoded. .jpeg is normalized to .jpg since
+				// folder.jpg is the far more common convention and there's no
+				// reason to support two extensions for the same format.
+				normExt := ext
+				if normExt == ".jpeg" {
+					normExt = ".jpg"
+				}
+				newPath = filepath.Join(fullAlbumDir, "folder"+normExt)
 
 			case metadata.CatArtwork:
 				sanStem := sanitize.CleanStringResult(rawStem, sanitize.TrackOverride)

@@ -53,7 +53,8 @@ directories: `/[First Letter of Artist]/[Artist]/[Year] [Album Name]/`
 
 - **Root:**
   - Audio files (`.flac`, `.mp3`, `.m4a`)
-  - Primary Art (static): `folder.jpg` or `folder.png`
+  - Primary Art (static): `folder.jpg` or `folder.png` — `rename` normalizes a
+    source `folder.jpeg` to `folder.jpg`
   - Primary Art (animated): `folder.webp` or `folder.mp4`
   - Text files: `.log`, `.cue`, `.m3u`, `.m3u8`
   - `sums.md5`
