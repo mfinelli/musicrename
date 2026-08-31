@@ -113,9 +113,10 @@ func PushOne(client *subsonic.Client, path string, dryRun bool) (*PushResult, er
 // the remote side already matches local content exactly, no request is
 // made at all.
 //
-// #TARGETS: is pushed as a musicrename-managed suffix on the remote
-// comment, preserving whatever human-authored text was already there; local
-// #TARGETS: being absent means the suffix is omitted entirely on push,
+// #TARGETS:/#SORT: are pushed as musicrename-managed keys within a single
+// suffix on the remote comment, preserving whatever human-authored text
+// was already there; either one being locally absent means its key is
+// omitted from the suffix (dropping the whole suffix if neither remains),
 // reconciling a removal onto the remote side the same way a change is
 // reconciled.
 //
@@ -165,13 +166,13 @@ func pushOne(client *subsonic.Client, path string, dryRun bool, index map[string
 		}
 
 		// The comment param isn't reliably supported at creation time
-		// across Subsonic-compatible servers, so the #TARGETS: suffix
-		// is set via a follow-up updatePlaylist call; the same call
-		// path already confirmed to work for name changes on an
-		// existing playlist, rather than a second, unverified
-		// create-time code path.
-		if gp.HasTargets {
-			comment := composeComment("", gp.Targets, true)
+		// across Subsonic-compatible servers, so the musicrename-managed
+		// suffix is set via a follow-up updatePlaylist call.
+		if gp.HasTargets || gp.HasSort {
+			comment := composeComment("", commentDirectives{
+				Targets: gp.Targets, HasTargets: gp.HasTargets,
+				Sort: gp.Sort, HasSort: gp.HasSort,
+			})
 			if err := client.UpdatePlaylist(created.ID, map[string]string{"comment": comment}); err != nil {
 				return nil, fmt.Errorf("setting playlist comment: %w", err)
 			}
@@ -212,16 +213,18 @@ func pushOne(client *subsonic.Client, path string, dryRun bool, index map[string
 	}
 
 	// Preserve whatever human-authored text is already in the remote
-	// comment (only the musicrename-managed #TARGETS: suffix is ours to
-	// rewrite).
-	remoteHuman, remoteTargets, remoteHasTargets := parseCommentTargets(remote.Comment)
-	desiredComment := composeComment(remoteHuman, gp.Targets, gp.HasTargets)
+	// comment (only the musicrename-managed suffix is ours to rewrite).
+	remoteHuman, remoteDirectives := parseCommentDirectives(remote.Comment)
+	desiredComment := composeComment(remoteHuman, commentDirectives{
+		Targets: gp.Targets, HasTargets: gp.HasTargets,
+		Sort: gp.Sort, HasSort: gp.HasSort,
+	})
 
 	// Compare against a canonically-recomposed version of the remote
 	// comment, not the raw string: a hand-edited or otherwise-unsorted
-	// remote suffix would otherwise register as "different" purely due to
-	// target order, triggering a needless update.
-	normalizedRemoteComment := composeComment(remoteHuman, remoteTargets, remoteHasTargets)
+	// remote suffix (out-of-order keys, unsorted target values) would
+	// otherwise register as "different", triggering a needless update.
+	normalizedRemoteComment := composeComment(remoteHuman, remoteDirectives)
 
 	if remote.Name == name && normalizedRemoteComment == desiredComment && stringSlicesEqual(remotePaths, gp.Entries) {
 		result.Unchanged = append(result.Unchanged, path)

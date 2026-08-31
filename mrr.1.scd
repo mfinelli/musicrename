@@ -528,8 +528,9 @@ a phone) *during* an open pull-edit-push session gets silently overwritten
 by the eventual push: treat this as a checkout/check-in, not a continuous
 merge.
 
-A *#TARGETS:* directive is synced through the Navidrome playlist's comment
-field, appended as a *[musicrename:targets=...]* suffix so a normal,
+A *#TARGETS:* or *#SORT:* directive is synced through the Navidrome
+playlist's comment field, appended as a *[musicrename:sort=...;targets=...]*
+suffix (either or both keys present, as applicable) so a normal,
 human-written description can still live in the same field.
 
 Deleting a playlist outside of *mrr sync navidrome delete* is handled

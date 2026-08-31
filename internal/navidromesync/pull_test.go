@@ -243,6 +243,109 @@ func TestPullAll(t *testing.T) {
 		assert.Empty(t, gp.Targets)
 	})
 
+	t.Run("syncs #SORT: from the remote comment, previously local-only value discarded", func(t *testing.T) {
+		root := t.TempDir()
+		touchLocalFile(t, root, "main/a/artist/album/01 old.flac")
+		touchLocalFile(t, root, "main/a/artist/album/02 new.flac")
+
+		localPath := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(localPath, &playlist.GlobalPlaylist{
+			Name:           "Road Trip",
+			NavidromeID:    "id-1",
+			HasNavidromeID: true,
+			HasSort:        true, Sort: []string{"title"}, // stale local-only value
+			Entries: []string{"main/a/artist/album/01 old.flac"},
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.Contains(r.URL.Path, "getPlaylists"):
+				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+			case strings.Contains(r.URL.Path, "getPlaylist"):
+				fmt.Fprint(w, singlePlaylistJSONWithComment(
+					"id-1", "Road Trip", "[musicrename:sort=artist,album,track]",
+					[]string{"main/a/artist/album/02 new.flac"},
+				))
+			}
+		}))
+		defer srv.Close()
+
+		result, err := PullAll(testClient(srv.URL), root, false)
+		require.NoError(t, err)
+		require.Len(t, result.Updated, 1)
+
+		gp, err := playlist.ReadGlobalPlaylist(localPath)
+		require.NoError(t, err)
+		assert.True(t, gp.HasSort)
+		assert.Equal(t, []string{"artist", "album", "track"}, gp.Sort, "order must be preserved exactly, not alphabetized")
+	})
+
+	t.Run("reconciles #SORT: removal when the remote comment loses that key", func(t *testing.T) {
+		root := t.TempDir()
+		touchLocalFile(t, root, "main/a/artist/album/01 track.flac")
+
+		localPath := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(localPath, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+			HasSort: true, Sort: []string{"artist"},
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.Contains(r.URL.Path, "getPlaylists"):
+				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+			case strings.Contains(r.URL.Path, "getPlaylist"):
+				fmt.Fprint(w, singlePlaylistJSONWithComment(
+					"id-1", "Road Trip", "", []string{"main/a/artist/album/01 track.flac"},
+				))
+			}
+		}))
+		defer srv.Close()
+
+		result, err := PullAll(testClient(srv.URL), root, false)
+		require.NoError(t, err)
+		require.Len(t, result.Updated, 1)
+
+		gp, err := playlist.ReadGlobalPlaylist(localPath)
+		require.NoError(t, err)
+		assert.False(t, gp.HasSort, "a removed remote key must clear local #SORT:, not leave it stale")
+		assert.Empty(t, gp.Sort)
+	})
+
+	t.Run("both #TARGETS: and #SORT: reconcile together from one comment", func(t *testing.T) {
+		root := t.TempDir()
+		touchLocalFile(t, root, "main/a/artist/album/01 track.flac")
+
+		localPath := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(localPath, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.Contains(r.URL.Path, "getPlaylists"):
+				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+			case strings.Contains(r.URL.Path, "getPlaylist"):
+				fmt.Fprint(w, singlePlaylistJSONWithComment(
+					"id-1", "Road Trip", "[musicrename:sort=artist,album;targets=ipod,sdcard]",
+					[]string{"main/a/artist/album/01 track.flac"},
+				))
+			}
+		}))
+		defer srv.Close()
+
+		result, err := PullAll(testClient(srv.URL), root, false)
+		require.NoError(t, err)
+		require.Len(t, result.Updated, 1)
+
+		gp, err := playlist.ReadGlobalPlaylist(localPath)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"artist", "album"}, gp.Sort)
+		assert.ElementsMatch(t, []string{"ipod", "sdcard"}, gp.Targets)
+	})
+
 	t.Run("leaves an existing correlated file unchanged when content matches", func(t *testing.T) {
 		root := t.TempDir()
 		touchLocalFile(t, root, "main/a/artist/album/01 track.flac")

@@ -209,19 +209,22 @@ func applyRemotePlaylist(
 		entries = append(entries, e.Path)
 	}
 
-	// #TARGETS: is synced from the remote comment's musicrename-managed
-	// suffix, not preserved from the existing local file. A target added,
-	// changed, or removed on the remote side (including from Navidrome's
-	// UI, since the suffix is just a comment) is reconciled locally the
-	// same way name and entries already are.
-	_, targets, hasTargets := parseCommentTargets(remote.Comment)
+	// #TARGETS: and #SORT: are both synced from the remote comment's
+	// musicrename-managed suffix, not preserved from the existing local
+	// file so either one added, changed, or removed on the remote side
+	// (including a hand-edit via Navidrome's own UI, since the suffix is
+	// just a comment) is reconciled locally the same way name and entries
+	// already are.
+	_, remoteDirectives := parseCommentDirectives(remote.Comment)
 
 	updated := &playlist.GlobalPlaylist{
 		Name:           remote.Name,
 		NavidromeID:    remote.ID,
 		HasNavidromeID: true,
-		Targets:        targets,
-		HasTargets:     hasTargets,
+		Targets:        remoteDirectives.Targets,
+		HasTargets:     remoteDirectives.HasTargets,
+		Sort:           remoteDirectives.Sort,
+		HasSort:        remoteDirectives.HasSort,
 		Entries:        entries,
 	}
 
@@ -229,7 +232,9 @@ func applyRemotePlaylist(
 		if existing.Name == updated.Name &&
 			stringSlicesEqual(existing.Entries, updated.Entries) &&
 			existing.HasTargets == updated.HasTargets &&
-			stringSetsEqual(existing.Targets, updated.Targets) {
+			stringSetsEqual(existing.Targets, updated.Targets) &&
+			existing.HasSort == updated.HasSort &&
+			stringSlicesEqual(existing.Sort, updated.Sort) {
 			result.Unchanged = append(result.Unchanged, localPath)
 			return result, nil
 		}

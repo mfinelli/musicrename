@@ -393,6 +393,108 @@ func TestPushOne(t *testing.T) {
 		assert.Equal(t, "Great mix", capturedComment, "the suffix must be gone but the human text kept")
 	})
 
+	t.Run("creates a new remote playlist with #SORT: encoded in the comment, order preserved", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", HasSort: true, Sort: []string{"artist", "album", "track"},
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		var capturedComment string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/createPlaylist", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
+		})
+		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
+			if c := r.URL.Query().Get("comment"); c != "" {
+				capturedComment = c
+			}
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Created, 1)
+		assert.Equal(t, "[musicrename:sort=artist,album,track]", capturedComment)
+	})
+
+	t.Run("both #SORT: and #TARGETS: together produce one comment, sort-then-targets", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name:    "Road Trip",
+			HasSort: true, Sort: []string{"artist", "album"},
+			HasTargets: true, Targets: []string{"sdcard", "ipod"},
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		var capturedComment string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/createPlaylist", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
+		})
+		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
+			if c := r.URL.Query().Get("comment"); c != "" {
+				capturedComment = c
+			}
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Created, 1)
+		assert.Equal(t, "[musicrename:sort=artist,album;targets=ipod,sdcard]", capturedComment)
+	})
+
+	t.Run("removes the #SORT: key but keeps #TARGETS:, when local #SORT: is removed", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+			HasTargets: true, Targets: []string{"ipod"},
+			// No Sort/HasSort: locally removed.
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		var capturedComment string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+				`"comment":"[musicrename:sort=artist;targets=ipod]",`+
+				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Has("comment") {
+				capturedComment = r.URL.Query().Get("comment")
+			}
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Updated, 1)
+		assert.Equal(t, "[musicrename:targets=ipod]", capturedComment)
+	})
+
 	t.Run("a remote #TARGETS: suffix reordered but set-equal to local is Unchanged, no update call made", func(t *testing.T) {
 		root := t.TempDir()
 		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
