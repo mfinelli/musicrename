@@ -52,11 +52,23 @@ type EntryRow struct {
 // len(entries) stats and, for files that exist, len(entries) tag reads, not
 // a library-wide scan of any kind so it stays cheap regardless of how
 // large the library itself is.
-func ResolveEntryRows(libraryRootRoot string, entries []string) []EntryRow {
+//
+// A playlist can still run to thousands of entries, and every tag read is a
+// real file open, so this can take a noticeable amount of time even though it
+// isn't a library-wide scan. progress, if non-nil, is called with each
+// entry's Rel immediately before it's resolved (mirroring [hasher.Hash]'s
+// progress callback timing and nil-safety exactly) so a caller can render an
+// in-place "reading tags..." indicator instead of leaving the terminal
+// silent for that stretch.
+func ResolveEntryRows(libraryRootRoot string, entries []string, progress func(rel string)) []EntryRow {
 	reader := metadata.NewReader()
 	rows := make([]EntryRow, 0, len(entries))
 
 	for _, rel := range entries {
+		if progress != nil {
+			progress(rel)
+		}
+
 		abs := filepath.Join(libraryRootRoot, rel)
 		row := EntryRow{Rel: rel}
 

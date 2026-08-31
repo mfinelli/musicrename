@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/huh"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/playlist"
@@ -75,7 +76,22 @@ func runPlaylistEntriesRemove(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	rows := playlist.ResolveEntryRows(absRoot, gp.Entries)
+	// Resolving tags is a real per-file open, and a playlist can run to
+	// thousands of entries, so render an in-place progress indicator
+	// rather than leaving the terminal silent for that whole stretch
+	// (mirrors playlist_sums.go's \r\033[K progress style exactly,
+	// including its "do nothing when not a terminal" behavior).
+	isTTY := isatty.IsTerminal(os.Stdout.Fd())
+	var progress func(rel string)
+	if isTTY {
+		progress = func(rel string) {
+			fmt.Fprintf(out, "\r\033[K  reading tags... %s", rel)
+		}
+	}
+	rows := playlist.ResolveEntryRows(absRoot, gp.Entries, progress)
+	if isTTY {
+		fmt.Fprint(out, "\r\033[K")
+	}
 
 	artist, _ := cmd.Flags().GetString("artist")
 	album, _ := cmd.Flags().GetString("album")

@@ -57,7 +57,7 @@ func makeEntryRowAudioFile(t *testing.T, dir, name string, tags map[string]strin
 func TestResolveEntryRows(t *testing.T) {
 	t.Run("a missing file is reported as Missing, no track", func(t *testing.T) {
 		root := t.TempDir()
-		rows := ResolveEntryRows(root, []string{"main/a/artist/album/nope.flac"})
+		rows := ResolveEntryRows(root, []string{"main/a/artist/album/nope.flac"}, nil)
 		require.Len(t, rows, 1)
 		assert.True(t, rows[0].Missing)
 		assert.Nil(t, rows[0].Track)
@@ -70,7 +70,7 @@ func TestResolveEntryRows(t *testing.T) {
 			"ARTIST": "The Artist", "TITLE": "The Title",
 		})
 
-		rows := ResolveEntryRows(root, []string{"main/a/artist/album/01 track.flac"})
+		rows := ResolveEntryRows(root, []string{"main/a/artist/album/01 track.flac"}, nil)
 		require.Len(t, rows, 1)
 		assert.False(t, rows[0].Missing)
 		require.NotNil(t, rows[0].Track)
@@ -85,7 +85,7 @@ func TestResolveEntryRows(t *testing.T) {
 			"ARTIST": "The Artist",
 		})
 
-		rows := ResolveEntryRows(root, []string{"main/a/artist/album/02 untitled.flac"})
+		rows := ResolveEntryRows(root, []string{"main/a/artist/album/02 untitled.flac"}, nil)
 		require.Len(t, rows, 1)
 		assert.Equal(t, "The Artist — 02 untitled", rows[0].Label)
 	})
@@ -96,7 +96,7 @@ func TestResolveEntryRows(t *testing.T) {
 			"TITLE": "Solo Title",
 		})
 
-		rows := ResolveEntryRows(root, []string{"main/a/artist/album/03.flac"})
+		rows := ResolveEntryRows(root, []string{"main/a/artist/album/03.flac"}, nil)
 		require.Len(t, rows, 1)
 		assert.Equal(t, "Solo Title", rows[0].Label)
 	})
@@ -110,7 +110,7 @@ func TestResolveEntryRows(t *testing.T) {
 			"main/a/artist/album/01.flac",
 			"main/a/artist/album/missing.flac",
 			"main/a/artist/album/02.flac",
-		})
+		}, nil)
 		require.Len(t, rows, 3)
 		assert.Equal(t, "First", rows[0].Label)
 		assert.True(t, rows[1].Missing)
@@ -123,7 +123,7 @@ func TestResolveEntryRows(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0755))
 		require.NoError(t, os.WriteFile(full, []byte("not actually audio"), 0644))
 
-		rows := ResolveEntryRows(root, []string{"main/a/artist/album/notaudio.flac"})
+		rows := ResolveEntryRows(root, []string{"main/a/artist/album/notaudio.flac"}, nil)
 		require.Len(t, rows, 1)
 		assert.True(t, rows[0].Missing)
 		assert.Nil(t, rows[0].Track)
@@ -132,9 +132,35 @@ func TestResolveEntryRows(t *testing.T) {
 
 	t.Run("empty entries returns an empty, non-nil slice", func(t *testing.T) {
 		root := t.TempDir()
-		rows := ResolveEntryRows(root, []string{})
+		rows := ResolveEntryRows(root, []string{}, nil)
 		assert.NotNil(t, rows)
 		assert.Empty(t, rows)
+	})
+
+	t.Run("progress is called once per entry, in order, before each is resolved", func(t *testing.T) {
+		root := t.TempDir()
+		makeEntryRowAudioFile(t, root, "main/a/artist/album/01.flac", map[string]string{"TITLE": "First"})
+
+		var seen []string
+		rows := ResolveEntryRows(root, []string{
+			"main/a/artist/album/01.flac",
+			"main/a/artist/album/missing.flac",
+		}, func(rel string) {
+			seen = append(seen, rel)
+		})
+
+		assert.Equal(t, []string{
+			"main/a/artist/album/01.flac",
+			"main/a/artist/album/missing.flac",
+		}, seen)
+		require.Len(t, rows, 2)
+	})
+
+	t.Run("a nil progress is safe (the default, exercised by every case above)", func(t *testing.T) {
+		root := t.TempDir()
+		assert.NotPanics(t, func() {
+			ResolveEntryRows(root, []string{"whatever.flac"}, nil)
+		})
 	})
 }
 
