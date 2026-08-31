@@ -403,14 +403,40 @@ func checkArtwork(album *metadata.Album, ar *AlbumResult) {
 }
 
 // checkIntegrity warns when sums.md5 is absent from the album directory.
-// Verification of the checksums themselves is out of scope; the user can run
-// `md5sum -c sums.md5` directly for that.
+// When present, it also warns about any file in the album with no
+// corresponding entry recorded in sums.md5, and any entry recorded in
+// sums.md5 with no corresponding file in the album. Verification of the
+// checksums themselves is out of scope; the user can run `md5sum -c sums.md5`
+// directly for that.
 func checkIntegrity(album *metadata.Album, ar *AlbumResult) {
 	sumsPath := filepath.Join(album.RootPath, hasher.SumsFilename)
 	if _, err := os.Stat(sumsPath); os.IsNotExist(err) {
 		ar.Warnings = append(ar.Warnings, Warning{
 			Path:    album.RootPath,
 			Message: "missing " + hasher.SumsFilename,
+		})
+		return
+	}
+
+	missingFromSums, missingOnDisk, err := hasher.DiffEntries(album.RootPath, hasher.SumsFilename)
+	if err != nil {
+		ar.Warnings = append(ar.Warnings, Warning{
+			Path:    album.RootPath,
+			Message: fmt.Sprintf("could not verify %s entries: %v", hasher.SumsFilename, err),
+		})
+		return
+	}
+
+	for _, name := range missingFromSums {
+		ar.Warnings = append(ar.Warnings, Warning{
+			Path:    filepath.Join(album.RootPath, name),
+			Message: fmt.Sprintf("not recorded in %s", hasher.SumsFilename),
+		})
+	}
+	for _, name := range missingOnDisk {
+		ar.Warnings = append(ar.Warnings, Warning{
+			Path:    album.RootPath,
+			Message: fmt.Sprintf("%s references %q which does not exist", hasher.SumsFilename, name),
 		})
 	}
 }

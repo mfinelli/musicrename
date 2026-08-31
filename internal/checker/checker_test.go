@@ -523,6 +523,41 @@ func TestCheckIntegrity(t *testing.T) {
 		checkIntegrity(album, ar)
 		assert.Empty(t, ar.Warnings)
 	})
+
+	t.Run("file on disk with no recorded entry produces warning", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, hasher.Hash(dir, nil))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "01 track.flac"), []byte("audio"), 0o644))
+		album := makeCheckerAlbum(dir, "Artist", nil, nil)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkIntegrity(album, ar)
+		w := findWarning(ar, "not recorded in "+hasher.SumsFilename)
+		require.NotNil(t, w)
+		assert.Equal(t, filepath.Join(dir, "01 track.flac"), w.Path)
+	})
+
+	t.Run("recorded entry with no file on disk produces warning", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "01 track.flac"), []byte("audio"), 0o644))
+		require.NoError(t, hasher.Hash(dir, nil))
+		require.NoError(t, os.Remove(filepath.Join(dir, "01 track.flac")))
+		album := makeCheckerAlbum(dir, "Artist", nil, nil)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkIntegrity(album, ar)
+		w := findWarning(ar, "01 track.flac")
+		require.NotNil(t, w)
+		assert.Equal(t, dir, w.Path)
+	})
+
+	t.Run("sums.md5 matching disk exactly produces no warning", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "01 track.flac"), []byte("audio"), 0o644))
+		require.NoError(t, hasher.Hash(dir, nil))
+		album := makeCheckerAlbum(dir, "Artist", nil, nil)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkIntegrity(album, ar)
+		assert.Empty(t, ar.Warnings)
+	})
 }
 
 func TestCheckUnknownFiles(t *testing.T) {

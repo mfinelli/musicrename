@@ -65,7 +65,10 @@ func (r *CheckResult) HasWarnings() bool {
 //   - musicvideo.nfo has a non-empty title and artist.
 //   - (only if videoRoot != "", and only if the above all passed) dir
 //     matches what Add/Rename would compute from the nfo.
-//   - sums.md5 exists.
+//   - sums.md5 exists, and when it does, that its recorded entries match
+//     the directory's current file listing (a pure listing comparison via
+//     hasher.DiffEntries, performed without hashing anything; verifying the
+//     checksums themselves is out of scope, use `md5sum -c sums.md5`).
 func Check(dir, videoRoot string) (*CheckResult, error) {
 	result := &CheckResult{}
 
@@ -107,6 +110,26 @@ func Check(dir, videoRoot string) (*CheckResult, error) {
 
 	if _, err := os.Stat(filepath.Join(dir, hasher.SumsFilename)); os.IsNotExist(err) {
 		result.Warnings = append(result.Warnings, Warning{Path: dir, Message: "missing sums.md5"})
+	} else {
+		missingFromSums, missingOnDisk, derr := hasher.DiffEntries(dir, hasher.SumsFilename)
+		if derr != nil {
+			result.Warnings = append(result.Warnings, Warning{
+				Path:    dir,
+				Message: fmt.Sprintf("could not verify sums.md5 entries: %v", derr),
+			})
+		}
+		for _, name := range missingFromSums {
+			result.Warnings = append(result.Warnings, Warning{
+				Path:    dir,
+				Message: fmt.Sprintf("%s not recorded in sums.md5", name),
+			})
+		}
+		for _, name := range missingOnDisk {
+			result.Warnings = append(result.Warnings, Warning{
+				Path:    dir,
+				Message: fmt.Sprintf("sums.md5 references %q which does not exist", name),
+			})
+		}
 	}
 
 	return result, nil
