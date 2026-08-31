@@ -37,9 +37,15 @@ playlists/*.m3u8 (applies to every target) and playlists/{target}/*.m3u8
 
   - An entry whose path does not resolve to an actual file anywhere under
     library-root-root.
-  - Two or more playlist files sharing the same #NAVIDROME-ID directive, 
+  - An unrecognized target name inside a #TARGETS: directive.
+  - Two or more playlist files sharing the same #NAVIDROME-ID directive,
     which would otherwise silently correlate to the same remote Navidrome
     playlist.
+  - A directive (#PLAYLIST:, #NAVIDROME-ID:, or #TARGETS:) that appears more
+    than once within a single file.
+  - A missing playlists/sums.md5, and once one exists, any file under the
+    tree not recorded in it or any entry recorded in it with no matching
+    file.
 
 This does not check album-local target manifests (ipod.m3u8, sdcard.m3u8,
 etc., inside an album directory) which are audited by 'musicrename check'

@@ -600,6 +600,18 @@ func (r *PlaylistResult) HasWarnings() bool {
 //     Under the one-file-per-playlist structure this is never legitimate, so
 //     any duplicate is reported unconditionally (target scope is expressed
 //     via the #TARGETS: directive inside a single canonical file).
+//   - A directive (#PLAYLIST:, #NAVIDROME-ID:, or #TARGETS:) that appears
+//     more than once within a single file. Every reader silently resolves
+//     this one way or another (see [playlist.DuplicateDirectives]), so it's
+//     never a hard error, only a passive finding.
+//   - A missing playlists/sums.md5, and once present, any file under the
+//     tree with no corresponding entry recorded in it, or any entry recorded
+//     in it with no corresponding file (a pure listing comparison via
+//     [hasher.DiffEntries], performed without hashing anything). Skipped
+//     entirely if the playlists/ tree doesn't exist at all, or contains no
+//     .m3u8 file yet, matching this function's "no directory, no findings"
+//     stance rather than demanding a sums.md5 for a tree with nothing
+//     meaningful in it yet.
 //
 // A libraryRootRoot with no playlists/ directory at all is not an error; it
 // simply produces an empty PlaylistResult.
@@ -614,7 +626,14 @@ func CheckPlaylists(libraryRootRoot string) (*PlaylistResult, error) {
 	// #NAVIDROME-ID check below.
 	navidromeIDs := make(map[string][]string)
 
+	// Tracks whether WalkTree found at least one .m3u8 file at all, so an
+	// empty (or .m3u8-free) playlists/ tree doesn't get flagged for a
+	// missing sums.md5 it has no real need for yet.
+	var sawPlaylist bool
+
 	err := playlist.WalkTree(libraryRootRoot, func(path string) error {
+		sawPlaylist = true
+
 		entries, err := playlist.ReadEntries(path)
 		if err != nil {
 			result.Warnings = append(result.Warnings, PlaylistWarning{
@@ -647,6 +666,15 @@ func CheckPlaylists(libraryRootRoot string) (*PlaylistResult, error) {
 			}
 		}
 
+		if dups, err := playlist.DuplicateDirectives(path); err == nil {
+			for _, prefix := range dups {
+				result.Warnings = append(result.Warnings, PlaylistWarning{
+					Path:    path,
+					Message: fmt.Sprintf("duplicate %s directive", prefix),
+				})
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -672,6 +700,41 @@ func CheckPlaylists(libraryRootRoot string) (*PlaylistResult, error) {
 					id, strings.Join(others, ", "),
 				),
 			})
+		}
+	}
+
+	playlistsDir := playlist.Dir(libraryRootRoot)
+	if _, statErr := os.Stat(playlistsDir); statErr == nil {
+		sumsPath := filepath.Join(playlistsDir, hasher.SumsFilename)
+		switch _, sumsErr := os.Stat(sumsPath); {
+		case os.IsNotExist(sumsErr):
+			if sawPlaylist {
+				result.Warnings = append(result.Warnings, PlaylistWarning{
+					Path:    playlistsDir,
+					Message: "missing " + hasher.SumsFilename,
+				})
+			}
+		case sumsErr == nil:
+			missingFromSums, missingOnDisk, derr := hasher.DiffEntries(playlistsDir, hasher.SumsFilename)
+			if derr != nil {
+				result.Warnings = append(result.Warnings, PlaylistWarning{
+					Path:    playlistsDir,
+					Message: fmt.Sprintf("could not verify %s entries: %v", hasher.SumsFilename, derr),
+				})
+			} else {
+				for _, name := range missingFromSums {
+					result.Warnings = append(result.Warnings, PlaylistWarning{
+						Path:    filepath.Join(playlistsDir, name),
+						Message: fmt.Sprintf("not recorded in %s", hasher.SumsFilename),
+					})
+				}
+				for _, name := range missingOnDisk {
+					result.Warnings = append(result.Warnings, PlaylistWarning{
+						Path:    playlistsDir,
+						Message: fmt.Sprintf("%s references %q which does not exist", hasher.SumsFilename, name),
+					})
+				}
+			}
 		}
 	}
 

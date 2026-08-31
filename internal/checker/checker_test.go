@@ -992,6 +992,7 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 			[]byte("#PLAYLIST:Road Trip\n"+filepath.ToSlash(trackRel)+"\n"),
 			0o644,
 		))
+		require.NoError(t, hasher.Hash(filepath.Join(root, "playlists"), nil))
 
 		result, err := CheckPlaylists(root)
 		require.NoError(t, err)
@@ -1094,6 +1095,7 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 		require.NoError(t, os.WriteFile(
 			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#TARGETS:ipod,sdcard\n"), 0o644,
 		))
+		require.NoError(t, hasher.Hash(filepath.Join(root, "playlists"), nil))
 
 		result, err := CheckPlaylists(root)
 		require.NoError(t, err)
@@ -1106,10 +1108,104 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 		require.NoError(t, os.WriteFile(
 			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
 		))
+		require.NoError(t, hasher.Hash(filepath.Join(root, "playlists"), nil))
 
 		result, err := CheckPlaylists(root)
 		require.NoError(t, err)
 		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("missing playlists/sums.md5 produces a warning once a playlist exists", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "missing "+hasher.SumsFilename)
+		require.NotNil(t, w)
+		assert.Equal(t, filepath.Join(root, "playlists"), w.Path)
+	})
+
+	t.Run("file under playlists/ with no recorded entry produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "second.m3u8"), []byte("#PLAYLIST:Second\n"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "not recorded in "+hasher.SumsFilename)
+		require.NotNil(t, w)
+		assert.Equal(t, filepath.Join(playlistsDir, "second.m3u8"), w.Path)
+	})
+
+	t.Run("recorded entry with no file under playlists/ produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+		require.NoError(t, os.Remove(filepath.Join(playlistsDir, "roadtrip.m3u8")))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, `sums.md5 references "roadtrip.m3u8" which does not exist`)
+		require.NotNil(t, w)
+		assert.Equal(t, playlistsDir, w.Path)
+	})
+
+	t.Run("playlists/sums.md5 matching the tree exactly produces no warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("duplicate #PLAYLIST: directive within one file produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#PLAYLIST:First\n#PLAYLIST:Second\n"), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "duplicate #PLAYLIST: directive")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+	})
+
+	t.Run("no duplicate directives produces no warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Nil(t, findPlaylistWarning(result, "duplicate #"))
 	})
 
 	t.Run("subdirectories under playlists/ are walked recursively", func(t *testing.T) {

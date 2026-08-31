@@ -30,6 +30,48 @@ import (
 // (ASCII-sanitized) filename.
 const playlistNamePrefix = "#PLAYLIST:"
 
+// playlistDirectivePrefixes lists every directive prefix a library-wide
+// playlist file recognizes, in the fixed order they're written in by
+// [WriteGlobalPlaylist] (not necessarily file order, for a stable,
+// predictable [DuplicateDirectives] result).
+var playlistDirectivePrefixes = []string{playlistNamePrefix, navidromeIDPrefix, targetsPrefix}
+
+// DuplicateDirectives returns the directive prefixes that appear more than
+// once in the playlist file at path (in playlistDirectivePrefixes order),
+// or nil if none do. A missing file returns (nil, nil).
+//
+// A duplicate is never treated as an error by any reader in this package:
+// [ReadNavidromeID] and [ReadTargets] each resolve to whichever occurrence
+// they encounter first, while [ReadGlobalPlaylist] resolves to whichever it
+// encounters last (parsed via a single switch over all lines in order)
+// so behavior is well-defined either way, just silently inconsistent
+// between readers. DuplicateDirectives exists purely so `playlist check`
+// can surface this as a passive audit finding.
+func DuplicateDirectives(path string) ([]string, error) {
+	lines, err := readLines(path)
+	if err != nil {
+		return nil, err
+	}
+
+	counts := make(map[string]int, len(playlistDirectivePrefixes))
+	for _, line := range lines {
+		for _, prefix := range playlistDirectivePrefixes {
+			if strings.HasPrefix(line, prefix) {
+				counts[prefix]++
+				break
+			}
+		}
+	}
+
+	var dups []string
+	for _, prefix := range playlistDirectivePrefixes {
+		if counts[prefix] > 1 {
+			dups = append(dups, prefix)
+		}
+	}
+	return dups, nil
+}
+
 // GlobalPlaylist is the parsed content of a library-wide playlist file
 // (playlists/*.m3u8): its extended-M3U directives plus its plain entries,
 // in order. Unlike an album-local manifest, entry order here is meaningful.

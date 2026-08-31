@@ -208,3 +208,60 @@ func TestWriteGlobalPlaylist(t *testing.T) {
 		assert.Equal(t, "#PLAYLIST:New\nnew.flac\n", string(got))
 	})
 }
+
+func TestDuplicateDirectives(t *testing.T) {
+	t.Run("missing file returns nil, nil", func(t *testing.T) {
+		dir := t.TempDir()
+		dups, err := DuplicateDirectives(filepath.Join(dir, "missing.m3u8"))
+		require.NoError(t, err)
+		assert.Nil(t, dups)
+	})
+
+	t.Run("no duplicates returns nil", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte(
+			"#PLAYLIST:Road Trip\n#NAVIDROME-ID:abc-123\n#TARGETS:ipod\ntrack.flac\n",
+		), 0644))
+
+		dups, err := DuplicateDirectives(path)
+		require.NoError(t, err)
+		assert.Nil(t, dups)
+	})
+
+	t.Run("flags a duplicate #PLAYLIST: directive", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte(
+			"#PLAYLIST:First\n#PLAYLIST:Second\ntrack.flac\n",
+		), 0644))
+
+		dups, err := DuplicateDirectives(path)
+		require.NoError(t, err)
+		assert.Equal(t, []string{playlistNamePrefix}, dups)
+	})
+
+	t.Run("flags multiple duplicated directives, in fixed order", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte(
+			"#TARGETS:ipod\n#TARGETS:sdcard\n#PLAYLIST:First\n#PLAYLIST:Second\ntrack.flac\n",
+		), 0644))
+
+		dups, err := DuplicateDirectives(path)
+		require.NoError(t, err)
+		assert.Equal(t, []string{playlistNamePrefix, targetsPrefix}, dups)
+	})
+
+	t.Run("three occurrences still reports the prefix once", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte(
+			"#NAVIDROME-ID:a\n#NAVIDROME-ID:b\n#NAVIDROME-ID:c\ntrack.flac\n",
+		), 0644))
+
+		dups, err := DuplicateDirectives(path)
+		require.NoError(t, err)
+		assert.Equal(t, []string{navidromeIDPrefix}, dups)
+	})
+}
