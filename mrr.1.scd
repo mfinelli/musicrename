@@ -201,8 +201,8 @@ If _album-path_ is omitted it defaults to the current directory.
 Audits the library-wide *playlists/* tree (see *PLAYLISTS* below) for
 broken entries, unrecognized names in a *#TARGETS:* directive, duplicate
 *#NAVIDROME-ID* values across files, a directive (*#PLAYLIST:*,
-*#NAVIDROME-ID:*, or *#TARGETS:*) repeated within a single file, and a
-missing or stale *playlists/sums.md5* (files present with no recorded
+*#NAVIDROME-ID:*, *#TARGETS:*, or *#SORT:*) repeated within a single file,
+and a missing or stale *playlists/sums.md5* (files present with no recorded
 entry, or entries with no matching file). Read-only; exits non-zero if any
 findings are present.
 
@@ -302,6 +302,30 @@ _playlist_ must already exist.
 	with *--artist*, both must match.
 *--dry-run*
 	Preview what would be removed without changing the file.
+
+## mrr playlist sort <_playlist_> [_fields_] [*--shuffle*] [*--dry-run*]
+
+Reorders _playlist_'s entries by _fields_, a comma-separated list of track
+metadata fields in precedence order (the first breaks the most ties):
+*artist*, *albumartist*, *album*, *year*, *disc*, *track*, *title*. An
+entry with no value for the field being compared sorts after any entry
+that has one; an entry that doesn't resolve to a real file at all sorts
+after every resolvable one. Ties left unbroken by every given field keep
+their current relative order.
+
+With neither _fields_ nor *--shuffle* given, reapplies whichever criteria
+were last used on this playlist (remembered in a *#SORT:* directive
+written back on every successful sort or shuffle) but this errors if
+nothing has been remembered yet and none is given now. Explicit _fields_
+or *--shuffle* always supersede and become the new remembered criteria.
+
+_playlist_ must already exist.
+
+*--shuffle*
+	Randomize entry order instead of sorting by fields.
+*--dry-run*
+	Preview the new order without changing the file or its remembered
+	criteria.
 
 ## mrr sync ipod <_device-path_> [_path_]
 

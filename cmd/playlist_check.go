@@ -41,8 +41,8 @@ playlists/*.m3u8 (applies to every target) and playlists/{target}/*.m3u8
   - Two or more playlist files sharing the same #NAVIDROME-ID directive,
     which would otherwise silently correlate to the same remote Navidrome
     playlist.
-  - A directive (#PLAYLIST:, #NAVIDROME-ID:, or #TARGETS:) that appears more
-    than once within a single file.
+  - A directive (#PLAYLIST:, #NAVIDROME-ID:, #TARGETS:, or #SORT:) that
+    appears more than once within a single file.
   - A missing playlists/sums.md5, and once one exists, any file under the
     tree not recorded in it or any entry recorded in it with no matching
     file.

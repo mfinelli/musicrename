@@ -600,10 +600,10 @@ func (r *PlaylistResult) HasWarnings() bool {
 //     Under the one-file-per-playlist structure this is never legitimate, so
 //     any duplicate is reported unconditionally (target scope is expressed
 //     via the #TARGETS: directive inside a single canonical file).
-//   - A directive (#PLAYLIST:, #NAVIDROME-ID:, or #TARGETS:) that appears
-//     more than once within a single file. Every reader silently resolves
-//     this one way or another (see [playlist.DuplicateDirectives]), so it's
-//     never a hard error, only a passive finding.
+//   - A directive (#PLAYLIST:, #NAVIDROME-ID:, #TARGETS:, or #SORT:) that
+//     appears more than once within a single file. Every reader silently
+//     resolves this one way or another (see [playlist.DuplicateDirectives]),
+//     so it's never a hard error, only a passive finding.
 //   - A missing playlists/sums.md5, and once present, any file under the
 //     tree with no corresponding entry recorded in it, or any entry recorded
 //     in it with no corresponding file (a pure listing comparison via

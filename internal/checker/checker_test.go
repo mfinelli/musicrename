@@ -1194,6 +1194,21 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 		assert.Equal(t, path, w.Path)
 	})
 
+	t.Run("duplicate #SORT: directive within one file produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#SORT:artist\n#SORT:shuffle\n"), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "duplicate #SORT: directive")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+	})
+
 	t.Run("no duplicate directives produces no warning", func(t *testing.T) {
 		root := t.TempDir()
 		playlistsDir := filepath.Join(root, "playlists")

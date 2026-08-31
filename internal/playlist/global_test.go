@@ -98,6 +98,51 @@ func TestReadGlobalPlaylist(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"track.flac"}, gp.Entries)
 	})
+
+	t.Run("parses a field-list #SORT: directive, order preserved", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#SORT:artist,album,track\ntrack.flac\n"), 0644))
+
+		gp, err := ReadGlobalPlaylist(path)
+		require.NoError(t, err)
+		assert.True(t, gp.HasSort)
+		assert.Equal(t, []string{"artist", "album", "track"}, gp.Sort)
+	})
+
+	t.Run("parses the shuffle sentinel #SORT: directive", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#SORT:shuffle\ntrack.flac\n"), 0644))
+
+		gp, err := ReadGlobalPlaylist(path)
+		require.NoError(t, err)
+		assert.True(t, gp.HasSort)
+		assert.Equal(t, []string{"shuffle"}, gp.Sort)
+	})
+
+	t.Run("present-but-empty #SORT: is distinct from absent", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#SORT:\ntrack.flac\n"), 0644))
+
+		gp, err := ReadGlobalPlaylist(path)
+		require.NoError(t, err)
+		assert.True(t, gp.HasSort)
+		assert.Empty(t, gp.Sort)
+		assert.NotNil(t, gp.Sort)
+	})
+
+	t.Run("no #SORT: directive at all", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("track.flac\n"), 0644))
+
+		gp, err := ReadGlobalPlaylist(path)
+		require.NoError(t, err)
+		assert.False(t, gp.HasSort)
+		assert.Empty(t, gp.Sort)
+	})
 }
 
 func TestWriteGlobalPlaylist(t *testing.T) {
@@ -149,6 +194,67 @@ func TestWriteGlobalPlaylist(t *testing.T) {
 		got, err := os.ReadFile(path)
 		require.NoError(t, err)
 		assert.Contains(t, string(got), "#TARGETS:\n")
+	})
+
+	t.Run("writes #SORT: after #TARGETS:, preserving given field order", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "roadtrip.m3u8")
+
+		err := WriteGlobalPlaylist(path, &GlobalPlaylist{
+			Name:       "Road Trip",
+			HasTargets: true, Targets: []string{"ipod"},
+			HasSort: true, Sort: []string{"album", "artist", "track"},
+			Entries: []string{"track.flac"},
+		})
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t,
+			"#PLAYLIST:Road Trip\n#TARGETS:ipod\n#SORT:album,artist,track\ntrack.flac\n",
+			string(got),
+		)
+	})
+
+	t.Run("#SORT: field order is never alphabetized, unlike Targets", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+
+		require.NoError(t, WriteGlobalPlaylist(path, &GlobalPlaylist{
+			HasSort: true, Sort: []string{"track", "album", "artist"},
+			Entries: []string{"track.flac"},
+		}))
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(got), "#SORT:track,album,artist\n")
+	})
+
+	t.Run("the shuffle sentinel round-trips as-is", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+
+		require.NoError(t, WriteGlobalPlaylist(path, &GlobalPlaylist{
+			HasSort: true, Sort: []string{"shuffle"},
+			Entries: []string{"track.flac"},
+		}))
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(got), "#SORT:shuffle\n")
+	})
+
+	t.Run("sorting a nil-Sort input does not panic", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+
+		require.NoError(t, WriteGlobalPlaylist(path, &GlobalPlaylist{
+			HasSort: true, Entries: []string{"track.flac"},
+		}))
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(got), "#SORT:\n")
 	})
 
 	t.Run("omits directives that are not set", func(t *testing.T) {
@@ -263,5 +369,17 @@ func TestDuplicateDirectives(t *testing.T) {
 		dups, err := DuplicateDirectives(path)
 		require.NoError(t, err)
 		assert.Equal(t, []string{navidromeIDPrefix}, dups)
+	})
+
+	t.Run("flags a duplicate #SORT: directive", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "list.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte(
+			"#SORT:artist\n#SORT:shuffle\ntrack.flac\n",
+		), 0644))
+
+		dups, err := DuplicateDirectives(path)
+		require.NoError(t, err)
+		assert.Equal(t, []string{sortPrefix}, dups)
 	})
 }
