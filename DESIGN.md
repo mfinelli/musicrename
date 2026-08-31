@@ -1916,6 +1916,8 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename logout`                                        | **Implemented (§8.1).** Clears stored Navidrome credentials. Pure local file removal; not an error if not logged in.                                                                                                                                                                                                                                                                                                         |
 | `musicrename playlist select <target> [album-path]`         | **Implemented (§7.3).** Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back, targeted-updating (never fully rehashing) `sums.md5` if present (§7.3, §3.4). `album-path` defaults to the current directory, matching `inspect`/`lyrics`. `--skip-md5` suppresses the `sums.md5` update. |
 | `musicrename playlist check [library-root-root]`            | **Implemented (§7.12).** Audits the `playlists/` tree for entries that don't resolve to a file, unrecognized `#TARGETS:` names, and duplicate `#NAVIDROME-ID` values across files. Read-only; exits non-zero on findings, matching `check`'s conventions. Album-local manifest findings live in `musicrename check` instead (§4.3, §7.12), not here.                                                                         |
+| `musicrename playlist rename [library-root-root]`           | **Implemented (§7.13).** Scans the `playlists/` tree and renames each file to a filesystem-safe name derived from its `#PLAYLIST:` directive; a file with no directive, or one that sanitizes to an empty string, is skipped and reported rather than treated as an error. Content is never touched, only the filename. `--dry-run`.                                                                                         |
+| `musicrename playlist sums [library-root-root]`             | **Implemented (§9.2).** Computes MD5 checksums for every file under `playlists/` recursively and writes a single `playlists/sums.md5` covering the whole tree — unlike album/video `sums.md5`, there is no library-wide-vs-single-item distinction here since the tree itself is the only unit. `--force` to overwrite an existing one.                                                                                      |
 | `musicrename sync ipod <device-path> [library-root-root]`   | **Implemented (§7.7).** Full reconciliation sync to an attached iPod: computes the plan, checks device capacity, confirms (unless `--yes`), then applies it. `--dry-run`, `--yes`, `--verbose`.                                                                                                                                                                                                                              |
 | `musicrename sync sdcard <device-path> [library-root-root]` | **Implemented (§7.7).** Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                          |
 | `musicrename sync navidrome pull [playlist]`                | **Implemented.** Pulls all playlists, or one by path if given (§8.5, §8.7). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                          |
@@ -1939,12 +1941,32 @@ one place strict error handling is non-negotiable rather than a nicety.
 
 ### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
 
-Tooling beyond `playlist select`/`playlist rename` for the global `playlists/`
-tree (§7.4) — e.g. `playlist create <name> [--targets]` to scaffold a new file
-with correctly formatted `#PLAYLIST:`/`#TARGETS:` headers, reordering, editing a
-playlist's `#TARGETS:` scope, or repairing malformed headers — is deferred as a
-later phase of this same work, alongside the video/Rockbox pipeline (§6.5) and
-the on-device sync mechanism (§7) itself. `playlist select`'s narrower
-album-manifest scope, plus `playlist rename`'s narrow filename-only scope, cover
-the immediate need; the rest of the global-playlist authoring experience remains
-manual (a text editor) until this phase is picked up.
+Tooling beyond `playlist select`/`playlist rename`/`playlist sums` for the
+global `playlists/` tree (§7.4) is being built out as this phase's remaining
+work, alongside the video/Rockbox pipeline (§6.5) and the on-device sync
+mechanism (§7), both already implemented:
+
+- `playlist create <name> [--targets]` — scaffold a new file with correctly
+  formatted `#PLAYLIST:`/`#TARGETS:` headers only, no seeded entries.
+- Editing a playlist's `#TARGETS:` scope after the fact.
+- `playlist entries add`/`remove` and an interactive reorder TUI, plus
+  `playlist sort` — path-based, bounded by the playlist's own entry count rather
+  than a full library scan; a library-wide search/browse UI for picking tracks
+  to add is explicitly out of scope for now.
+- `playlist check` extensions: missing `playlists/sums.md5`, and (now that
+  `playlist sums` exists to generate it) diffing its recorded entries against
+  the tree's actual file listing via `hasher.DiffEntries`, the same listing-only
+  comparison already wired into `check`/`video check` (§4.3). Malformed-header
+  findings (duplicate directives, an unrecognized name in `#TARGETS:`) fold in
+  here too, as plain findings with no `--fix`, matching every other `check`
+  command's read-only posture.
+- Retrofitting every mutating playlist command above, plus `playlist rename` and
+  `sync navidrome pull/push` (§8), to maintain `playlists/sums.md5` per-line via
+  `hasher.UpdateFile`/`RenameFile`/`RemoveFile` (§3.4) rather than a full rehash
+  — these currently predate `playlist sums`'s existence and don't yet touch it
+  at all.
+
+`playlist select`'s narrower album-manifest scope, plus
+`playlist rename`/`sums`'s narrow filename/checksum-only scopes, cover the
+immediate need; the rest of the global-playlist authoring experience remains
+manual (a text editor) until the remaining items above are picked up.

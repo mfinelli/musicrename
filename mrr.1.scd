@@ -222,6 +222,19 @@ If _library-root-root_ is omitted it defaults to the current directory.
 *--dry-run*
 	Preview all planned renames without touching the filesystem.
 
+## mrr playlist sums [_library-root-root_]
+
+Computes MD5 checksums for every file under the library-wide *playlists/*
+tree (see *PLAYLISTS* below) recursively, and writes them to a single
+*playlists/sums.md5* covering the whole tree. Unlike album or video
+*sums.md5*, which are one per directory, there is no library-wide-vs-
+single-item distinction to make here.
+
+If _library-root-root_ is omitted it defaults to the current directory.
+
+*--force*
+	Overwrite an existing *playlists/sums.md5*.
+
 ## mrr sync ipod <_device-path_> [_path_]
 
 Syncs the library to an iPod running Rockbox (https://www.rockbox.org)

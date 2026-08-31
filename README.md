@@ -231,6 +231,27 @@ instead.)
 mrr playlist check ~/music
 ```
 
+#### `playlist rename`
+
+Scans the same `playlists/` tree as `playlist check` and renames each file to a
+filesystem-safe name derived from its `#PLAYLIST:` directive. A file with no
+`#PLAYLIST:` directive, or one that sanitizes to an empty string, is skipped and
+reported rather than treated as an error.
+
+```sh
+mrr playlist rename ~/music
+```
+
+#### `playlist sums`
+
+Computes MD5 checksums for every file under the `playlists/` tree recursively
+and writes a single `playlists/sums.md5` covering the whole tree (unlike album
+or video `sums.md5`, there's no per-directory split here).
+
+```sh
+mrr playlist sums ~/music
+```
+
 #### `sync ipod` / `sync sdcard`
 
 Compares the library against the device, checks free space, then asks for

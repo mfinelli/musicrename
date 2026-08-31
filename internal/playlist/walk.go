@@ -25,6 +25,14 @@ import (
 	"strings"
 )
 
+// Dir returns the library-wide playlists/ directory under libraryRootRoot.
+// Exported so callers outside this package (cmd/playlist_sums.go and future
+// mutating playlist commands) reference the same "playlists" name WalkTree
+// uses internally, rather than each hardcoding it separately.
+func Dir(libraryRootRoot string) string {
+	return filepath.Join(libraryRootRoot, "playlists")
+}
+
 // WalkTree calls fn once for every .m3u8 file found by walking
 // libraryRootRoot's playlists/ directory recursively. Subdirectories
 // carry no scoping meaning under the flat, #TARGETS:-based structure
@@ -35,7 +43,7 @@ import (
 // WalkTree simply calls fn zero times. fn is called with each file's full
 // path; a non-nil error from fn stops the walk and is returned as-is.
 func WalkTree(libraryRootRoot string, fn func(path string) error) error {
-	playlistsDir := filepath.Join(libraryRootRoot, "playlists")
+	playlistsDir := Dir(libraryRootRoot)
 
 	err := filepath.WalkDir(playlistsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

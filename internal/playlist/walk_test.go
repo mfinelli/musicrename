@@ -27,6 +27,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDir(t *testing.T) {
+	t.Run("joins libraryRootRoot with playlists", func(t *testing.T) {
+		assert.Equal(t, filepath.Join("/library", "playlists"), Dir("/library"))
+	})
+}
+
 func TestWalkTree(t *testing.T) {
 	t.Run("no playlists/ directory at all is not an error", func(t *testing.T) {
 		root := t.TempDir()
