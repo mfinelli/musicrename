@@ -1921,6 +1921,7 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename playlist create <name> [library-root-root]`    | **Implemented (§9.2).** Scaffolds a new `playlists/` file with a `#PLAYLIST:` directive (and `#TARGETS:`, if `--targets` is given) and no entries; the filename is sanitized the same way `playlist rename` derives one. Errors rather than overwrites if the destination already exists. Adds the new file's entry to an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                       |
 | `musicrename playlist targets <playlist>`                   | **Implemented (§9.2).** Rewrites an existing playlist's `#TARGETS:` directive: `--set` (an empty value is a valid, explicit "applies to no target" state) or `--clear` (removes the directive, "applies to every target"); exactly one is required. Every other directive and all entries are untouched. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                       |
 | `musicrename playlist entries add <playlist> <path>...`     | **Implemented (§9.2).** Appends each path, in order, to the playlist's entries, then rewrites the file. Each path may be cwd-relative or absolute; resolved to library-root-relative before storing, matching every existing entry. A path that doesn't resolve to a real file is skipped and reported, not added — a fail-fast convenience at add time, not a substitute for `playlist check`'s own audit. Always one read plus (if anything's added) one write; no library-wide scan of any kind, so cost stays independent of library size. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one. |
+| `musicrename playlist entries remove <playlist>`            | **Implemented (§9.2).** No flags: interactive checkbox (every current entry pre-checked, uncheck to remove), mirroring `playlist select`. `--artist`/`--album`: non-interactive, removes every entry whose resolved track's tags match (case-insensitive; both given means both must match). Tag reads are scoped to this playlist's own entries only, never a library-wide scan. An entry with no resolvable file/tags is shown but never auto-matched by the flags. `--dry-run` previews without writing. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                    |
 | `musicrename sync ipod <device-path> [library-root-root]`   | **Implemented (§7.7).** Full reconciliation sync to an attached iPod: computes the plan, checks device capacity, confirms (unless `--yes`), then applies it. `--dry-run`, `--yes`, `--verbose`.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `musicrename sync sdcard <device-path> [library-root-root]` | **Implemented (§7.7).** Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `musicrename sync navidrome pull [playlist]`                | **Implemented; extended (§9.2).** Pulls all playlists, or one by path if given (§8.5, §8.7). Every local write or delete keeps `playlists/sums.md5` current, if it already exists (§3.4). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                                                                                                               |
@@ -1945,15 +1946,39 @@ one place strict error handling is non-negotiable rather than a nicety.
 ### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
 
 Tooling beyond `playlist select`/`playlist rename`/`playlist sums`/
-`playlist check`/`playlist create`/`playlist targets`/`playlist entries add` for
-the global `playlists/` tree (§7.4) is being built out as this phase's remaining
-work, alongside the video/Rockbox pipeline (§6.5) and the on-device sync
-mechanism (§7), both already implemented:
+`playlist check`/`playlist create`/`playlist targets`/`playlist entries add`/`playlist entries remove`
+for the global `playlists/` tree (§7.4) is being built out as this phase's
+remaining work, alongside the video/Rockbox pipeline (§6.5) and the on-device
+sync mechanism (§7), both already implemented:
 
-- `playlist entries remove` and an interactive reorder TUI, plus `playlist sort`
-  — path-based, bounded by the playlist's own entry count rather than a full
-  library scan; a library-wide search/browse UI for picking tracks to add is
-  explicitly out of scope for now.
+- An interactive reorder TUI, plus `playlist sort` — path-based, bounded by the
+  playlist's own entry count rather than a full library scan; a library-wide
+  search/browse UI for picking tracks to add is explicitly out of scope for now.
+
+`playlist entries remove <playlist>` is done: with no flags, an interactive
+checkbox — every current entry pre-checked, uncheck to remove — mirroring
+`playlist select`'s exact interaction pattern. With `--artist`/`--album`,
+matches non-interactively instead: every entry whose resolved track's tags match
+all the given flags (case-insensitive) is removed, no prompt (both given means
+both must match, not either). An entry with no resolvable file or tags is shown
+either way but never auto-matched by the flags — there's nothing to compare
+against. Tag reading (`internal/metadata.Reader.ReadTrack`, one file at a time)
+is scoped to this playlist's own entries only, the same "cost bounded by
+playlist size, not library size" principle `entries add` already established; no
+library-wide scan of any kind. `--dry-run` previews the removal set without
+writing. The interactive-selection and tag-matching logic are split cleanly
+along the `internal`/`cmd` boundary (§ Key learnings):
+`internal/playlist.ResolveEntryRows`/`FilterEntryRows` are pure/file-I/O-only
+and unit-tested with real ffmpeg-generated fixtures (mirroring
+`internal/metadata`'s own test pattern) exercising the actual tag-reading path;
+only the `huh` checkbox interaction itself, which inherently needs a terminal,
+lives in `cmd`. `internal/playlist.SetEntries` (new, shared with the future
+`playlist sort`) replaces a file's entire entry list in one write, deliberately
+performing no existence validation of its own — that's `AddEntries`' job for a
+genuinely new entry, and `CheckPlaylists`' job for auditing an already-written
+file — so a caller computing a removal or reordering from an already-read list
+never has an entry silently dropped by a function whose only job is "write this
+list." Follows the same `playlists/sums.md5` discipline as everything else here.
 
 `playlist entries add <playlist> <path>...` is done: appends each path, in
 order, resolving a cwd-relative or absolute path to library-root-relative before
@@ -1985,21 +2010,22 @@ read-only posture.
 The `playlists/sums.md5` retrofit is also done: `playlist rename` relabels a
 renamed entry via `hasher.RenameFile` (hash unchanged, only the name moved),
 warning rather than silently ignoring a stale missing entry; `playlist create`
-adds a new file's entry, `playlist targets` refreshes an existing one, and
-`playlist entries add` refreshes it again on each append, all via
-`hasher.UpdateFile`; and `sync navidrome pull`/`push`/`delete` (§8) keep the one
-entry they touch current the same way — pull's per-file reconciliation and bulk
-self-healing delete, push's new-playlist ID write-back, and delete's local-file
-removal. Every one of these is a no-op, not an error, when `playlists/sums.md5`
-doesn't exist yet; none of them create it from scratch (`playlist sums` remains
-the only command that does), matching the same discipline
-`hasher.UpdateFile`/`RenameFile`/`RemoveFile` already have toward an album's own
-`sums.md5` (§3.4). A genuine update failure is surfaced as a warning rather than
-failing the primary operation, which has typically already succeeded by the time
-the checksum bookkeeping runs.
+adds a new file's entry, `playlist targets` refreshes an existing one,
+`playlist entries add` refreshes it again on each append, and
+`playlist entries remove`'s `SetEntries` refreshes it again on each removal, all
+via `hasher.UpdateFile`; and `sync navidrome pull`/`push`/`delete` (§8) keep the
+one entry they touch current the same way — pull's per-file reconciliation and
+bulk self-healing delete, push's new-playlist ID write-back, and delete's
+local-file removal. Every one of these is a no-op, not an error, when
+`playlists/sums.md5` doesn't exist yet; none of them create it from scratch
+(`playlist sums` remains the only command that does), matching the same
+discipline `hasher.UpdateFile`/`RenameFile`/`RemoveFile` already have toward an
+album's own `sums.md5` (§3.4). A genuine update failure is surfaced as a warning
+rather than failing the primary operation, which has typically already succeeded
+by the time the checksum bookkeeping runs.
 
 `playlist select`'s narrower album-manifest scope, plus
-`playlist rename`/`sums`/`check`/`create`/`targets`/`entries add`'s narrow
-scopes, cover the immediate need; the rest of the global-playlist authoring
-experience — removing and reordering entries, plus sorting — remains manual (a
-text editor) until the remaining items above are picked up.
+`playlist rename`/`sums`/`check`/`create`/`targets`/`entries add`/`entries remove`'s
+narrow scopes, cover the immediate need; the rest of the global-playlist
+authoring experience — reordering entries and sorting — remains manual (a text
+editor) until the remaining items above are picked up.

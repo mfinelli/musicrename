@@ -280,6 +280,29 @@ skipped and reported.
 _playlist_ must already exist (use *playlist create* to scaffold a new one
 first).
 
+## mrr playlist entries remove <_playlist_> [*--artist* _name_] [*--album* _name_] [*--dry-run*]
+
+With neither *--artist* nor *--album* given, shows every current entry as a
+pre-checked checkbox (like *playlist select*); uncheck the ones to remove,
+then confirm. With either flag given, matches non-interactively instead:
+every entry whose resolved track's tags match all the given flags
+(case-insensitive) is removed.
+
+Reading tags is scoped to this playlist's entries only. An entry that doesn't
+resolve to a real file, or whose tags can't be read, is shown but never
+auto-matched by *--artist*/*--album* (since there's nothing to match against);
+it stays unless explicitly unchecked in interactive mode.
+
+_playlist_ must already exist.
+
+*--artist* _name_
+	Remove entries whose ARTIST tag matches _name_ (case-insensitive).
+*--album* _name_
+	Remove entries whose ALBUM tag matches _name_ (case-insensitive). Combined
+	with *--artist*, both must match.
+*--dry-run*
+	Preview what would be removed without changing the file.
+
 ## mrr sync ipod <_device-path_> [_path_]
 
 Syncs the library to an iPod running Rockbox (https://www.rockbox.org)

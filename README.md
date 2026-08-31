@@ -287,6 +287,18 @@ reported.
 mrr playlist entries add playlists/road-trip.m3u8 main/a/artist/album/01\ track.flac
 ```
 
+#### `playlist entries remove`
+
+With no flags, shows every entry as a pre-checked checkbox: uncheck the ones to
+remove, then confirm. With `--artist`/`--album`, matches and removes
+non-interactively instead (case-insensitive; both must match if both given).
+`--dry-run` previews without changing anything.
+
+```sh
+mrr playlist entries remove playlists/road-trip.m3u8
+mrr playlist entries remove playlists/road-trip.m3u8 --artist "The Beatles"
+```
+
 #### `sync ipod` / `sync sdcard`
 
 Compares the library against the device, checks free space, then asks for
