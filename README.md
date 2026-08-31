@@ -276,6 +276,17 @@ mrr playlist targets playlists/road-trip.m3u8 --set ipod
 mrr playlist targets playlists/road-trip.m3u8 --clear
 ```
 
+#### `playlist entries add`
+
+Appends one or more tracks to a playlist, in order. Each path may be relative to
+your current directory or absolute; either way it's resolved and stored relative
+to the library root. A path that doesn't resolve to a real file is skipped and
+reported.
+
+```sh
+mrr playlist entries add playlists/road-trip.m3u8 main/a/artist/album/01\ track.flac
+```
+
 #### `sync ipod` / `sync sdcard`
 
 Compares the library against the device, checks free space, then asks for

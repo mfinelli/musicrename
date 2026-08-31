@@ -267,6 +267,19 @@ target again. Exactly one of *--set*/*--clear* is required.
 _playlist_ must already exist; this command will never create a new file (use
 *playlist create* for that).
 
+## mrr playlist entries add <_playlist_> <_path_>...
+
+Appends each given _path_, in order, to _playlist_'s entry list, then
+rewrites the file. Each _path_ may be relative to the current working
+directory or absolute; either way it's resolved and stored relative to the
+library root.
+
+A _path_ that doesn't resolve to a real file under the library root is
+skipped and reported.
+
+_playlist_ must already exist (use *playlist create* to scaffold a new one
+first).
+
 ## mrr sync ipod <_device-path_> [_path_]
 
 Syncs the library to an iPod running Rockbox (https://www.rockbox.org)
