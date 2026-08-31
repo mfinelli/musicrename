@@ -57,26 +57,11 @@ func removeLocalSums(libraryRootRoot, path string) error {
 	return hasher.RemoveFile(playlistsDir, rel)
 }
 
-// libraryRootRootFor derives a playlist file's library-root-root by walking
-// up from its path to find the nearest ancestor directory named "playlists"
-// and returning that directory's parent.
-//
-// Falls back to the file's immediate parent directory if no "playlists"
-// ancestor is found (shouldn't happen for a file actually inside the
-// playlists/ tree, but avoids looping to the filesystem root on an
-// unexpected path rather than erroring outright).
+// libraryRootRootFor is a thin alias for [playlist.LibraryRootRootFor],
+// kept so call sites in this package don't need the playlist package
+// qualifier for something used this frequently.
 func libraryRootRootFor(path string) string {
-	dir := filepath.Dir(path)
-	for {
-		if filepath.Base(dir) == "playlists" {
-			return filepath.Dir(dir)
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return filepath.Dir(path)
-		}
-		dir = parent
-	}
+	return playlist.LibraryRootRootFor(path)
 }
 
 // newPlaylistFilename derives a filename (including the .m3u8 extension,

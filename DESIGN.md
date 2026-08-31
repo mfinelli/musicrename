@@ -1918,6 +1918,8 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename playlist check [library-root-root]`            | **Implemented (§7.12); extended (§9.2).** Audits the `playlists/` tree for entries that don't resolve to a file, unrecognized `#TARGETS:` names, duplicate `#NAVIDROME-ID` values across files, a directive (`#PLAYLIST:`, `#NAVIDROME-ID:`, `#TARGETS:`) repeated within one file, and a missing or stale `playlists/sums.md5` (listing comparison via `hasher.DiffEntries`, §3.4 — no hashing). Read-only; exits non-zero on findings, matching `check`'s conventions. Album-local manifest findings live in `musicrename check` instead (§4.3, §7.12), not here. |
 | `musicrename playlist rename [library-root-root]`           | **Implemented (§7.13); extended (§9.2).** Scans the `playlists/` tree and renames each file to a filesystem-safe name derived from its `#PLAYLIST:` directive; a file with no directive, or one that sanitizes to an empty string, is skipped and reported rather than treated as an error. Content is never touched, only the filename. If `playlists/sums.md5` already exists, the renamed entry is relabeled via `hasher.RenameFile` (§3.4); a stale missing entry is a warning, not silently ignored. `--dry-run`.                                              |
 | `musicrename playlist sums [library-root-root]`             | **Implemented (§9.2).** Computes MD5 checksums for every file under `playlists/` recursively and writes a single `playlists/sums.md5` covering the whole tree — unlike album/video `sums.md5`, there is no library-wide-vs-single-item distinction here since the tree itself is the only unit. `--force` to overwrite an existing one.                                                                                                                                                                                                                             |
+| `musicrename playlist create <name> [library-root-root]`    | **Implemented (§9.2).** Scaffolds a new `playlists/` file with a `#PLAYLIST:` directive (and `#TARGETS:`, if `--targets` is given) and no entries; the filename is sanitized the same way `playlist rename` derives one. Errors rather than overwrites if the destination already exists. Adds the new file's entry to an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                           |
+| `musicrename playlist targets <playlist>`                   | **Implemented (§9.2).** Rewrites an existing playlist's `#TARGETS:` directive: `--set` (an empty value is a valid, explicit "applies to no target" state) or `--clear` (removes the directive, "applies to every target"); exactly one is required. Every other directive and all entries are untouched. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                           |
 | `musicrename sync ipod <device-path> [library-root-root]`   | **Implemented (§7.7).** Full reconciliation sync to an attached iPod: computes the plan, checks device capacity, confirms (unless `--yes`), then applies it. `--dry-run`, `--yes`, `--verbose`.                                                                                                                                                                                                                                                                                                                                                                     |
 | `musicrename sync sdcard <device-path> [library-root-root]` | **Implemented (§7.7).** Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `musicrename sync navidrome pull [playlist]`                | **Implemented; extended (§9.2).** Pulls all playlists, or one by path if given (§8.5, §8.7). Every local write or delete keeps `playlists/sums.md5` current, if it already exists (§3.4). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                                                   |
@@ -1942,17 +1944,23 @@ one place strict error handling is non-negotiable rather than a nicety.
 ### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
 
 Tooling beyond `playlist select`/`playlist rename`/`playlist sums`/
-`playlist check` for the global `playlists/` tree (§7.4) is being built out as
-this phase's remaining work, alongside the video/Rockbox pipeline (§6.5) and the
-on-device sync mechanism (§7), both already implemented:
+`playlist check`/`playlist create`/`playlist targets` for the global
+`playlists/` tree (§7.4) is being built out as this phase's remaining work,
+alongside the video/Rockbox pipeline (§6.5) and the on-device sync mechanism
+(§7), both already implemented:
 
-- `playlist create <name> [--targets]` — scaffold a new file with correctly
-  formatted `#PLAYLIST:`/`#TARGETS:` headers only, no seeded entries.
-- Editing a playlist's `#TARGETS:` scope after the fact.
 - `playlist entries add`/`remove` and an interactive reorder TUI, plus
   `playlist sort` — path-based, bounded by the playlist's own entry count rather
   than a full library scan; a library-wide search/browse UI for picking tracks
   to add is explicitly out of scope for now.
+
+`playlist create`/`playlist targets` are done: `create <name> [--targets]`
+scaffolds a new file with `#PLAYLIST:`/`#TARGETS:` headers only (no seeded
+entries), erroring rather than overwriting an existing destination;
+`targets <playlist> [--set/--clear]` rewrites an existing file's `#TARGETS:`
+directive in place, leaving every other directive and all entries untouched.
+Both follow the same `playlists/sums.md5` discipline as everything else in this
+retrofit (see below): they update an existing one, never create it from scratch.
 
 `playlist check` extensions are done: a missing `playlists/sums.md5`; diffing
 its recorded entries against the tree's actual file listing via
@@ -1964,19 +1972,21 @@ read-only posture.
 
 The `playlists/sums.md5` retrofit is also done: `playlist rename` relabels a
 renamed entry via `hasher.RenameFile` (hash unchanged, only the name moved),
-warning rather than silently ignoring a stale missing entry; and
-`sync navidrome pull`/`push`/`delete` (§8) keep the one entry they touch current
-via `hasher.UpdateFile`/`RemoveFile` on every local write or delete they make —
-pull's per-file reconciliation and bulk self-healing delete, push's new-playlist
-ID write-back, and delete's local-file removal. Every one of these is a no-op,
-not an error, when `playlists/sums.md5` doesn't exist yet; none of them create
-it from scratch (`playlist sums` remains the only command that does), matching
-the same discipline `hasher.UpdateFile`/`RenameFile`/ `RemoveFile` already have
-toward an album's own `sums.md5` (§3.4). A genuine update failure is surfaced as
-a warning rather than failing the primary operation, which has typically already
-succeeded by the time the checksum bookkeeping runs.
+warning rather than silently ignoring a stale missing entry; `playlist create`
+adds a new file's entry, and `playlist targets` refreshes an existing one, via
+`hasher.UpdateFile`; and `sync navidrome pull`/`push`/`delete` (§8) keep the one
+entry they touch current the same way — pull's per-file reconciliation and bulk
+self-healing delete, push's new-playlist ID write-back, and delete's local-file
+removal. Every one of these is a no-op, not an error, when `playlists/sums.md5`
+doesn't exist yet; none of them create it from scratch (`playlist sums` remains
+the only command that does), matching the same discipline
+`hasher.UpdateFile`/`RenameFile`/`RemoveFile` already have toward an album's own
+`sums.md5` (§3.4). A genuine update failure is surfaced as a warning rather than
+failing the primary operation, which has typically already succeeded by the time
+the checksum bookkeeping runs.
 
 `playlist select`'s narrower album-manifest scope, plus
-`playlist rename`/`sums`/`check`'s narrow filename/checksum/audit-only scopes,
-cover the immediate need; the rest of the global-playlist authoring experience
-remains manual (a text editor) until the remaining items above are picked up.
+`playlist rename`/`sums`/`check`/`create`/`targets`'s narrow scopes, cover the
+immediate need; the rest of the global-playlist authoring experience — adding,
+removing, and reordering entries — remains manual (a text editor) until the
+remaining items above are picked up.

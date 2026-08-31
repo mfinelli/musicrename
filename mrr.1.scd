@@ -240,6 +240,33 @@ If _library-root-root_ is omitted it defaults to the current directory.
 *--force*
 	Overwrite an existing *playlists/sums.md5*.
 
+## mrr playlist create <_name_> [_library-root-root_]
+
+Creates a new file under the library-wide *playlists/* tree with a
+*#PLAYLIST:* directive set to _name_ (and a *#TARGETS:* directive, if
+*--targets* is given) and no entries.
+
+An existing file at that destination is an error; this command never overwrites
+an existing file. If a *playlists/sums.md5* already exists, the new file's
+entry is added to it.
+
+If _library-root-root_ is omitted it defaults to the current directory.
+
+*--targets* _t1,t2_
+	Comma-separated target names; omit the flag entirely for "applies to
+	every target".
+
+## mrr playlist targets <_playlist_> [*--set* _t1,t2_ | *--clear*]
+
+Rewrites _playlist_'s *#TARGETS:* directive: *--set* replaces it with the
+given comma-separated target list (an empty value is valid and means
+"applies to no target" which is distinct from omitting the flag); *--clear*
+removes the directive entirely, meaning the playlist applies to every
+target again. Exactly one of *--set*/*--clear* is required.
+
+_playlist_ must already exist; this command will never create a new file (use
+*playlist create* for that).
+
 ## mrr sync ipod <_device-path_> [_path_]
 
 Syncs the library to an iPod running Rockbox (https://www.rockbox.org)

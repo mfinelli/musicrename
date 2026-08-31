@@ -33,6 +33,31 @@ func Dir(libraryRootRoot string) string {
 	return filepath.Join(libraryRootRoot, "playlists")
 }
 
+// LibraryRootRootFor derives a playlist file's library-root-root by walking
+// up from its path to find the nearest ancestor directory named "playlists"
+// and returning that directory's parent (the inverse of [Dir]). Useful for
+// a command whose only input is a single playlist file path (no separate
+// library-root-root argument), so it can still resolve playlists/sums.md5
+// and other library-relative concerns from that path alone.
+//
+// Falls back to the file's immediate parent directory if no "playlists"
+// ancestor is found (shouldn't happen for a file actually inside the
+// playlists/ tree, but avoids looping to the filesystem root on an
+// unexpected path rather than erroring outright).
+func LibraryRootRootFor(path string) string {
+	dir := filepath.Dir(path)
+	for {
+		if filepath.Base(dir) == "playlists" {
+			return filepath.Dir(dir)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return filepath.Dir(path)
+		}
+		dir = parent
+	}
+}
+
 // WalkTree calls fn once for every .m3u8 file found by walking
 // libraryRootRoot's playlists/ directory recursively. Subdirectories
 // carry no scoping meaning under the flat, #TARGETS:-based structure

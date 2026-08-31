@@ -254,6 +254,28 @@ or video `sums.md5`, there's no per-directory split here).
 mrr playlist sums ~/music
 ```
 
+#### `playlist create`
+
+Scaffolds a new file under `playlists/` with a `#PLAYLIST:` directive (and a
+`#TARGETS:` directive, if `--targets` is given) and no entries. Refuses to
+overwrite an existing file.
+
+```sh
+mrr playlist create "Road Trip" ~/music
+mrr playlist create "Workout" ~/music --targets ipod,sdcard
+```
+
+#### `playlist targets`
+
+Edits an existing playlist's `#TARGETS:` scope: `--set` replaces it (an empty
+value means "applies to no target"); `--clear` removes the directive entirely
+("applies to every target").
+
+```sh
+mrr playlist targets playlists/road-trip.m3u8 --set ipod
+mrr playlist targets playlists/road-trip.m3u8 --clear
+```
+
 #### `sync ipod` / `sync sdcard`
 
 Compares the library against the device, checks free space, then asks for
