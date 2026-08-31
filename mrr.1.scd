@@ -214,7 +214,9 @@ If _library-root-root_ is omitted it defaults to the current directory.
 ## mrr playlist rename [_library-root-root_]
 
 Scans the same *playlists/* tree as *playlist check* and renames each file
-to a filesystem-safe name derived from its *#PLAYLIST:* directive.
+to a filesystem-safe name derived from its *#PLAYLIST:* directive. If a
+*playlists/sums.md5* already exists, the renamed file's entry is relabeled
+to its new name.
 
 A file with no *#PLAYLIST:* directive, or one whose name sanitizes to an
 empty string, is skipped and reported rather than treated as an error. A
@@ -294,7 +296,9 @@ If _path_ is omitted it defaults to the current directory.
 
 Pulls playlists from the configured Navidrome server (*mrr login*) into the
 *playlists/* tree, overwriting local content with whatever the server
-currently holds. See *NAVIDROME SYNC* below for the intended workflow.
+currently holds. See *NAVIDROME SYNC* below for the intended workflow. If a
+*playlists/sums.md5* already exists, every local write (create or update)
+and delete keeps that one entry current.
 
 With no argument, pulls every playlist. With _playlist_ given (a path to an
 existing local playlist file), pulls just that one; if the server confirms
@@ -323,7 +327,8 @@ given, pushes just that one.
 ## mrr sync navidrome delete <_playlist_>
 
 Permanently deletes one playlist: removes it from the Navidrome server,
-then removes the local file. _playlist_ must already have a
+then removes the local file (and, if a *playlists/sums.md5* already
+exists, that file's entry in it). _playlist_ must already have a
 *#NAVIDROME-ID* (i.e. it's been pushed at least once); this command errors
 immediately, without deleting anything, otherwise. Prompts for confirmation
 unless *--yes* is passed (this cannot be undone).

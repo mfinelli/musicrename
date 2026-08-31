@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	subsonic "github.com/supersonic-app/go-subsonic/subsonic"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
@@ -299,6 +300,32 @@ func TestPullAll(t *testing.T) {
 		assert.True(t, os.IsNotExist(statErr))
 	})
 
+	t.Run("bulk delete removes the entry from an existing playlists/sums.md5", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		localPath := filepath.Join(playlistsDir, "gone.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(localPath, &playlist.GlobalPlaylist{
+			Name: "Gone", NavidromeID: "id-gone", HasNavidromeID: true,
+		}))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "getPlaylists") {
+				fmt.Fprint(w, listPlaylistsJSON(map[string]string{}))
+			}
+		}))
+		defer srv.Close()
+
+		result, err := PullAll(testClient(srv.URL), root, false)
+		require.NoError(t, err)
+		require.Len(t, result.Deleted, 1)
+		assert.Empty(t, result.Warnings)
+
+		sums, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotContains(t, sums, "gone.m3u8")
+	})
+
 	t.Run("skips an entry that doesn't resolve to a local file, with a warning", func(t *testing.T) {
 		root := t.TempDir()
 		// Note: no local file is created for this entry.
@@ -490,5 +517,77 @@ func TestPullOne(t *testing.T) {
 		_, err := PullOne(testClient(srv.URL), path, false)
 		assert.Error(t, err)
 		assert.FileExists(t, path, "a generic failure must never delete the local file")
+	})
+
+	t.Run("updating content refreshes the entry in an existing playlists/sums.md5", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		touchLocalFile(t, root, "main/a/artist/album/02 new.flac")
+
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Old", NavidromeID: "id-1", HasNavidromeID: true,
+			Entries: []string{"main/a/artist/album/01 old.flac"},
+		}))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+		before, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		oldHash := before["roadtrip.m3u8"]
+		require.NotEmpty(t, oldHash)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, singlePlaylistJSON("id-1", "New", []string{"main/a/artist/album/02 new.flac"}))
+		}))
+		defer srv.Close()
+
+		result, err := PullOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Updated, 1)
+		assert.Empty(t, result.Warnings)
+
+		after, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotEqual(t, oldHash, after["roadtrip.m3u8"], "the entry's hash must be refreshed, content changed")
+	})
+
+	t.Run("self-heal delete removes the entry from an existing playlists/sums.md5", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		path := filepath.Join(playlistsDir, "gone.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Gone", NavidromeID: "id-gone", HasNavidromeID: true,
+		}))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, notFoundJSON())
+		}))
+		defer srv.Close()
+
+		result, err := PullOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Deleted, 1)
+		assert.Empty(t, result.Warnings)
+
+		sums, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotContains(t, sums, "gone.m3u8")
+	})
+
+	t.Run("no playlists/sums.md5 at all: pull still succeeds, no warning", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Old", NavidromeID: "id-1", HasNavidromeID: true,
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, singlePlaylistJSON("id-1", "New", nil))
+		}))
+		defer srv.Close()
+
+		result, err := PullOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
 	})
 }

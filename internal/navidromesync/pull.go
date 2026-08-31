@@ -25,6 +25,7 @@ import (
 
 	subsonic "github.com/supersonic-app/go-subsonic/subsonic"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/navidrome"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
@@ -75,7 +76,7 @@ func PullAll(client *subsonic.Client, libraryRootRoot string, dryRun bool) (*Pul
 		return nil, fmt.Errorf("fetching playlists: %w", err)
 	}
 
-	playlistsDir := filepath.Join(libraryRootRoot, "playlists")
+	playlistsDir := playlist.Dir(libraryRootRoot)
 	seen := make(map[string]bool, len(remote))
 
 	for _, rp := range remote {
@@ -112,6 +113,11 @@ func PullAll(client *subsonic.Client, libraryRootRoot string, dryRun bool) (*Pul
 			if err := os.Remove(path); err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("removing %s: %v", path, err))
 				continue
+			}
+			if err := removeLocalSums(libraryRootRoot, path); err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf(
+					"updating %s for removed %s: %v", hasher.SumsFilename, path, err,
+				))
 			}
 		}
 		result.Deleted = append(result.Deleted, path)
@@ -155,6 +161,11 @@ func PullOne(client *subsonic.Client, path string, dryRun bool) (*PullResult, er
 			if !dryRun {
 				if rmErr := os.Remove(path); rmErr != nil {
 					return nil, fmt.Errorf("removing %s: %w", path, rmErr)
+				}
+				if sumsErr := removeLocalSums(libraryRootRootFor(path), path); sumsErr != nil {
+					result.Warnings = append(result.Warnings, fmt.Sprintf(
+						"updating %s for removed %s: %v", hasher.SumsFilename, path, sumsErr,
+					))
 				}
 			}
 			result.Deleted = append(result.Deleted, path)
@@ -226,6 +237,11 @@ func applyRemotePlaylist(
 			if err := playlist.WriteGlobalPlaylist(localPath, updated); err != nil {
 				return nil, err
 			}
+			if sumsErr := updateLocalSums(libraryRootRoot, localPath); sumsErr != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf(
+					"updating %s for %s: %v", hasher.SumsFilename, localPath, sumsErr,
+				))
+			}
 		}
 		result.Updated = append(result.Updated, localPath)
 		return result, nil
@@ -234,6 +250,11 @@ func applyRemotePlaylist(
 	if !dryRun {
 		if err := playlist.WriteGlobalPlaylist(localPath, updated); err != nil {
 			return nil, err
+		}
+		if sumsErr := updateLocalSums(libraryRootRoot, localPath); sumsErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"updating %s for %s: %v", hasher.SumsFilename, localPath, sumsErr,
+			))
 		}
 	}
 	result.Created = append(result.Created, localPath)

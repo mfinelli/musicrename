@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
 
@@ -132,9 +133,23 @@ func PlanRenames(libraryRootRoot string) (ops []RenameOp, skipped []Skipped, err
 // matching executor.Execute's behaviour for the main rename command. A
 // genuine rename failure (e.g. a permissions error) stops immediately and
 // returns the error, alongside whatever warnings were collected so far.
-func ExecuteRenames(ops []RenameOp) (warnings []string, err error) {
+//
+// libraryRootRoot is used only to resolve each op's path relative to the
+// playlists/ tree root (see [Dir]), for updating playlists/sums.md5: a
+// successful rename relabels that file's entry there via [hasher.RenameFile]
+// (the hash itself is unchanged and only the name is moved). This command
+// never creates a sums.md5 from scratch; if one doesn't already exist, no
+// attempt is made to update it. If it does exist but has no entry for a
+// given oldRel (most likely meaning it was already stale before this call)
+// that's reported as a warning rather than silently ignored or treated as a
+// hard failure, since the rename itself already succeeded.
+func ExecuteRenames(libraryRootRoot string, ops []RenameOp) (warnings []string, err error) {
+	playlistsDir := Dir(libraryRootRoot)
+	_, statErr := os.Stat(filepath.Join(playlistsDir, hasher.SumsFilename))
+	sumsExists := statErr == nil
+
 	for _, op := range ops {
-		if _, statErr := os.Stat(op.NewPath); statErr == nil {
+		if _, raceErr := os.Stat(op.NewPath); raceErr == nil {
 			warnings = append(warnings, fmt.Sprintf(
 				"race condition: file already exists at %s, skipping rename of %s",
 				op.NewPath, op.OldPath,
@@ -144,6 +159,31 @@ func ExecuteRenames(ops []RenameOp) (warnings []string, err error) {
 
 		if renameErr := os.Rename(op.OldPath, op.NewPath); renameErr != nil {
 			return warnings, fmt.Errorf("renaming %s to %s: %w", op.OldPath, op.NewPath, renameErr)
+		}
+
+		if !sumsExists {
+			continue
+		}
+
+		oldRel, oldRelErr := filepath.Rel(playlistsDir, op.OldPath)
+		newRel, newRelErr := filepath.Rel(playlistsDir, op.NewPath)
+		if oldRelErr != nil || newRelErr != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"updating %s for %s: could not resolve path relative to %s",
+				hasher.SumsFilename, op.NewPath, playlistsDir,
+			))
+			continue
+		}
+
+		found, sumsErr := hasher.RenameFile(playlistsDir, oldRel, newRel)
+		if sumsErr != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"updating %s for %s: %v", hasher.SumsFilename, newRel, sumsErr,
+			))
+		} else if !found {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s exists but has no entry for %s; leaving as-is", hasher.SumsFilename, oldRel,
+			))
 		}
 	}
 	return warnings, nil

@@ -112,8 +112,12 @@ func runSyncNavidromeDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := navidromesync.DeleteOne(client, playlistPath); err != nil {
+	warning, err := navidromesync.DeleteOne(client, playlistPath)
+	if err != nil {
 		return err
+	}
+	if warning != "" {
+		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 
 	fmt.Fprintf(out, "Deleted %s.\n", args[0])

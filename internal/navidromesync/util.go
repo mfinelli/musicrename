@@ -27,8 +27,35 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
+	"github.com/mfinelli/musicrename/internal/playlist"
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
+
+// updateLocalSums updates path's entry in playlists/sums.md5 via
+// [hasher.UpdateFile], for callers that just wrote (created or overwrote)
+// path's content. A no-op if playlists/sums.md5 doesn't exist at all since
+// this package never creates one from scratch.
+func updateLocalSums(libraryRootRoot, path string) error {
+	playlistsDir := playlist.Dir(libraryRootRoot)
+	rel, err := filepath.Rel(playlistsDir, path)
+	if err != nil {
+		return fmt.Errorf("resolving %s relative to %s: %w", path, playlistsDir, err)
+	}
+	return hasher.UpdateFile(playlistsDir, rel)
+}
+
+// removeLocalSums removes path's entry from playlists/sums.md5 via
+// [hasher.RemoveFile], for callers that just deleted path from disk. A
+// no-op if playlists/sums.md5 doesn't exist, or has no entry for path.
+func removeLocalSums(libraryRootRoot, path string) error {
+	playlistsDir := playlist.Dir(libraryRootRoot)
+	rel, err := filepath.Rel(playlistsDir, path)
+	if err != nil {
+		return fmt.Errorf("resolving %s relative to %s: %w", path, playlistsDir, err)
+	}
+	return hasher.RemoveFile(playlistsDir, rel)
+}
 
 // libraryRootRootFor derives a playlist file's library-root-root by walking
 // up from its path to find the nearest ancestor directory named "playlists"

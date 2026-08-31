@@ -25,6 +25,7 @@ import (
 
 	subsonic "github.com/supersonic-app/go-subsonic/subsonic"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
@@ -186,6 +187,11 @@ func pushOne(client *subsonic.Client, path string, dryRun bool, index map[string
 		gp.HasNavidromeID = true
 		if err := playlist.WriteGlobalPlaylist(path, gp); err != nil {
 			return nil, fmt.Errorf("writing back #NAVIDROME-ID: %w", err)
+		}
+		if sumsErr := updateLocalSums(libraryRootRootFor(path), path); sumsErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"updating %s for %s: %v", hasher.SumsFilename, path, sumsErr,
+			))
 		}
 
 		result.Created = append(result.Created, path)

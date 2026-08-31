@@ -28,13 +28,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
 func TestDeleteOne(t *testing.T) {
 	t.Run("errors when the file does not exist", func(t *testing.T) {
 		root := t.TempDir()
-		err := DeleteOne(testClient("http://unused"), filepath.Join(root, "playlists", "missing.m3u8"))
+		_, err := DeleteOne(testClient("http://unused"), filepath.Join(root, "playlists", "missing.m3u8"))
 		assert.Error(t, err)
 	})
 
@@ -48,7 +49,7 @@ func TestDeleteOne(t *testing.T) {
 		// An unreachable URL: if DeleteOne tried to contact the server at
 		// all here, this would fail with a network error, not the
 		// no-#NAVIDROME-ID error being asserted below.
-		err := DeleteOne(testClient("http://127.0.0.1:1"), path)
+		_, err := DeleteOne(testClient("http://127.0.0.1:1"), path)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "#NAVIDROME-ID")
 
@@ -72,8 +73,9 @@ func TestDeleteOne(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := DeleteOne(testClient(srv.URL), path)
+		warning, err := DeleteOne(testClient(srv.URL), path)
 		require.NoError(t, err)
+		assert.Empty(t, warning)
 		assert.True(t, deleteCalled)
 
 		_, statErr := os.Stat(path)
@@ -92,8 +94,9 @@ func TestDeleteOne(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := DeleteOne(testClient(srv.URL), path)
+		warning, err := DeleteOne(testClient(srv.URL), path)
 		require.NoError(t, err)
+		assert.Empty(t, warning)
 
 		_, statErr := os.Stat(path)
 		assert.True(t, os.IsNotExist(statErr))
@@ -111,8 +114,48 @@ func TestDeleteOne(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := DeleteOne(testClient(srv.URL), path)
+		_, err := DeleteOne(testClient(srv.URL), path)
 		assert.Error(t, err)
 		assert.FileExists(t, path, "a generic failure must never delete the local file")
+	})
+
+	t.Run("removes the entry from an existing playlists/sums.md5", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+		}))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		}))
+		defer srv.Close()
+
+		warning, err := DeleteOne(testClient(srv.URL), path)
+		require.NoError(t, err)
+		assert.Empty(t, warning)
+
+		sums, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotContains(t, sums, "roadtrip.m3u8")
+	})
+
+	t.Run("no playlists/sums.md5 at all: delete still succeeds, no warning", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+		}))
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		}))
+		defer srv.Close()
+
+		warning, err := DeleteOne(testClient(srv.URL), path)
+		require.NoError(t, err)
+		assert.Empty(t, warning)
 	})
 }

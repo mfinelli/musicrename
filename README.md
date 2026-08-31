@@ -237,7 +237,8 @@ mrr playlist check ~/music
 Scans the same `playlists/` tree as `playlist check` and renames each file to a
 filesystem-safe name derived from its `#PLAYLIST:` directive. A file with no
 `#PLAYLIST:` directive, or one that sanitizes to an empty string, is skipped and
-reported rather than treated as an error.
+reported rather than treated as an error. If a `playlists/sums.md5` already
+exists, the renamed entry is relabeled to match (hash unchanged).
 
 ```sh
 mrr playlist rename ~/music
@@ -269,7 +270,8 @@ mrr sync sdcard /media/you/SDCARD --dry-run
 
 Pull overwrites `playlists/` with the server's current content; push overwrites
 the server with local content. Both accept an optional single playlist path to
-operate on just one instead of everything.
+operate on just one instead of everything. If a `playlists/sums.md5` already
+exists, every local write or delete this makes keeps it current.
 
 ```sh
 mrr sync navidrome pull
@@ -281,7 +283,8 @@ mrr sync navidrome pull playlists/road-trip.m3u8
 
 Permanently deletes one playlist, remotely and locally. Requires the playlist to
 already have a `#NAVIDROME-ID` (i.e. it's been pushed at least once). Prompts
-for confirmation unless `--yes` is passed.
+for confirmation unless `--yes` is passed. Also removes the file's entry from
+`playlists/sums.md5` if one exists.
 
 ```sh
 mrr sync navidrome delete playlists/old-mix.m3u8

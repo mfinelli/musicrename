@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
@@ -121,6 +122,55 @@ func TestPushOne(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "created-id", gp.NavidromeID)
 		assert.True(t, gp.HasNavidromeID)
+	})
+
+	t.Run("writing back the new ID refreshes the entry in an existing playlists/sums.md5", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+		before, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		oldHash := before["roadtrip.m3u8"]
+		require.NotEmpty(t, oldHash)
+
+		f := newPushFakeServer()
+		f.search3 = `{"subsonic-response":{"status":"ok","searchResult3":{"song":[` +
+			`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`
+		f.createID = "created-id"
+		srv := f.server()
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Created, 1)
+		assert.Empty(t, result.Warnings)
+
+		after, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotEqual(t, oldHash, after["roadtrip.m3u8"], "the entry's hash must be refreshed, content changed")
+	})
+
+	t.Run("no playlists/sums.md5 at all: create still succeeds, no warning", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		f := newPushFakeServer()
+		f.search3 = `{"subsonic-response":{"status":"ok","searchResult3":{"song":[` +
+			`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`
+		f.createID = "created-id"
+		srv := f.server()
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
 	})
 
 	t.Run("an unresolvable entry produces a warning and is excluded, but push still proceeds", func(t *testing.T) {

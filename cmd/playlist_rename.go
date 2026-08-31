@@ -101,7 +101,7 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 
 	var execWarnings []string
 	if !dryRun {
-		execWarnings, err = playlist.ExecuteRenames(ops)
+		execWarnings, err = playlist.ExecuteRenames(absRoot, ops)
 		if err != nil {
 			return fmt.Errorf("executing renames: %w", err)
 		}
