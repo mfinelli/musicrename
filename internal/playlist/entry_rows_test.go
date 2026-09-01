@@ -164,6 +164,53 @@ func TestResolveEntryRows(t *testing.T) {
 	})
 }
 
+func TestResolveEntryRow(t *testing.T) {
+	t.Run("a nil reader creates its own, one-off", func(t *testing.T) {
+		root := t.TempDir()
+		makeEntryRowAudioFile(t, root, "main/a/artist/album/01.flac", map[string]string{
+			"ARTIST": "The Artist", "TITLE": "The Title",
+		})
+
+		row := ResolveEntryRow(root, "main/a/artist/album/01.flac", nil)
+		assert.False(t, row.Missing)
+		require.NotNil(t, row.Track)
+		assert.Equal(t, "The Artist — The Title", row.Label)
+	})
+
+	t.Run("a shared reader works identically to a nil one", func(t *testing.T) {
+		root := t.TempDir()
+		makeEntryRowAudioFile(t, root, "main/a/artist/album/01.flac", map[string]string{
+			"ARTIST": "The Artist", "TITLE": "The Title",
+		})
+
+		reader := metadata.NewReader()
+		row := ResolveEntryRow(root, "main/a/artist/album/01.flac", reader)
+		assert.False(t, row.Missing)
+		assert.Equal(t, "The Artist — The Title", row.Label)
+	})
+
+	t.Run("a missing file", func(t *testing.T) {
+		root := t.TempDir()
+		row := ResolveEntryRow(root, "nope.flac", nil)
+		assert.True(t, row.Missing)
+		assert.Nil(t, row.Track)
+		assert.Contains(t, row.Label, "missing")
+	})
+
+	t.Run("matches ResolveEntryRows' per-entry result exactly", func(t *testing.T) {
+		root := t.TempDir()
+		makeEntryRowAudioFile(t, root, "main/a/artist/album/01.flac", map[string]string{
+			"ARTIST": "The Artist", "TITLE": "The Title",
+		})
+
+		fromBatch := ResolveEntryRows(root, []string{"main/a/artist/album/01.flac"}, nil)
+		fromSingle := ResolveEntryRow(root, "main/a/artist/album/01.flac", nil)
+
+		require.Len(t, fromBatch, 1)
+		assert.Equal(t, fromBatch[0], fromSingle)
+	})
+}
+
 func TestFilterEntryRows(t *testing.T) {
 	rowFor := func(rel, artist, album string) EntryRow {
 		return EntryRow{Rel: rel, Track: &metadata.Track{Artist: artist, Album: album}}

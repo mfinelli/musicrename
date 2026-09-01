@@ -509,15 +509,16 @@ failed tracks.
 
 ### Key Dependencies
 
-| Package                                  | Purpose                                                                                                    |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                                           |
-| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`, `lyrics`)                           |
-| `github.com/charmbracelet/huh`           | Interactive form/prompt fields for `video add`/`video edit` (editable, pre-fillable text inputs)           |
-| `github.com/deluan/go-taglib`            | Cross-format metadata reading and writing (maintained fork of `sentriz/go-taglib`, used by Navidrome)      |
-| `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`, `lyrics`, `playlist entries remove`, `playlist sort`) |
-| `github.com/spf13/cobra`                 | CLI command management                                                                                     |
-| `golang.org/x/time/rate`                 | Token bucket rate limiter for LRCLIB requests (`lyrics`)                                                   |
+| Package                                  | Purpose                                                                                                                                                                                                                                                                     |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                                                                                                                                                                                                            |
+| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`, `lyrics`)                                                                                                                                                                                            |
+| `github.com/charmbracelet/huh`           | Interactive form/prompt fields for `video add`/`video edit` (editable, pre-fillable text inputs)                                                                                                                                                                            |
+| `github.com/charmbracelet/bubbletea`     | Direct dependency as of `playlist entries reorder` (§9.2): a hand-built TUI (huh has no drag-reorder shape) for the interactive reorder editor, with background tag loading via bubbletea's Cmd/Msg pattern. Previously only pulled in indirectly, as huh's own foundation. |
+| `github.com/deluan/go-taglib`            | Cross-format metadata reading and writing (maintained fork of `sentriz/go-taglib`, used by Navidrome)                                                                                                                                                                       |
+| `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`, `lyrics`, `playlist entries remove`, `playlist sort`)                                                                                                                                                                  |
+| `github.com/spf13/cobra`                 | CLI command management                                                                                                                                                                                                                                                      |
+| `golang.org/x/time/rate`                 | Token bucket rate limiter for LRCLIB requests (`lyrics`)                                                                                                                                                                                                                    |
 
 ## 6. Music Video Support (Experimental)
 
@@ -1931,7 +1932,7 @@ one place strict error handling is non-negotiable rather than a nicety.
   that fails to resolve to a local track (§8.3), are surfaced as new `check`
   (§4.3) finding categories rather than resolved automatically.
 
-## 9. Command-Line Interface for §7/§8 (Implemented; §9.2 Deferred to Phase 3)
+## 9. Command-Line Interface for §7/§8 (Implemented; §9.2 Mostly Implemented)
 
 | Command                                                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1945,6 +1946,7 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename playlist targets <playlist>`                   | **Implemented (§9.2).** Rewrites an existing playlist's `#TARGETS:` directive: `--set` (an empty value is a valid, explicit "applies to no target" state) or `--clear` (removes the directive, "applies to every target"); exactly one is required. Every other directive and all entries are untouched. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `musicrename playlist entries add <playlist> <path>...`     | **Implemented (§9.2).** Appends each path, in order, to the playlist's entries, then rewrites the file. Each path may be cwd-relative or absolute; resolved to library-root-relative before storing, matching every existing entry. A path that doesn't resolve to a real file is skipped and reported, not added — a fail-fast convenience at add time, not a substitute for `playlist check`'s own audit. Always one read plus (if anything's added) one write; no library-wide scan of any kind, so cost stays independent of library size. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `musicrename playlist entries remove <playlist>`            | **Implemented (§9.2).** No flags: interactive checkbox (every current entry pre-checked, uncheck to remove), mirroring `playlist select`. `--artist`/`--album`: non-interactive, removes every entry whose resolved track's tags match (case-insensitive; both given means both must match). Tag reads are scoped to this playlist's own entries only, never a library-wide scan, with a TTY-gated `\r`-overwriting progress indicator (§5, since a playlist can run to thousands of entries). An entry with no resolvable file/tags is shown but never auto-matched by the flags. `--dry-run` previews without writing. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                      |
+| `musicrename playlist entries reorder <playlist>`           | **Implemented (§9.2).** Full-screen interactive editor: arrow/j-k/Home/End/PgUp/PgDn move the cursor; space grabs/releases the entry under it (movement then moves the entry, shifting everything between the old and new position by one); enter saves; esc/ctrl+c/q cancels. Hand-built directly on `bubbletea` — `huh` has no drag-reorder shape — rather than composed from `huh` fields. Filenames render immediately; tags load in the background via `bubbletea`'s Cmd/Msg pattern and fill in as each file is read, correlated to the right row by a stable per-row id rather than position so reordering freely while a load is still in flight never misattributes a result. Same `playlists/sums.md5` discipline as `entries remove`/`sort`.                                                                                                                                                                                                                                                                                                        |
 | `musicrename playlist sort <playlist> [fields]`             | **Implemented (§9.2).** Reorders entries by comma-separated fields (`artist`, `albumartist`, `album`, `year`, `disc`, `track`, `title`) in precedence order, stably (unbroken ties keep current relative order); a value absent for the field being compared sorts last, and an unresolvable entry sorts after every resolvable one. `--shuffle` randomizes instead — no tag reads needed at all for this path, unlike the field-based one, which gets the same progress indicator `entries remove` has. With neither given, reapplies the criteria remembered in a new `#SORT:` directive (written back on every successful sort/shuffle); errors if nothing's remembered yet. `--dry-run` previews without writing anything, including the remembered criteria. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one. `#SORT:` is reconciled through `sync navidrome pull`/`push` the same way `#TARGETS:` is (§8.4, §9.2) — a locally-set sort criteria round-trips correctly across machines syncing the same Navidrome server. |
 | `musicrename sync ipod <device-path> [library-root-root]`   | **Implemented (§7.7).** Full reconciliation sync to an attached iPod: computes the plan, checks device capacity, confirms (unless `--yes`), then applies it. `--dry-run`, `--yes`, `--verbose`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `musicrename sync sdcard <device-path> [library-root-root]` | **Implemented (§7.7).** Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -1967,17 +1969,57 @@ one place strict error handling is non-negotiable rather than a nicety.
   `playlist rename` (§7.13) is the one exception, and it only ever touches the
   filename, never the file's content.
 
-### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
+### 9.2 Robust Global Playlist Management (Phase 3) — Mostly Implemented
 
 Tooling beyond `playlist select`/`playlist rename`/`playlist sums`/
-`playlist check`/`playlist create`/`playlist targets`/`playlist entries add`/`playlist entries remove`/`playlist sort`
-for the global `playlists/` tree (§7.4) is being built out as this phase's
-remaining work, alongside the video/Rockbox pipeline (§6.5) and the on-device
-sync mechanism (§7), both already implemented:
+`playlist check`/`playlist create`/`playlist targets`/`playlist entries add`/`playlist entries remove`/`playlist entries reorder`/`playlist sort`
+for the global `playlists/` tree (§7.4) has now landed in full, alongside the
+video/Rockbox pipeline (§6.5) and the on-device sync mechanism (§7), both
+already implemented. Two further ideas — a file-browser mode for `entries add`
+that avoids a library-wide scan by only reading tags once an album directory is
+actually drilled into (matching `playlist select`'s existing scope), and a
+duplicate-entry finder/remover for both album-local manifests and global
+playlists — are under discussion but not yet scoped in detail, so they aren't
+documented further here until they are.
 
-- An interactive reorder TUI — path-based, bounded by the playlist's own entry
-  count rather than a full library scan; a library-wide search/browse UI for
-  picking tracks to add is explicitly out of scope for now.
+`playlist entries reorder <playlist>` is done: a full-screen interactive editor,
+hand-built directly on `charmbracelet/bubbletea` rather than composed from `huh`
+fields, since `huh` has no drag-reorder shape at all — this is the first direct
+use of `bubbletea` in the project (previously pulled in only indirectly, as
+`huh`'s own foundation; promoted to a direct `go.mod` requirement accordingly).
+Arrow keys (or j/k/Home/End/PgUp/PgDn) move the cursor; space "grabs" the entry
+under the cursor, after which the same movement keys move that entry instead —
+shifting everything strictly between the old and new position over by one to
+make room, the same operation whether the move is by one (an adjacent swap) or
+several places at once (Home/End/PgUp/PgDn), so every movement key routes
+through one function (`moveTo`) rather than duplicating that logic per key.
+
+Filenames render immediately; tags load in the background afterward via
+`bubbletea`'s Cmd/Msg pattern (a goroutine feeding a channel, with a Cmd that
+blocks for exactly one message at a time and gets re-issued after each one — the
+standard idiom for streaming incremental results into a bubbletea update loop
+without blocking it), reusing `metadata.Reader.ReadTrack` the same way
+`entries remove`/`sort` already do. A meaningful correctness/concurrency
+subtlety came up building this: the background loader must never read the
+model's live entry slice directly, since the user is free to reorder while
+loading is still in flight — doing so would be a data race (the update loop
+mutates that slice concurrently), and even race-free, correlating a loaded
+result back to a row by _positional index_ would attach it to the wrong row once
+anything's moved. The fix was a stable per-row `id`, assigned once at model
+creation and never touched again (distinct from the row's _position_, which
+changes freely), plus a `posByID` index (a plain slice, not a map, since ids are
+dense 0..n-1) kept in sync on every reorder; the loader reads from a private
+one-time `(id, rel)` snapshot taken before it starts, so there's nothing shared
+for a concurrent reorder to race against at all, and a `tagLoadedMsg` is
+correlated by that stable id rather than position, so it always lands on the
+right row regardless of how much reordering happened while it was in flight.
+`ResolveEntryRows` was refactored to expose the underlying single-entry step as
+`ResolveEntryRow` (taking an optional shared `*metadata.Reader`) specifically so
+this loader could reuse it, rather than re-implementing "resolve one entry" a
+third time. On save, the new order commits through the already-existing
+`SetEntries` — no new persistence primitive needed, since this is exactly the
+same "replace path's entry list" operation `entries remove` and `sort` already
+perform.
 
 `playlist check`'s directive-order consistency check is done:
 `playlist.CheckDirectiveOrder` reports whether a file's directives appear in the
@@ -2139,7 +2181,8 @@ album's own `sums.md5` (§3.4). A genuine update failure is surfaced as a warnin
 rather than failing the primary operation, which has typically already succeeded
 by the time the checksum bookkeeping runs.
 
-`playlist select`'s narrower album-manifest scope, plus
-`playlist rename`/`sums`/`check`/`create`/`targets`/`entries add`/`entries remove`/`sort`'s
-narrow scopes, cover the immediate need; only the interactive drag-to-reorder
-experience remains until it's picked up.
+`playlist select`, `playlist rename`/`sums`/`check`/`create`/`targets`, and the
+full `playlist entries`/`playlist sort` family together now cover every
+originally-planned piece of §9.2; only the two newer ideas noted above (a
+file-browser `entries add` mode, and duplicate-entry detection/removal) remain,
+pending further design discussion before they're scoped.

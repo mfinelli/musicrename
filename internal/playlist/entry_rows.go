@@ -68,31 +68,49 @@ func ResolveEntryRows(libraryRootRoot string, entries []string, progress func(re
 		if progress != nil {
 			progress(rel)
 		}
-
-		abs := filepath.Join(libraryRootRoot, rel)
-		row := EntryRow{Rel: rel}
-
-		if _, err := os.Stat(abs); err != nil {
-			row.Missing = true
-			row.Label = rel + "  (missing — no matching file found)"
-			rows = append(rows, row)
-			continue
-		}
-
-		track := &metadata.Track{Path: abs}
-		if err := reader.ReadTrack(track); err != nil {
-			row.Missing = true
-			row.Label = rel + "  (tags unreadable)"
-			rows = append(rows, row)
-			continue
-		}
-
-		row.Track = track
-		row.Label = formatEntryRowLabel(track, rel)
-		rows = append(rows, row)
+		rows = append(rows, ResolveEntryRow(libraryRootRoot, rel, reader))
 	}
 
 	return rows
+}
+
+// ResolveEntryRow resolves a single entry (relative to libraryRootRoot)
+// against the filesystem, reading its tags via reader if the file exists
+// and has readable tags. Shared by [ResolveEntryRows]'s loop and by any
+// caller that needs to resolve entries one at a time (e.g.,
+// asynchronously, to keep a UI responsive while a large playlist's tags
+// load in the background) rather than all at once, up front, before
+// anything can be shown at all.
+//
+// reader may be nil, in which case a fresh one-off *metadata.Reader is
+// created for just this call. A caller resolving many entries in sequence
+// should pass a single shared Reader instead: [metadata.Reader] holds no
+// state, so reuse costs nothing, and avoids repeated
+// [metadata.NewReader] allocations that buy nothing.
+func ResolveEntryRow(libraryRootRoot, rel string, reader *metadata.Reader) EntryRow {
+	if reader == nil {
+		reader = metadata.NewReader()
+	}
+
+	abs := filepath.Join(libraryRootRoot, rel)
+	row := EntryRow{Rel: rel}
+
+	if _, err := os.Stat(abs); err != nil {
+		row.Missing = true
+		row.Label = rel + "  (missing — no matching file found)"
+		return row
+	}
+
+	track := &metadata.Track{Path: abs}
+	if err := reader.ReadTrack(track); err != nil {
+		row.Missing = true
+		row.Label = rel + "  (tags unreadable)"
+		return row
+	}
+
+	row.Track = track
+	row.Label = formatEntryRowLabel(track, rel)
+	return row
 }
 
 // formatEntryRowLabel builds a plain-text display label for one resolved

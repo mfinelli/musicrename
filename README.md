@@ -299,6 +299,18 @@ mrr playlist entries remove playlists/road-trip.m3u8
 mrr playlist entries remove playlists/road-trip.m3u8 --artist "The Beatles"
 ```
 
+#### `playlist entries reorder`
+
+Opens a full-screen interactive editor for reordering entries: arrow keys (or
+j/k/Home/End/PgUp/PgDn) move the cursor, space grabs/releases the entry under it
+(movement then moves the entry instead), enter saves, esc/q cancels. Filenames
+show immediately; richer "Artist — Title" labels fill in from the background as
+tags load, without blocking you from reordering in the meantime.
+
+```sh
+mrr playlist entries reorder playlists/road-trip.m3u8
+```
+
 #### `playlist sort`
 
 Reorders a playlist by comma-separated metadata fields (`artist`, `albumartist`,

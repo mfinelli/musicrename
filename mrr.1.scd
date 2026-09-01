@@ -305,6 +305,22 @@ _playlist_ must already exist.
 *--dry-run*
 	Preview what would be removed without changing the file.
 
+## mrr playlist entries reorder <_playlist_>
+
+Opens an interactive full-screen editor listing _playlist_'s current
+entries. Move the cursor with the arrow keys (or *j*/*k*, *Home*/*End*,
+*PgUp*/*PgDn*); press *space* to "grab" the entry under the cursor, then
+the same movement keys move it instead of the cursor, shifting everything
+between the old and new position by one to make room; press *space* again
+to release it. Press *enter* to save the new order, or
+*esc*/*ctrl+c*/*q* to cancel without changing anything.
+
+Filenames are shown immediately; track metadata loads in the background
+afterward, filling in as each file is read but you can reorder freely while
+it's still loading.
+
+_playlist_ must already exist.
+
 ## mrr playlist sort <_playlist_> [_fields_] [*--shuffle*] [*--dry-run*]
 
 Reorders _playlist_'s entries by _fields_, a comma-separated list of track
