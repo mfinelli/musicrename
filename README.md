@@ -223,10 +223,10 @@ mrr playlist select ipod ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
 #### `playlist check`
 
 Audits the `playlists/` tree for broken entries, unrecognized `#TARGETS:` names,
-duplicate `#NAVIDROME-ID` values, a directive repeated within one file, and a
-missing or stale `playlists/sums.md5` (listing comparison only, no hashing).
-Read-only; exits non-zero on findings. (Findings for album-local `{target}.m3u8`
-manifests are reported by `mrr check` instead.)
+duplicate `#NAVIDROME-ID` values, a directive repeated within one file or out of
+its normal order, and a missing or stale `playlists/sums.md5` (listing
+comparison only, no hashing). Read-only; exits non-zero on findings. (Findings
+for album-local `{target}.m3u8` manifests are reported by `mrr check` instead.)
 
 ```sh
 mrr playlist check ~/music

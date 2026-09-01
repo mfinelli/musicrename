@@ -202,9 +202,11 @@ Audits the library-wide *playlists/* tree (see *PLAYLISTS* below) for
 broken entries, unrecognized names in a *#TARGETS:* directive, duplicate
 *#NAVIDROME-ID* values across files, a directive (*#PLAYLIST:*,
 *#NAVIDROME-ID:*, *#TARGETS:*, or *#SORT:*) repeated within a single file,
-and a missing or stale *playlists/sums.md5* (files present with no recorded
-entry, or entries with no matching file). Read-only; exits non-zero if any
-findings are present.
+those same directives appearing in a different relative order than
+musicrename itself would write them in, and a missing or stale
+*playlists/sums.md5* (files present with no recorded entry, or entries
+with no matching file). Read-only; exits non-zero if any findings are
+present.
 
 Findings for album-local *{target}.m3u8* manifests (the ones *playlist
 select* writes) are reported by *mrr check* instead, not here.

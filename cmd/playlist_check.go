@@ -43,6 +43,9 @@ playlists/*.m3u8 (applies to every target) and playlists/{target}/*.m3u8
     playlist.
   - A directive (#PLAYLIST:, #NAVIDROME-ID:, #TARGETS:, or #SORT:) that
     appears more than once within a single file.
+  - The file's directives appearing in a different relative order than
+    how musicrename would write them in (#PLAYLIST:, #NAVIDROME-ID:,
+    #TARGETS:, #SORT:, filtered to whichever are actually present).
   - A missing playlists/sums.md5, and once one exists, any file under the
     tree not recorded in it or any entry recorded in it with no matching
     file.

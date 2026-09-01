@@ -1223,6 +1223,38 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 		assert.Nil(t, findPlaylistWarning(result, "duplicate #"))
 	})
 
+	t.Run("out-of-order directives produce a warning naming both the actual and expected order", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#TARGETS:ipod\n#PLAYLIST:Road Trip\n"), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "directives out of order")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+		assert.Contains(t, w.Message, "found #TARGETS:,#PLAYLIST:")
+		assert.Contains(t, w.Message, "expected #PLAYLIST:,#TARGETS:")
+	})
+
+	t.Run("a file with directives in canonical order produces no order warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(
+			"#PLAYLIST:Road Trip\n#NAVIDROME-ID:id-1\n#TARGETS:ipod\n#SORT:artist\n",
+		), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Nil(t, findPlaylistWarning(result, "directives out of order"))
+	})
+
 	t.Run("subdirectories under playlists/ are walked recursively", func(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists", "roadtrips"), 0o755))

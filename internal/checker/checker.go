@@ -604,6 +604,13 @@ func (r *PlaylistResult) HasWarnings() bool {
 //     appears more than once within a single file. Every reader silently
 //     resolves this one way or another (see [playlist.DuplicateDirectives]),
 //     so it's never a hard error, only a passive finding.
+//   - The file's directives appearing in a different relative order than
+//     [playlist.WriteGlobalPlaylist] itself would write them in (see
+//     [playlist.CheckDirectiveOrder]) which is only a consistency finding,
+//     since every reader in this package is prefix-based and
+//     order-independent; this exists purely so every playlist file in
+//     the tree looks the same as one `musicrename` itself would have
+//     produced.
 //   - A missing playlists/sums.md5, and once present, any file under the
 //     tree with no corresponding entry recorded in it, or any entry recorded
 //     in it with no corresponding file (a pure listing comparison via
@@ -673,6 +680,16 @@ func CheckPlaylists(libraryRootRoot string) (*PlaylistResult, error) {
 					Message: fmt.Sprintf("duplicate %s directive", prefix),
 				})
 			}
+		}
+
+		if ok, got, want, err := playlist.CheckDirectiveOrder(path); err == nil && !ok {
+			result.Warnings = append(result.Warnings, PlaylistWarning{
+				Path: path,
+				Message: fmt.Sprintf(
+					"directives out of order: found %s, expected %s",
+					strings.Join(got, ","), strings.Join(want, ","),
+				),
+			})
 		}
 
 		return nil
