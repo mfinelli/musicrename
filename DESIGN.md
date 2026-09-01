@@ -2021,6 +2021,17 @@ third time. On save, the new order commits through the already-existing
 same "replace path's entry list" operation `entries remove` and `sort` already
 perform.
 
+Quitting — by any of enter/esc/ctrl+c/q — cancels the background loader via a
+`context.Context` bound to the model's own lifetime, checked both before opening
+each file and on the channel send itself (which would otherwise block forever
+the moment nothing is calling `waitForTag` anymore, i.e. immediately after
+quitting). This isn't just cleanup hygiene: without it, a genuinely large
+playlist's loader would keep opening files nobody will ever see the result of
+for as long as the OS process happens to stay alive afterward, which is an
+accident of process lifetime, not a guarantee. Cancellation is invoked
+proactively in the quit key handlers, for the earliest possible signal, and
+again via a `defer` in the command layer as a safety net.
+
 `playlist check`'s directive-order consistency check is done:
 `playlist.CheckDirectiveOrder` reports whether a file's directives appear in the
 same relative order `WriteGlobalPlaylist` itself would produce — not necessarily

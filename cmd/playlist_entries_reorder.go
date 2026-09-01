@@ -18,6 +18,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -88,6 +89,7 @@ func runPlaylistEntriesReorder(cmd *cobra.Command, args []string) error {
 	}
 
 	m := newReorderModel(path, gp.Entries)
+	defer m.cancel() // safety net; the quit keys below already cancel proactively
 	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	if err != nil {
 		return fmt.Errorf("running reorder editor: %w", err)
@@ -155,6 +157,12 @@ type reorderModel struct {
 	height    int // visible entry rows; refined by the first tea.WindowSizeMsg
 	tagMsgs   chan tagLoadedMsg
 	confirmed bool
+	// ctx/cancel bound the background loader's lifetime to this model's:
+	// cancelled the moment the user quits (any of enter/esc/ctrl+c/q), so
+	// a playlist with thousands of unresolved entries doesn't keep opening
+	// files.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // tagLoadedMsg reports one entry's resolved tags, arriving asynchronously
@@ -177,11 +185,14 @@ func newReorderModel(path string, rels []string) *reorderModel {
 		entries[i] = reorderRow{id: i, rel: rel, label: filepath.Base(rel)}
 		posByID[i] = i
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &reorderModel{
 		path:    path,
 		entries: entries,
 		posByID: posByID,
 		height:  20, // a sane default before the first tea.WindowSizeMsg arrives
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }
 
@@ -213,12 +224,30 @@ func (m *reorderModel) Init() tea.Cmd {
 		snapshot[i] = idRel{id: e.id, rel: e.rel}
 	}
 
+	// Checks m.ctx before opening each file, and again on the send itself
+	// (which would otherwise block forever once the user quits and
+	// nothing is calling waitForTag anymore): a bare "stop when nobody's
+	// reading" plus process-exit is not a real guarantee, and the goal is
+	// for quitting to actually stop the loader promptly, not merely
+	// happen to look that way because the process usually exits right
+	// after.
 	go func() {
 		defer close(m.tagMsgs)
 		reader := metadata.NewReader()
 		for _, s := range snapshot {
+			select {
+			case <-m.ctx.Done():
+				return
+			default:
+			}
+
 			row := playlist.ResolveEntryRow(libraryRootRoot, s.rel, reader)
-			m.tagMsgs <- tagLoadedMsg{id: s.id, label: row.Label, missing: row.Missing}
+
+			select {
+			case m.tagMsgs <- tagLoadedMsg{id: s.id, label: row.Label, missing: row.Missing}:
+			case <-m.ctx.Done():
+				return
+			}
 		}
 	}()
 
@@ -281,9 +310,11 @@ func (m *reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.grabbed = !m.grabbed
 		case "enter":
 			m.confirmed = true
+			m.cancel()
 			return m, tea.Quit
 		case "esc", "ctrl+c", "q":
 			m.confirmed = false
+			m.cancel()
 			return m, tea.Quit
 		}
 	}
