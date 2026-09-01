@@ -29,6 +29,12 @@ type AudioFormat string
 // FormatMP3 is the MP3 audio format, encoded via libmp3lame.
 const FormatMP3 AudioFormat = "mp3"
 
+// FormatAAC is the AAC audio format (in an .m4a container), encoded via
+// ffmpeg's native "aac" encoder. Used as ipod's defensive fallback for a
+// derived-audio source format outside its accepted set; real library tracks
+// never hit this, since they're always already FLAC/MP3/M4A.
+const FormatAAC AudioFormat = "aac"
+
 // EncodeParams are the actual ffmpeg codec and arguments used to produce a
 // given AudioFormat: the one place codec-level specifics (which encoder,
 // which quality setting) live, so adding or tuning a format never requires
@@ -47,6 +53,12 @@ type EncodeParams struct {
 // settings.
 var encodeParams = map[AudioFormat]EncodeParams{
 	FormatMP3: {Codec: "libmp3lame", Args: []string{"-q:a", "0"}, Ext: ".mp3"},
+	// 256k is a plain constant-bitrate target, not a VBR quality level like
+	// FormatMP3's "-q:a 0": ffmpeg's native aac encoder doesn't have as
+	// well-established a VBR scale as libmp3lame's, so CBR is the more
+	// predictable, portable choice here. Roughly the same quality ballpark
+	// as FormatMP3's ~245kbps V0 target.
+	FormatAAC: {Codec: "aac", Args: []string{"-b:a", "256k"}, Ext: ".m4a"},
 }
 
 // EncodeParamsFor returns the encode parameters for format. ok is false
@@ -83,9 +95,18 @@ type Definition struct {
 // versa (enforced by TestDefinitionsMatchNames).
 var definitions = map[string]Definition{
 	"ipod": {
-		AcceptedFormats: []string{".flac", ".mp3", ".m4a"},
-		// No TranscodeFormat: Rockbox plays every format this tool
-		// already manages, so ipod never needs to transcode anything.
+		// .opus/.ogg are here purely for derived-audio files, whose
+		// extension follows their source video's codec rather than
+		// one fixed format — Rockbox's documented native codec support
+		// covers both, so these are true passthrough, not transcoded.
+		// In general no real library tracks are .opus/.ogg.
+		AcceptedFormats: []string{".flac", ".mp3", ".m4a", ".opus", ".ogg"},
+		// TranscodeFormat is a defensive fallback only, for whatever
+		// unexpected source format might show up via a derived-audio
+		// file that isn't already in AcceptedFormats above but this
+		// should rarely or never actually trigger: every real library
+		// track this tool manages is already FLAC/MP3/M4A.
+		TranscodeFormat: FormatAAC,
 		ArtMaxDimension: 400, // iPod screen is 320x240; a little headroom
 		EmbedArt:        false,
 	},
