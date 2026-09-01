@@ -132,6 +132,8 @@ Checks include:
   *folder.webp* / *folder.mp4*). One static image plus one animated file is
   allowed as a fallback pair.
 - Missing *sums.md5*
+- Playlist manifest issues (*{target}.m3u8*): unrecognized target name, a
+  stale entry with no matching track, or a duplicate entry
 - Path conformance: whether *rename* would move any file (library mode only)
 
 Read-only; makes no filesystem changes.
@@ -346,6 +348,9 @@ written back on every successful sort or shuffle) but this errors if
 nothing has been remembered yet and none is given now. Explicit _fields_
 or *--shuffle* always supersede and become the new remembered criteria.
 
+By default duplicate entries are removed when sorting. Pass *--skip-dedupe* to
+turn this off.
+
 _playlist_ must already exist.
 
 *--shuffle*
@@ -353,6 +358,24 @@ _playlist_ must already exist.
 *--dry-run*
 	Preview the new order without changing the file or its remembered
 	criteria.
+*--skip-dedupe*
+	Do not remove duplicate entries before sorting.
+
+## mrr playlist entries dedupe <_playlist_> [*--check*] [*--dry-run*]
+
+Removes duplicate entries from _playlist_, keeping each one's first
+occurrence; every other entry's relative order is left completely
+untouched.
+
+*--check* and *--dry-run* are mutually exclusive: *--check* exits non-zero if
+any duplicates are found; *--dry-run* previews what would be removed.
+
+_playlist_ must already exist.
+
+*--check*
+	Report whether duplicates exist.
+*--dry-run*
+	Preview what would be removed without changing the file.
 
 ## mrr sync ipod <_device-path_> [_path_]
 

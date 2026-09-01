@@ -324,13 +324,25 @@ mrr playlist entries reorder playlists/road-trip.m3u8
 Reorders a playlist by comma-separated metadata fields (`artist`, `albumartist`,
 `album`, `year`, `disc`, `track`, `title`), first field breaking the most ties.
 With no fields and no `--shuffle`, reapplies whatever was last used (remembered
-in the file itself). `--shuffle` randomizes instead. `--dry-run` previews
-without writing.
+in the file itself). `--shuffle` randomizes instead. Duplicate entries are
+removed by default when sorting (`--skip-dedupe` to keep them). `--dry-run`
+previews without writing.
 
 ```sh
 mrr playlist sort playlists/road-trip.m3u8 artist,album,track
 mrr playlist sort playlists/road-trip.m3u8 --shuffle
 mrr playlist sort playlists/road-trip.m3u8
+```
+
+#### `playlist entries dedupe`
+
+Removes duplicate entries, keeping each one's first occurrence and leaving every
+other entry's order completely untouched. `--check` exits non-zero if duplicates
+exist; `--dry-run` previews and always exits 0; the two are mutually exclusive.
+
+```sh
+mrr playlist entries dedupe playlists/road-trip.m3u8
+mrr playlist entries dedupe playlists/road-trip.m3u8 --check
 ```
 
 #### `sync ipod` / `sync sdcard`

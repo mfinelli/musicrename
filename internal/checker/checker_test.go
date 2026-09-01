@@ -913,6 +913,84 @@ func TestCheckPlaylists(t *testing.T) {
 		assert.Nil(t, findWarning(ar, `stale entry "01 track.flac"`))
 	})
 
+	t.Run("a duplicate entry produces a warning naming the repeat count", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte(
+			"01 track.flac\n01 track.flac\n",
+		), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		w := findWarning(ar, "duplicate entry")
+		require.NotNil(t, w)
+		assert.Equal(t, manifestPath, w.Path)
+		assert.Contains(t, w.Message, `"01 track.flac"`)
+		assert.Contains(t, w.Message, "2 times")
+	})
+
+	t.Run("three occurrences still report the entry once", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte(
+			"01 track.flac\n01 track.flac\n01 track.flac\n",
+		), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		duplicateWarnings := 0
+		for _, w := range ar.Warnings {
+			if strings.Contains(w.Message, "duplicate entry") {
+				duplicateWarnings++
+			}
+		}
+		assert.Equal(t, 1, duplicateWarnings)
+	})
+
+	t.Run("a duplicate stale entry is flagged as both stale and duplicate", func(t *testing.T) {
+		dir := t.TempDir()
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte(
+			"gone.flac\ngone.flac\n",
+		), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist", nil,
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		assert.NotNil(t, findWarning(ar, "stale entry"))
+		assert.NotNil(t, findWarning(ar, "duplicate entry"))
+	})
+
+	t.Run("no duplicates: no duplicate warning", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte("01 track.flac\n"), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+		assert.Nil(t, findWarning(ar, "duplicate entry"))
+	})
+
 	t.Run("recognized target with every entry matching a track: no warnings", func(t *testing.T) {
 		dir := t.TempDir()
 		trackPath := filepath.Join(dir, "01 track.flac")

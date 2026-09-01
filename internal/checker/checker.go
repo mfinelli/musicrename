@@ -524,6 +524,15 @@ func checkNaming(album *metadata.Album, libraryRoot string, ar *AlbumResult) {
 //     interactively, surfaced here as a passive audit finding instead). Not
 //     checked for an unrecognized-target manifest, since that manifest is
 //     already flagged as a whole.
+//   - A duplicate entry: the same line appearing more than once. Unlike
+//     the same concern in a library-wide playlist, a repeated track in an
+//     album-local manifest is never legitimate because a manifest is a
+//     selection of an album's tracks for one target, not an ordered mix where
+//     a deliberate repeat could make sense. Re-running `playlist select` on the same
+//     target already fixes it as a side effect: its selection model is
+//     keyed by filename, so it can't represent (and therefore can't
+//     write back) two rows for the same track. Reported once per
+//     duplicated name regardless of how many times it repeats.
 //
 // This does not check the library-wide playlists/ tree which has no
 // per-album scope and is audited separately by `musicrename playlist check`
@@ -558,12 +567,25 @@ func checkPlaylists(album *metadata.Album, ar *AlbumResult) {
 			continue
 		}
 
+		counts := make(map[string]int, len(names))
+		for _, n := range names {
+			counts[n]++
+		}
+
+		reportedDuplicate := make(map[string]bool, len(names))
 		for _, n := range names {
 			if !trackNames[n] {
 				ar.Warnings = append(ar.Warnings, Warning{
 					Path:    path,
 					Message: fmt.Sprintf("stale entry %q: no matching track found in album", n),
 				})
+			}
+			if counts[n] > 1 && !reportedDuplicate[n] {
+				ar.Warnings = append(ar.Warnings, Warning{
+					Path:    path,
+					Message: fmt.Sprintf("duplicate entry %q (appears %d times)", n, counts[n]),
+				})
+				reportedDuplicate[n] = true
 			}
 		}
 	}

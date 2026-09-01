@@ -41,9 +41,12 @@ resolvable one. Ties left unbroken by every given field keep their current
 relative order.
 
 With neither fields nor --shuffle given, reapplies whichever criteria were
-last used on this playlist or errors if nothing has been remembered yet and 
-none is given now. Explicit fields or --shuffle always supersede and become 
+last used on this playlist or errors if nothing has been remembered yet and
+none is given now. Explicit fields or --shuffle always supersede and become
 the new remembered criteria.
+
+By default duplicate entries are removed when sorting. Pass --skip-dedupe to
+turn this off.
 
 playlist must already exist.`,
 	Args: cobra.RangeArgs(1, 2),
@@ -53,6 +56,7 @@ playlist must already exist.`,
 func init() {
 	playlistSortCmd.Flags().Bool("shuffle", false, "Randomize entry order instead of sorting by fields")
 	playlistSortCmd.Flags().Bool("dry-run", false, "Preview the new order without changing the file or its remembered criteria")
+	playlistSortCmd.Flags().Bool("skip-dedupe", false, "Do not remove duplicate entries before sorting")
 	playlistCmd.AddCommand(playlistSortCmd)
 }
 
@@ -79,10 +83,17 @@ func runPlaylistSort(cmd *cobra.Command, args []string) error {
 
 	shuffle, _ := cmd.Flags().GetBool("shuffle")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	skipDedupe, _ := cmd.Flags().GetBool("skip-dedupe")
 	fieldsGiven := len(args) > 1
 
 	if fieldsGiven && shuffle {
 		return fmt.Errorf("cannot combine explicit fields with --shuffle")
+	}
+
+	entries := gp.Entries
+	var removedDupes int
+	if !skipDedupe {
+		entries, removedDupes = playlist.DedupeEntries(entries)
 	}
 
 	shuffleMode, fields, sortSpec, err := resolvePlaylistSortMode(gp, args, fieldsGiven, shuffle)
@@ -92,7 +103,7 @@ func runPlaylistSort(cmd *cobra.Command, args []string) error {
 
 	var newOrder []string
 	if shuffleMode {
-		newOrder = playlist.ShuffleEntries(gp.Entries)
+		newOrder = playlist.ShuffleEntries(entries)
 	} else {
 		// Resolving tags is a real per-file open, and a playlist can
 		// run to thousands of entries, so render an in-place progress
@@ -105,7 +116,7 @@ func runPlaylistSort(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(out, "\r\033[K  reading tags... %s", rel)
 			}
 		}
-		rows := playlist.ResolveEntryRows(absRoot, gp.Entries, progress)
+		rows := playlist.ResolveEntryRows(absRoot, entries, progress)
 		if isTTY {
 			fmt.Fprint(out, "\r\033[K")
 		}
@@ -113,6 +124,9 @@ func runPlaylistSort(cmd *cobra.Command, args []string) error {
 	}
 
 	if dryRun {
+		if removedDupes > 0 {
+			fmt.Fprintf(out, "Would also remove %d duplicate entries\n", removedDupes)
+		}
 		fmt.Fprintln(out, "Would reorder to:")
 		for _, r := range newOrder {
 			fmt.Fprintln(out, "  "+r)
@@ -130,6 +144,9 @@ func runPlaylistSort(cmd *cobra.Command, args []string) error {
 	}
 	if warning != "" {
 		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+	}
+	if removedDupes > 0 {
+		fmt.Fprintf(out, "Removed %d duplicate entries\n", removedDupes)
 	}
 	if shuffleMode {
 		fmt.Fprintf(out, "Shuffled %d entries\n", len(newOrder))
