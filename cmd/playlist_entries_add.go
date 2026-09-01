@@ -19,6 +19,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +101,12 @@ func runPlaylistEntriesAdd(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+w))
 	}
 	fmt.Fprintf(out, "%d added, %d warning(s)\n", len(added), len(warnings))
+
+	if len(added) > 0 {
+		if gp, gerr := playlist.ReadGlobalPlaylist(path); gerr == nil {
+			printSortReminder(out, path, gp)
+		}
+	}
 	return nil
 }
 
@@ -157,7 +164,27 @@ func runPlaylistEntriesAddInteractive(cmd *cobra.Command, absRoot, path string) 
 		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "Playlist now has %d entries\n", len(newEntries))
+
+	if result.selection.HasNewEntries() {
+		printSortReminder(out, path, gp)
+	}
 	return nil
+}
+
+// printSortReminder prints a low-key note if gp has a #SORT: directive
+// stored, since neither entries add mode ever re-sorts automatically
+// after appending. Doing so safely would mean resolving every entry's
+// tags just to check whether the playlist is already in that order; and it
+// isn't even safe in principle, since #SORT: only records the last explicit
+// sort criteria used, not a live guarantee the playlist is still in that
+// order (a `playlist entries reorder` session never touches it, so blindly
+// reapplying it here could silently discard hand-curation work).
+func printSortReminder(out io.Writer, path string, gp *playlist.GlobalPlaylist) {
+	if !gp.HasSort || len(gp.Sort) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "Note: this playlist has #SORT:%s stored; run 'playlist sort %s' to reapply it.\n",
+		strings.Join(gp.Sort, ","), path)
 }
 
 // entriesAddModel is a bubbletea model spanning both the directory browser

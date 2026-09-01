@@ -138,3 +138,36 @@ func TestBrowseSelectionStagedCount(t *testing.T) {
 		assert.Equal(t, 1, s.StagedCount())
 	})
 }
+
+func TestBrowseSelectionHasNewEntries(t *testing.T) {
+	t.Run("false when nothing has been touched", func(t *testing.T) {
+		s := NewBrowseSelection([]string{"a.flac"})
+		assert.False(t, s.HasNewEntries())
+	})
+
+	t.Run("false when only original entries were toggled", func(t *testing.T) {
+		s := NewBrowseSelection([]string{"a.flac", "b.flac"})
+		s.Apply([]string{"a.flac"}, map[string]bool{"a.flac": false})
+		assert.False(t, s.HasNewEntries())
+	})
+
+	t.Run("true once a new entry is staged", func(t *testing.T) {
+		s := NewBrowseSelection([]string{"a.flac"})
+		s.Apply([]string{"n.flac"}, map[string]bool{"n.flac": true})
+		assert.True(t, s.HasNewEntries())
+	})
+
+	t.Run("false again after staging then unstaging the same new entry", func(t *testing.T) {
+		s := NewBrowseSelection(nil)
+		s.Apply([]string{"n.flac"}, map[string]bool{"n.flac": true})
+		s.Apply([]string{"n.flac"}, map[string]bool{"n.flac": false})
+		assert.False(t, s.HasNewEntries())
+	})
+
+	t.Run("true even if an original entry was also unstaged in the same session", func(t *testing.T) {
+		s := NewBrowseSelection([]string{"a.flac"})
+		s.Apply([]string{"a.flac"}, map[string]bool{"a.flac": false})
+		s.Apply([]string{"n.flac"}, map[string]bool{"n.flac": true})
+		assert.True(t, s.HasNewEntries())
+	})
+}

@@ -2067,23 +2067,53 @@ start, read once via `ReadGlobalPlaylist`, never mutated), `selected` (a set,
 seeded from `original`, toggled by every album visited), and `addedOrder` (rel
 paths in `selected` that aren't in `original`, in the order first staged) —
 `FinalEntries` combines them on exit into original order (minus anything
-unchecked) followed by newly staged entries in staging order. `Apply` diffs a
-completed checklist's final selected set against the current staged state, for
-just that album's own candidate tracks, in a single pass after the form submits
-(`huh` reports only the final selected set on submission, not incremental toggle
-events, so there's no need to track per-keypress state). Quitting is
-deliberately asymmetric by design, not by accident: `ctrl+c` is intercepted
-directly in the outer model's `Update`, before it can ever reach the embedded
-`huh.Form`, so it reliably aborts the whole session regardless of whatever
-`huh`'s own internal key handling would otherwise do with it; `esc` is instead
-forwarded to the form like any other key, so within the checklist itself it
-means "back out of just this album's edits" (`huh.StateAborted`, reachable now
-only via `esc` since `ctrl+c` never gets there), while at the top-level browser
-it's the browser's own `Update` that treats `esc`/`q` as "save everything staged
-so far and leave" — the same key means "back out one level" everywhere, and
-doing so from the outermost level naturally means "end the session," while
-`ctrl+c` alone remains the single unconditional "discard everything" escape
-hatch.
+unchecked) followed by newly staged entries in staging order. `HasNewEntries`
+(`len(addedOrder) > 0`) is distinct from `StagedCount` (which also counts
+untouched original entries) and from "the entry count went up" (unstaging an
+original entry while also staging a new one can leave the count unchanged, or
+even lower it, while `HasNewEntries` is still true) — it exists specifically to
+answer "was anything genuinely new added this session," for the `#SORT:`
+reminder described below. `Apply` diffs a completed checklist's final selected
+set against the current staged state, for just that album's own candidate
+tracks, in a single pass after the form submits (`huh` reports only the final
+selected set on submission, not incremental toggle events, so there's no need to
+track per-keypress state). Quitting is deliberately asymmetric by design, not by
+accident: `ctrl+c` is intercepted directly in the outer model's `Update`, before
+it can ever reach the embedded `huh.Form`, so it reliably aborts the whole
+session regardless of whatever `huh`'s own internal key handling would otherwise
+do with it; `esc` is instead forwarded to the form like any other key, so within
+the checklist itself it means "back out of just this album's edits"
+(`huh.StateAborted`, reachable now only via `esc` since `ctrl+c` never gets
+there), while at the top-level browser it's the browser's own `Update` that
+treats `esc`/`q` as "save everything staged so far and leave" — the same key
+means "back out one level" everywhere, and doing so from the outermost level
+naturally means "end the session," while `ctrl+c` alone remains the single
+unconditional "discard everything" escape hatch.
+
+Both `entries add` modes also print a `#SORT:` reminder — a small addition
+prompted by a "should adding automatically re-sort?" question that came up after
+everything else here had already landed. The answer settled on was no: `#SORT:`
+records only the _last explicit_ sort criteria used, not a live guarantee the
+playlist is still in that order, and `playlist entries reorder` (below)
+deliberately never touches it, so blindly reapplying it after every add could
+silently discard real hand-curation work the moment reorder and a stored
+`#SORT:` coexist — a combination this whole feature set exists specifically to
+support. Auto-detecting _whether_ the playlist is still sorted first (only
+reapplying if it already matches) was considered and rejected too: answering
+that would mean resolving every entry's tags just to check, undermining
+`entries add`'s own "bounded by what's actually touched" scope for no real gain.
+The reminder is the middle ground — a plain note
+(`Note: this playlist has #SORT:... stored; run 'playlist sort ...' to reapply it.`),
+printed only when something was genuinely added this run (the non-interactive
+path's own `len(added) > 0`; the interactive path's
+`BrowseSelection.HasNewEntries`, since the entry count alone can't distinguish
+"nothing new" from "one added, one unstaged" reliably) and only when `#SORT:` is
+actually stored — no tag reads, no risk of clobbering anything, action left
+entirely up to the person running the command. Not extended to
+`entries remove`/`dedupe` (which only ever narrow what's already there, so can't
+un-sort anything) or to `entries reorder` itself (whose whole purpose is
+intentional manual reordering, so nagging about the stored criteria there would
+just be second-guessing the thing just asked for).
 
 `playlist entries reorder <playlist>` is done: a full-screen interactive editor,
 hand-built directly on `charmbracelet/bubbletea` rather than composed from `huh`

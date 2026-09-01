@@ -116,3 +116,11 @@ func (s *BrowseSelection) FinalEntries() []string {
 	final = append(final, s.addedOrder...)
 	return final
 }
+
+// HasNewEntries reports whether at least one entry not already in the
+// original playlist was staged this session: distinct from StagedCount,
+// which also counts untouched original entries, and true regardless of
+// whether any original entries were also unstaged in the same session.
+func (s *BrowseSelection) HasNewEntries() bool {
+	return len(s.addedOrder) > 0
+}
