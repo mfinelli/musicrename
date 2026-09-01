@@ -1944,7 +1944,7 @@ one place strict error handling is non-negotiable rather than a nicety.
 | `musicrename playlist sums [library-root-root]`             | **Implemented (§9.2).** Computes MD5 checksums for every file under `playlists/` recursively and writes a single `playlists/sums.md5` covering the whole tree — unlike album/video `sums.md5`, there is no library-wide-vs-single-item distinction here since the tree itself is the only unit. `--force` to overwrite an existing one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `musicrename playlist create <name> [library-root-root]`    | **Implemented (§9.2).** Scaffolds a new `playlists/` file with a `#PLAYLIST:` directive (and `#TARGETS:`, if `--targets` is given) and no entries; the filename is sanitized the same way `playlist rename` derives one. Errors rather than overwrites if the destination already exists. Adds the new file's entry to an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `musicrename playlist targets <playlist>`                   | **Implemented (§9.2).** Rewrites an existing playlist's `#TARGETS:` directive: `--set` (an empty value is a valid, explicit "applies to no target" state) or `--clear` (removes the directive, "applies to every target"); exactly one is required. Every other directive and all entries are untouched. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `musicrename playlist entries add <playlist> <path>...`     | **Implemented (§9.2).** Appends each path, in order, to the playlist's entries, then rewrites the file. Each path may be cwd-relative or absolute; resolved to library-root-relative before storing, matching every existing entry. A path that doesn't resolve to a real file is skipped and reported, not added — a fail-fast convenience at add time, not a substitute for `playlist check`'s own audit. Always one read plus (if anything's added) one write; no library-wide scan of any kind, so cost stays independent of library size. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `musicrename playlist entries add <playlist> [path]...`     | **Implemented (§9.2).** Appends each path, in order, to the playlist's entries, then rewrites the file. Each path may be cwd-relative or absolute; resolved to library-root-relative before storing, matching every existing entry. A path that doesn't resolve to a real file is skipped and reported, not added — a fail-fast convenience at add time, not a substitute for `playlist check`'s own audit. Always one read plus (if anything's added) one write; no library-wide scan of any kind, so cost stays independent of library size. With no path arguments, opens an interactive directory browser instead — see the write-up below. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                               |
 | `musicrename playlist entries remove <playlist>`            | **Implemented (§9.2).** No flags: interactive checkbox (every current entry pre-checked, uncheck to remove), mirroring `playlist select`. `--artist`/`--album`: non-interactive, removes every entry whose resolved track's tags match (case-insensitive; both given means both must match). Tag reads are scoped to this playlist's own entries only, never a library-wide scan, with a TTY-gated `\r`-overwriting progress indicator (§5, since a playlist can run to thousands of entries). An entry with no resolvable file/tags is shown but never auto-matched by the flags. `--dry-run` previews without writing. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                      |
 | `musicrename playlist entries reorder <playlist>`           | **Implemented (§9.2).** Full-screen interactive editor: arrow/j-k/Home/End/PgUp/PgDn move the cursor; space grabs/releases the entry under it (movement then moves the entry, shifting everything between the old and new position by one); enter saves; esc/ctrl+c/q cancels. Hand-built directly on `bubbletea` — `huh` has no drag-reorder shape — rather than composed from `huh` fields. Filenames render immediately; tags load in the background via `bubbletea`'s Cmd/Msg pattern and fill in as each file is read, correlated to the right row by a stable per-row id rather than position so reordering freely while a load is still in flight never misattributes a result. Same `playlists/sums.md5` discipline as `entries remove`/`sort`.                                                                                                                                                                                                                                                                                                        |
 | `musicrename playlist sort <playlist> [fields]`             | **Implemented (§9.2).** Reorders entries by comma-separated fields (`artist`, `albumartist`, `album`, `year`, `disc`, `track`, `title`) in precedence order, stably (unbroken ties keep current relative order); a value absent for the field being compared sorts last, and an unresolvable entry sorts after every resolvable one. `--shuffle` randomizes instead — no tag reads needed at all for this path, unlike the field-based one, which gets the same progress indicator `entries remove` has. With neither given, reapplies the criteria remembered in a new `#SORT:` directive (written back on every successful sort/shuffle); errors if nothing's remembered yet. `--dry-run` previews without writing anything, including the remembered criteria. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one. `#SORT:` is reconciled through `sync navidrome pull`/`push` the same way `#TARGETS:` is (§8.4, §9.2) — a locally-set sort criteria round-trips correctly across machines syncing the same Navidrome server. |
@@ -1975,12 +1975,70 @@ Tooling beyond `playlist select`/`playlist rename`/`playlist sums`/
 `playlist check`/`playlist create`/`playlist targets`/`playlist entries add`/`playlist entries remove`/`playlist entries reorder`/`playlist sort`
 for the global `playlists/` tree (§7.4) has now landed in full, alongside the
 video/Rockbox pipeline (§6.5) and the on-device sync mechanism (§7), both
-already implemented. Two further ideas — a file-browser mode for `entries add`
-that avoids a library-wide scan by only reading tags once an album directory is
-actually drilled into (matching `playlist select`'s existing scope), and a
-duplicate-entry finder/remover for both album-local manifests and global
-playlists — are under discussion but not yet scoped in detail, so they aren't
-documented further here until they are.
+already implemented. One further idea — a duplicate-entry finder/remover for
+both album-local manifests and global playlists — remains under discussion but
+not yet scoped in detail, so it isn't documented further here until it is.
+
+`playlist entries add`'s interactive browser mode (no path arguments) is done: a
+single `bubbletea` model spanning two screens — a directory browser, and, when
+an album directory is opened, an embedded `huh` MultiSelect checklist reusing
+`playlist select`'s own track-formatting helpers (`sortTracksForDisplay`,
+`albumHasMultiDisc`, `formatTrackLabel`) and its `metadata.ProcessLibrary`-based
+album read — rather than two separately chained programs, so a session's staged
+selections and current browse position both persist across visiting several
+albums, and everything commits in one write at the end rather than per-album.
+The staging/diffing logic (`playlist.BrowseSelection`) and the directory-
+listing/filtering helpers it needs (`playlist.ListSubdirectories`,
+`playlist.FilterNames`) are pure — no terminal dependency at all — so they live
+in `internal/playlist` with their own tests, the same internal/cmd split
+`entries remove` already established (§9.2, below); only the `bubbletea`
+presentation glue itself (`Update`/`View`/`Init`, key routing, the `huh.Form`
+embedding), which genuinely can't be exercised without a terminal, stays in
+`cmd`. Browsing itself never reads a single file's tags: at the
+library-root-root level, the listing is `internal/devicesync.LibraryRoots` (the
+same "every sibling except the reserved `playlists`/`videos` names" enumeration
+§7.1's own sync-target discovery already uses, called from `cmd` rather than
+from `internal/playlist` itself since `internal/devicesync` already imports
+`internal/playlist` and a reverse import would cycle); at any deeper level it's
+`playlist.ListSubdirectories`, a plain `os.ReadDir` filtered to directories and
+dotfiles excluded. A directory is recognized as an album via `sumsIsAlbumRoot`
+(already used by `sums`) — the presence of an audio file extension directly
+inside it, checked only for the one directory actually being entered, never for
+everything currently on screen — and album subdirectories
+(`artwork`/`scans`/`extras`) are never listed for further descent once that's
+established, since album directories are assumed well-formed. Ascending is
+clamped at library-root-root — never above it — which is also the directory
+`internal/devicesync.LibraryRoots` is called against, so every one of the
+library roots it lists (`main`, `christmas`, `classical`, ...) is reachable from
+the browser's top level, letting a single session add tracks from more than one
+library root without any change to how entries are stored: every one of them
+already shares the same library-root-root every entry is already relative to
+(§7.1), so nothing about the entry format needed to change to support this. A
+`/`-triggered substring filter (`playlist.FilterNames`) narrows the current
+level's listing.
+
+`playlist.BrowseSelection` tracks `original` (the playlist's entries at session
+start, read once via `ReadGlobalPlaylist`, never mutated), `selected` (a set,
+seeded from `original`, toggled by every album visited), and `addedOrder` (rel
+paths in `selected` that aren't in `original`, in the order first staged) —
+`FinalEntries` combines them on exit into original order (minus anything
+unchecked) followed by newly staged entries in staging order. `Apply` diffs a
+completed checklist's final selected set against the current staged state, for
+just that album's own candidate tracks, in a single pass after the form submits
+(`huh` reports only the final selected set on submission, not incremental toggle
+events, so there's no need to track per-keypress state). Quitting is
+deliberately asymmetric by design, not by accident: `ctrl+c` is intercepted
+directly in the outer model's `Update`, before it can ever reach the embedded
+`huh.Form`, so it reliably aborts the whole session regardless of whatever
+`huh`'s own internal key handling would otherwise do with it; `esc` is instead
+forwarded to the form like any other key, so within the checklist itself it
+means "back out of just this album's edits" (`huh.StateAborted`, reachable now
+only via `esc` since `ctrl+c` never gets there), while at the top-level browser
+it's the browser's own `Update` that treats `esc`/`q` as "save everything staged
+so far and leave" — the same key means "back out one level" everywhere, and
+doing so from the outermost level naturally means "end the session," while
+`ctrl+c` alone remains the single unconditional "discard everything" escape
+hatch.
 
 `playlist entries reorder <playlist>` is done: a full-screen interactive editor,
 hand-built directly on `charmbracelet/bubbletea` rather than composed from `huh`
@@ -2194,6 +2252,6 @@ by the time the checksum bookkeeping runs.
 
 `playlist select`, `playlist rename`/`sums`/`check`/`create`/`targets`, and the
 full `playlist entries`/`playlist sort` family together now cover every
-originally-planned piece of §9.2; only the two newer ideas noted above (a
-file-browser `entries add` mode, and duplicate-entry detection/removal) remain,
-pending further design discussion before they're scoped.
+originally-planned piece of §9.2 plus the file-browser `entries add` mode noted
+above; only duplicate-entry detection/removal remains, pending further design
+discussion before it's scoped.

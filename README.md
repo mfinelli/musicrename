@@ -283,8 +283,16 @@ your current directory or absolute; either way it's resolved and stored relative
 to the library root. A path that doesn't resolve to a real file is skipped and
 reported.
 
+With no paths given, opens an interactive directory browser instead: navigate
+with the arrow keys (or j/k), left/h/backspace goes up (never above the
+library-root-root), right/l/enter descends or, for an album directory, opens a
+checkbox picker for its tracks. `/` filters the current listing. Nothing is
+written until you leave: esc/q saves everything staged across the session in one
+write, ctrl+c discards it all.
+
 ```sh
 mrr playlist entries add playlists/road-trip.m3u8 main/a/artist/album/01\ track.flac
+mrr playlist entries add playlists/road-trip.m3u8
 ```
 
 #### `playlist entries remove`

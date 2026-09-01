@@ -269,7 +269,7 @@ target again. Exactly one of *--set*/*--clear* is required.
 _playlist_ must already exist; this command will never create a new file (use
 *playlist create* for that).
 
-## mrr playlist entries add <_playlist_> <_path_>...
+## mrr playlist entries add <_playlist_> [_path_]...
 
 Appends each given _path_, in order, to _playlist_'s entry list, then
 rewrites the file. Each _path_ may be relative to the current working
@@ -278,6 +278,15 @@ library root.
 
 A _path_ that doesn't resolve to a real file under the library root is
 skipped and reported.
+
+With no _path_ arguments, opens an interactive directory browser instead:
+arrow keys (or *j*/*k*) move the cursor, *left*/*h*/*backspace* goes up a
+level, *right*/*l*/*enter* descends into a directory or, if is an album,
+opens a checkbox picker for its tracks. Press */* to filter the current
+directory's listing by substring.
+
+Nothing is written until the browser is left: *esc*/*q* at the top level saves
+everything staged across the whole session; *ctrl+c* discards all changes.
 
 _playlist_ must already exist (use *playlist create* to scaffold a new one
 first).
