@@ -4,6 +4,24 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v4.1.0 — 2026-09-01
+
+Round out global playlist management: `playlist create`/`targets` scaffold and
+edit a playlist's `#TARGETS:` scope, `playlist sums` covers the `playlists/`
+tree the way `sums` already covers albums, and `playlist check` gains missing/
+stale checksum detection, directive-order consistency, and duplicate-directive
+findings (the same missing-entry checksum diffing was also added to `check` and
+`video check`).
+
+Add a full `playlist entries` command family: `add` (by path, or an interactive
+directory browser), `remove` (interactive checkbox, or non-interactive by
+`--artist`/`--album`), `reorder` (a full-screen grab-and-move editor), and
+`dedupe`. `playlist sort` reorders by metadata fields or shuffles.
+
+Extend Navidrome sync (`sync navidrome pull`/`push`) to carry `#SORT:` alongside
+`#TARGETS:` in the remote comment field, so sort criteria round-trip across
+machines the same way target scoping already did.
+
 ## v4.0.0 — 2026-08-30
 
 Add playlist management. Album-local `{target}.m3u8` manifests (managed with the
