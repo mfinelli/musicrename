@@ -763,16 +763,215 @@ printing empty fields.
   filename-matched) on that basis; revisit if/when multiple videos per track
   become a real need.
 
-### 6.5 Future Work (Not Yet Implemented)
+### 6.5 Video Device Sync (Future Work, Design Settled)
 
-- **iPod/Rockbox conversion pipeline:** transcode videos to a uniform,
-  Rockbox-compatible resolution/format/framerate for on-device playback, and
-  embed Artist/Title metadata into the converted file (MP4 atoms via go-taglib,
-  or via `ffmpeg -metadata` at transcode time — mechanically straightforward,
-  same pattern as audio tag writing). **Open question:** whether Rockbox's video
-  plugin actually reads and displays embedded metadata during playback, or only
-  identifies videos by filename, is unconfirmed and should be verified against
-  the target device before this is relied upon.
+Video sync reuses the existing `internal/target.Definition` (§7.2) rather than
+introducing a parallel video-target type: `ipod` and `sdcard` are each a single
+sync policy already, not two independent concept-spaces, and giving them a
+second, disconnected "video definition" would mean two sources of truth for what
+one target wants. `Definition` gains:
+
+- `SupportsVideo bool` — whether this target can play video at all.
+- Video-specific transcode settings (exact fields TBD at implementation time —
+  at minimum a resolution cap, framerate, and container/codec), used only when
+  `SupportsVideo` is true.
+
+`ipod` sets `SupportsVideo: true`. Real research (Rockbox's own `MPEGplayer`
+documentation, real hardware testing shared by others, and a device-specific
+WinFF preset — the full findings, sources, and exact `ffmpeg` invocations tried
+live in `VIDEO.md`, kept separate from this settled-decisions document so raw
+research doesn't clutter it) confirms the actual target is much more specific
+than "a uniform resolution/format/framerate": Rockbox's video plugin decodes
+**MPEG-1/MPEG-2 only, entirely in software on the main CPU** — no modern codec
+(H.264, the actual format `yt-dlp` sources are in) is supported at all. The real
+encode target is MPEG-2 video plus MP3 audio, muxed as an MPEG Program Stream
+(`.mpg`). **Exact resolution/bitrate/framerate remain open pending real
+on-device testing** against the actual device this is being built for (an iPod
+Video 5.5G) — the sources gathered so far meaningfully disagree with each other
+(a device-specific preset's bitrate is roughly 10x lower than
+independently-tested real-world numbers; suggested resolutions differ too), so
+nothing is finalized as fact until verified with a real converted file on real
+hardware, not reasoned about from written sources alone.
+
+**No metadata embedding.** This reverses an earlier instinct in this same
+document to embed it regardless "since it's cheap" — that assumed an MP4-style
+container, where embedding is well-trodden ground; now that the real target is
+confirmed to be MPEG-PS, there's no established, well-supported metadata
+convention for that container the way MP4 atoms or ID3 have, so it's unclear the
+metadata would even survive the mux, separate from the original open question of
+whether Rockbox's video plugin reads it at all. Combined with no evidence,
+across any researched source, that `MPEGplayer` displays any metadata during
+playback, this isn't worth the implementation cost anymore. Videos are
+identified by filename only, as originally suspected.
+
+`sdcard` sets `SupportsVideo: false`. Attempting to select or sync video against
+a target with `SupportsVideo: false` is a hard, immediate error at the command
+level ("target %q does not support video") — not a silent no-op, and not a
+fallback to something else. Currently only `ipod` is valid for video selection
+(below) or `video sync <target>`. Getting a video's audio onto a target like
+`sdcard` is handled entirely through §6.6's derived-audio file plus the
+ordinary, already-existing playlist-driven audio sync path (see §6.6's
+sync/Navidrome interaction write-up below) — not through any video-sync-specific
+fallback logic. An earlier draft of this section routed `sdcard`'s audio through
+video-sync's own selection/diff logic directly; that turned out to be
+unnecessary complexity once it became clear playlist membership already handles
+this for free through the existing, unmodified §7.7 algorithm.
+
+#### Selection: `videos/{target}.m3u8`
+
+Unlike audio (§7.3, selection scoped per-album, since an album is naturally a
+small, human-sized group of tracks), video selection is scoped at the video-root
+level: a single `videos/{target}.m3u8` per target, listing the selected videos'
+paths — valid only for a target with `SupportsVideo: true` (above); attempting
+this against `sdcard` errors immediately. A flat, all-at-once checklist across a
+library that may hold hundreds or thousands of videos would be unusable, so this
+reuses §9.2's `playlist entries add` interactive-browser machinery
+(`playlist.BrowseSelection` for staging, the shared directory-browser model)
+rather than a flat form: browsing to an artist directory presents every video by
+that artist (tens, not thousands) as one multi-select screen, exactly the same
+shape as the audio checkbox list, just one directory level up (artist instead of
+album — a video's own directory holds exactly one video, so there's no
+meaningful per-directory sub-selection the way an album's tracks have). Despite
+the `.m3u8` extension, this is the same "reuse the file format, not its playback
+semantics" move as the album-local manifests — nothing here depends on any
+player interpreting these files, since `musicrename` is the only thing that ever
+reads or writes them.
+
+### 6.6 Audio Extraction from Video (Future Work, Design Settled)
+
+Some tracks exist only as a music video (published to YouTube, never released as
+a standalone single/album), which makes them invisible to Navidrome (no video
+support) and unplayable on `sdcard` (no video support either, §6.5).
+`video extract-audio <video>` pulls the audio stream out and writes a derived
+audio file — a deliberate, per-video, curator-triggered command, not something
+inferred automatically (e.g. by fuzzy-matching against the existing library to
+guess which songs are "missing"). This matches the project's existing posture
+elsewhere: the library is curator-managed, not heuristic-managed
+(`bucketOverrides`, §3.1/§3.2, is a hardcoded map for exactly this reason).
+
+**Rejected alternative — a dedicated library root:** treating extracted audio as
+an ordinary library track (its own root, e.g. `youtube`, using the standard
+`bucket/artist/album/track` hierarchy, discovered automatically by every
+existing audio command via §7.1's library-roots convention) was considered and
+rejected. It only looks like "zero new code" — in practice a video-derived
+single has no real album, wants no lyrics, and should trust the nfo's tags over
+independently re-scanning the file, so every one of `check`/`lyrics`/etc. would
+need new exclusion logic to avoid false-positive findings (missing YEAR, missing
+lyrics, ...) that mean nothing for this content. That's exclusion logic
+scattered across many commands instead of concentrated in one.
+
+**Chosen design — lives alongside the video, owned by the `video` commands:**
+
+- **Location & naming:** written into the video's own directory, same base name
+  as the video file with the extracted extension (e.g. `[title].mp4` →
+  `[title].m4a`). Exactly one video per directory is already assumed (§6.4), so
+  this doesn't need any new naming scheme.
+- **Codec/container:** always a true remux (`-c:a copy`, no re-encode) —
+  extension follows whatever codec the source stream actually is (`.m4a` for
+  AAC, `.opus` for Opus, etc.), rather than forcing one canonical format. This
+  is only viable because the derived file is _not_ routed through
+  `ProcessLibrary`/`check`/`sums`'s audio-extension sniffing (`.flac`/`.mp3`/
+  `.m4a` only) the way a real library track would be — `video sums` doesn't care
+  about a file's codec any more than it cares about `info.txt`'s internal format
+  (see below), so there's nothing to special-case. Target-specific reformatting
+  (e.g. `sdcard` needing MP3) is handled entirely by the _existing_ audio
+  transcode pipeline at sync time (§6.5), not by extraction.
+- **Tags:** written directly from `musicvideo.nfo`'s ARTIST/TITLE (and
+  ALBUM/YEAR if present) — not independently scanned/trusted, since the nfo is
+  the curator-maintained source of truth for this video.
+- **ReplayGain:** computed and written by `rsgain` (new external dependency,
+  shelled out via the same injectable-runner pattern already used for `ffmpeg`
+  and `yt-dlp`) — a purpose-built ReplayGain 2.0 tool (EBU R128/ITU-R BS.1770,
+  -18 LUFS reference) rather than hand-rolling loudness measurement from raw
+  `ffmpeg loudnorm`/`ebur128` output, which would mean re-deriving the correct
+  reference level and peak conversion math ourselves. `rsgain` writes the
+  `REPLAYGAIN_*` tags directly (not routed through `go-taglib` — this is the one
+  tag-write in the project that doesn't go through the shared mechanism, because
+  the tool that computes the value is also the correct one to write it, same
+  underlying library either way).
+- **`video sums` / `hasher.Hash`:** needs no changes at all to _discover_ the
+  derived file. Hashing is generic by extension — `.m4a`/`.opus`/etc. aren't in
+  the small, hardcoded `textExtensions` set (`.cue`/`.log`/`.m3u`/`.m3u8`/
+  `.nfo`/`.txt`), so they fall to the binary (`*`) branch automatically, the
+  same as the video itself, with no changes to `hasher` needed.
+  `video extract-audio` does follow the same `sums.md5`-refresh discipline every
+  other write command in this project already has (§9.2's retrofit list): a
+  no-op if `sums.md5` doesn't exist yet, otherwise `hasher.UpdateFile` for that
+  one entry — a genuine rehash, not a no-op, since a fresh extraction, a
+  `--retag`, and a `--force` re-extraction all write real bytes to the derived
+  file (a tag-only rewrite still changes the file's content, just not its audio
+  stream).
+- **`video rename`:** carries the derived audio file along on any move, the same
+  treatment `info.txt` already gets.
+- **`video check`:** gains two independent new findings, matching two different
+  kinds of drift with two different fixes:
+  - **Tag drift** — the derived file's own current tags no longer match
+    `musicvideo.nfo`'s (`video edit` changed the artist/title after extraction
+    ran, and the derived audio was never refreshed to match). Detected directly,
+    no sidecar needed: read both, compare live values. Fixed via a cheap
+    `--retag`-only re-run of `extract-audio` — rewrites tags via `go-taglib`
+    only, no re-encode and no `rsgain` recompute, since loudness didn't change.
+  - **Content drift** — the video file itself changed since extraction
+    (re-fetched, replaced with a different upload). Detected via a new small
+    sidecar, `audio.src.md5`, living alongside the video — same
+    md5sum-compatible line format as the on-device `{target}.src.md5` sidecar
+    (§7.6's exact precedent) — recording the video's hash _as of extraction
+    time_. `check` compares that recorded value against the video directory's
+    _currently-recorded_ `sums.md5` entry for the video: a plain string
+    comparison, no hashing performed by `check` itself, mirroring §7.6's own
+    passthrough-file drift check exactly ("a plain string comparison between the
+    two — no re-hashing on either side"). If `sums.md5` has no entry to compare
+    against at all (never run, or predates the video changing), that's its own
+    distinct "can't verify — run `video sums`" finding, the same posture §7.7
+    step 3 already takes for the equivalent gap on the device-sync side — never
+    silently treated as either confirmed-fresh or confirmed-stale. Fixed via a
+    full `--force` re-extraction (re-encode, retag, recompute ReplayGain,
+    refresh the sidecar).
+
+  `video edit` never auto-triggers either fix — both are surfaced as findings
+  for the curator to resolve deliberately, consistent with every `check` command
+  in this document being read-only/report-only (§3.4).
+
+- **Navidrome visibility caveat:** this relies on Navidrome recursively scanning
+  the whole library-root-root for known audio extensions regardless of
+  directory-naming convention (i.e. it doesn't care that the file happens to sit
+  inside `videos/`) — the same kind of assumption §8.3 already flags as worth
+  confirming, not guaranteed, rather than something to treat as settled without
+  checking.
+
+#### Interaction with Device Sync (§7) and Navidrome Sync (§8)
+
+No changes are needed to either sync mechanism for a derived audio file to be
+distributable through it — confirmed by tracing the actual existing algorithms,
+not assumed:
+
+- **Navidrome (§8.3):** push resolution matches purely by `path` against
+  Navidrome's own catalog scan, with no assumption anywhere that the path's root
+  name is one of the "official" library roots — a
+  `videos/artist/title/title.m4a` entry resolves exactly like any other track,
+  contingent on the same pre-existing assumption §8.3 already flags (Navidrome's
+  configured music folder being the library-root-root itself).
+- **Device sync (§7.7 step 1):** desired-state computation unions "every library
+  root except `videos`" with "every entry from a playlist" as two independent
+  things — the `videos` exclusion only governs the album-manifest-scanning half
+  of that union; playlist entries were never restricted to `LibraryRoots` at
+  all, since they're already fully-qualified `(root, relative path)` values.
+  Step 3's source-hash comparison then reads whichever directory an entry's own
+  path names for a generic `sums.md5` — which `video sums` already writes in the
+  identical format — so a playlist entry pointing into `videos/` flows through
+  the diff algorithm exactly like an album's track, no special-casing required
+  anywhere in §7.
+- A derived audio file and its source video can coexist on-device simultaneously
+  with no conflict: video-selection sync (§6.5) and playlist-driven audio sync
+  are fully independent mechanisms writing to non-overlapping on-device paths
+  (each library root, `videos` included, mirrors as its own top-level device
+  directory, §7.1).
+
+The one real gap this tracing surfaced: `ipod`'s `Definition` had no fallback
+for a source format outside its accepted set, which a derived-audio file (whose
+extension follows its source codec, not one fixed canonical format) could
+plausibly hit. Addressed directly in `ipod`'s own definition (§7.2) rather than
+with any extraction- or sync-side special-casing.
 
 ## 7. Device Sync & Playlist Management (Implemented)
 
@@ -837,6 +1036,21 @@ Initial targets:
   format this tool manages at all, so `ipod` never actually transcodes anything.
   External artwork only, resized to 400px (the iPod's screen is 320x240; a
   little headroom over that, not full source resolution).
+
+  **Pending amendment, to land alongside §6.6's implementation:**
+  `AcceptedFormats` gains `.opus` and `.ogg` (Vorbis) — passthrough, matching
+  Rockbox's own documented native codec support — and `TranscodeFormat` gains a
+  new AAC (`.m4a`) fallback (a new `FormatAAC` entry in the shared
+  `EncodeParams` map, alongside `FormatMP3`) for anything outside the accepted
+  set. Neither change is prompted by anything about real library tracks (always
+  already FLAC/MP3/M4A) — both exist purely because a §6.6 derived-audio file's
+  extension follows whatever codec its source video actually had, which could in
+  principle be something `ipod` doesn't otherwise encounter. The passthrough
+  additions handle the realistic case (Opus, the most likely thing extraction
+  actually produces from a modern source); the AAC fallback is a defensive last
+  resort for whatever else might show up that should, in practice, rarely or
+  never actually trigger.
+
 - **`sdcard`:** MP3 only — anything else is transcoded to MP3 (`libmp3lame`, VBR
   quality V0, via `ffmpeg`). Artwork is _embedded_ rather than external (500px)
   — more portable for a target that's about swapping storage between devices (a
