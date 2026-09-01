@@ -24,66 +24,153 @@ import (
 	"strings"
 )
 
-// commentTargetsPattern matches a musicrename-managed #TARGETS: suffix
-// appended to a Navidrome playlist's comment field, e.g. "Great road trip mix
-// [musicrename:targets=ipod,sdcard]". A suffix rather than owning the whole
-// field lets a human still write an ordinary description in the same comment;
-// only this trailing bracketed segment is ever read or rewritten by
-// musicrename. Anchored to the end of the string, non-greedy on the human-text
-// group so a comment that happens to contain other bracketed text elsewhere
-// isn't misread.
-var commentTargetsPattern = regexp.MustCompile(`(?s)^(.*?)\s*\[musicrename:targets=([^\]]*)\]\s*$`)
-
-// parseCommentTargets splits a Navidrome comment into its human-authored
-// portion and any musicrename-managed targets suffix.
+// commentDirectivesPattern matches a musicrename-managed suffix appended to
+// a Navidrome playlist's comment field, e.g. "Great road trip mix
+// [musicrename:sort=artist,album;targets=ipod,sdcard]". A suffix rather
+// than owning the whole field lets a human still write an ordinary
+// description in the same comment; only this trailing bracketed segment is
+// ever read or rewritten by musicrename. Anchored to the end of the
+// string, non-greedy on the human-text group so a comment that happens to
+// contain other bracketed text elsewhere isn't misread.
 //
-// hasTargets is false, and targets nil, when no such suffix is present at
-// all which is distinct from a present-but-empty suffix
-// ("[musicrename:targets=]"), which is an explicit, deliberate empty list.
-// This mirrors the same absent/present-but-empty distinction
-// [playlist.GlobalPlaylist] makes for the local #TARGETS: directive, so
-// the two stay directly comparable.
-func parseCommentTargets(comment string) (human string, targets []string, hasTargets bool) {
-	m := commentTargetsPattern.FindStringSubmatch(comment)
+// The bracket's inner content is a single semicolon-separated list of
+// key=value directives (not one bracket per directive) matched here as
+// one opaque group and split apart in [parseCommentDirectives], since a
+// semicolon or an unescaped bracket can never legitimately appear inside a
+// target name or sort field name (both are drawn from small, fixed,
+// punctuation-free vocabularies), so no escaping is needed to keep the two
+// directives' comma-separated value lists unambiguous within one bracket.
+var commentDirectivesPattern = regexp.MustCompile(`(?s)^(.*?)\s*\[musicrename:([^\]]*)\]\s*$`)
+
+// commentDirectiveOrder is every recognized comment directive key, in the
+// fixed alphabetical order [composeComment] always writes them in so that we
+// have deterministic output regardless of which are present, mirroring how
+// target *values* are already alphabetized on write. Adding a third
+// directive means inserting its key here in alphabetical position, not
+// just appending, and adding its case to composeComment's key-by-key
+// section below.
+var commentDirectiveOrder = []string{"sort", "targets"}
+
+// commentDirectives holds every musicrename-managed directive that can
+// appear in a Navidrome playlist's comment suffix. Field names and Has*
+// pairing intentionally mirror [playlist.GlobalPlaylist]'s Targets/
+// HasTargets and Sort/HasSort so the two stay directly comparable and a
+// caller can move values between them without translation.
+type commentDirectives struct {
+	Targets    []string
+	HasTargets bool
+	Sort       []string
+	HasSort    bool
+}
+
+// parseCommentDirectives splits a Navidrome comment into its human-authored
+// portion and any musicrename-managed directives found in its suffix.
+// Directive keys may appear in any order within the bracket because only
+// [composeComment]'s output is canonically ordered: this parser stays
+// liberal about what it accepts (a hand-edited comment, or a suffix
+// written by a future version of musicrename with its own key order,
+// should still parse correctly) while [composeComment] is strict about
+// what it produces. An unrecognized key within the bracket is silently
+// ignored rather than rejected outright, for the same forward-compatibility
+// reason. A key with no "=" is likewise ignored.
+//
+// A given key's Has* is false, and its value slice nil, when that key
+// isn't present in the suffix at all which is distinct from present-but-empty
+// (e.g. "targets="), which is an explicit, deliberate empty list. This
+// mirrors the same absent/present-but-empty distinction
+// [playlist.GlobalPlaylist] makes for its own local directives.
+func parseCommentDirectives(comment string) (human string, d commentDirectives) {
+	m := commentDirectivesPattern.FindStringSubmatch(comment)
 	if m == nil {
-		return comment, nil, false
+		return comment, commentDirectives{}
 	}
 
 	human = m[1]
-	raw := m[2]
-	if raw == "" {
-		return human, []string{}, true
-	}
+	for _, kv := range strings.Split(m[2], ";") {
+		kv = strings.TrimSpace(kv)
+		if kv == "" {
+			continue
+		}
+		key, raw, found := strings.Cut(kv, "=")
+		if !found {
+			continue
+		}
 
+		values := splitCommentList(raw)
+		switch strings.TrimSpace(key) {
+		case "targets":
+			d.Targets = values
+			d.HasTargets = true
+		case "sort":
+			d.Sort = values
+			d.HasSort = true
+		}
+	}
+	return human, d
+}
+
+// splitCommentList splits one directive's raw comma-separated value into
+// its parts, trimmed. Always non-nil (even for an empty raw), so a caller
+// can distinguish "key present, empty value" from "key absent entirely"
+// purely via the corresponding Has* field, without also checking for nil.
+func splitCommentList(raw string) []string {
+	values := []string{}
+	if raw == "" {
+		return values
+	}
 	for p := range strings.SplitSeq(raw, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			targets = append(targets, p)
+			values = append(values, p)
 		}
 	}
-	if targets == nil {
-		targets = []string{}
-	}
-	return human, targets, true
+	return values
 }
 
 // composeComment rebuilds a Navidrome comment from a human-authored prefix
-// and a targets list — the inverse of parseCommentTargets.
+// and a set of directives (the inverse of [parseCommentDirectives]).
+// Present directives are always written in [commentDirectiveOrder], so two
+// calls with the same logical content produce byte-identical output
+// regardless of the order their fields were set in which is what lets
+// push.go compare a freshly-composed comment against one recomposed from
+// the (possibly differently-ordered, e.g. hand-edited) remote comment
+// without a spurious "different" result.
 //
-// If hasTargets is false, the suffix is omitted entirely: this is how a
-// local #TARGETS: directive being removed reconciles onto the remote
-// side — push simply stops appending a suffix, leaving only whatever
-// human text was already there.
-func composeComment(human string, targets []string, hasTargets bool) string {
+// Targets' values are alphabetized here because order carries no meaning
+// for a set. Sort's values are never reordered: order there is precedence,
+// the exact thing the directive exists to remember, and alphabetizing it
+// would silently corrupt it which matches [playlist.WriteGlobalPlaylist]'s
+// identical treatment of the local #SORT: directive.
+//
+// If no directive in d has its Has* set, the suffix is omitted entirely:
+// this is how a local directive being removed (via `playlist targets
+// --clear`, or the last-remembered #SORT: disappearing some other way)
+// reconciles onto the remote side: push simply stops appending anything
+// for it, leaving only whatever human text was already there.
+func composeComment(human string, d commentDirectives) string {
 	human = strings.TrimSpace(human)
-	if !hasTargets {
+
+	parts := make([]string, 0, len(commentDirectiveOrder))
+	for _, key := range commentDirectiveOrder {
+		switch key {
+		case "sort":
+			if d.HasSort {
+				parts = append(parts, "sort="+strings.Join(d.Sort, ","))
+			}
+		case "targets":
+			if d.HasTargets {
+				sorted := append([]string(nil), d.Targets...)
+				sort.Strings(sorted)
+				parts = append(parts, "targets="+strings.Join(sorted, ","))
+			}
+		}
+	}
+
+	if len(parts) == 0 {
 		return human
 	}
 
-	sorted := append([]string(nil), targets...)
-	sort.Strings(sorted)
-
-	suffix := fmt.Sprintf("[musicrename:targets=%s]", strings.Join(sorted, ","))
+	suffix := fmt.Sprintf("[musicrename:%s]", strings.Join(parts, ";"))
 	if human == "" {
 		return suffix
 	}

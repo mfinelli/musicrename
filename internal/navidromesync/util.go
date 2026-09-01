@@ -27,29 +27,41 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
+	"github.com/mfinelli/musicrename/internal/playlist"
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
 
-// libraryRootRootFor derives a playlist file's library-root-root by walking
-// up from its path to find the nearest ancestor directory named "playlists"
-// and returning that directory's parent.
-//
-// Falls back to the file's immediate parent directory if no "playlists"
-// ancestor is found (shouldn't happen for a file actually inside the
-// playlists/ tree, but avoids looping to the filesystem root on an
-// unexpected path rather than erroring outright).
-func libraryRootRootFor(path string) string {
-	dir := filepath.Dir(path)
-	for {
-		if filepath.Base(dir) == "playlists" {
-			return filepath.Dir(dir)
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return filepath.Dir(path)
-		}
-		dir = parent
+// updateLocalSums updates path's entry in playlists/sums.md5 via
+// [hasher.UpdateFile], for callers that just wrote (created or overwrote)
+// path's content. A no-op if playlists/sums.md5 doesn't exist at all since
+// this package never creates one from scratch.
+func updateLocalSums(libraryRootRoot, path string) error {
+	playlistsDir := playlist.Dir(libraryRootRoot)
+	rel, err := filepath.Rel(playlistsDir, path)
+	if err != nil {
+		return fmt.Errorf("resolving %s relative to %s: %w", path, playlistsDir, err)
 	}
+	return hasher.UpdateFile(playlistsDir, rel)
+}
+
+// removeLocalSums removes path's entry from playlists/sums.md5 via
+// [hasher.RemoveFile], for callers that just deleted path from disk. A
+// no-op if playlists/sums.md5 doesn't exist, or has no entry for path.
+func removeLocalSums(libraryRootRoot, path string) error {
+	playlistsDir := playlist.Dir(libraryRootRoot)
+	rel, err := filepath.Rel(playlistsDir, path)
+	if err != nil {
+		return fmt.Errorf("resolving %s relative to %s: %w", path, playlistsDir, err)
+	}
+	return hasher.RemoveFile(playlistsDir, rel)
+}
+
+// libraryRootRootFor is a thin alias for [playlist.LibraryRootRootFor],
+// kept so call sites in this package don't need the playlist package
+// qualifier for something used this frequently.
+func libraryRootRootFor(path string) string {
+	return playlist.LibraryRootRootFor(path)
 }
 
 // newPlaylistFilename derives a filename (including the .m3u8 extension,

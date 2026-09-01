@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
@@ -121,6 +122,55 @@ func TestPushOne(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "created-id", gp.NavidromeID)
 		assert.True(t, gp.HasNavidromeID)
+	})
+
+	t.Run("writing back the new ID refreshes the entry in an existing playlists/sums.md5", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+		before, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		oldHash := before["roadtrip.m3u8"]
+		require.NotEmpty(t, oldHash)
+
+		f := newPushFakeServer()
+		f.search3 = `{"subsonic-response":{"status":"ok","searchResult3":{"song":[` +
+			`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`
+		f.createID = "created-id"
+		srv := f.server()
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Created, 1)
+		assert.Empty(t, result.Warnings)
+
+		after, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotEqual(t, oldHash, after["roadtrip.m3u8"], "the entry's hash must be refreshed, content changed")
+	})
+
+	t.Run("no playlists/sums.md5 at all: create still succeeds, no warning", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		f := newPushFakeServer()
+		f.search3 = `{"subsonic-response":{"status":"ok","searchResult3":{"song":[` +
+			`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`
+		f.createID = "created-id"
+		srv := f.server()
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
 	})
 
 	t.Run("an unresolvable entry produces a warning and is excluded, but push still proceeds", func(t *testing.T) {
@@ -341,6 +391,108 @@ func TestPushOne(t *testing.T) {
 		require.Len(t, result.Updated, 1)
 		require.True(t, commentSent)
 		assert.Equal(t, "Great mix", capturedComment, "the suffix must be gone but the human text kept")
+	})
+
+	t.Run("creates a new remote playlist with #SORT: encoded in the comment, order preserved", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", HasSort: true, Sort: []string{"artist", "album", "track"},
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		var capturedComment string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/createPlaylist", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
+		})
+		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
+			if c := r.URL.Query().Get("comment"); c != "" {
+				capturedComment = c
+			}
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Created, 1)
+		assert.Equal(t, "[musicrename:sort=artist,album,track]", capturedComment)
+	})
+
+	t.Run("both #SORT: and #TARGETS: together produce one comment, sort-then-targets", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name:    "Road Trip",
+			HasSort: true, Sort: []string{"artist", "album"},
+			HasTargets: true, Targets: []string{"sdcard", "ipod"},
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		var capturedComment string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/createPlaylist", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
+		})
+		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
+			if c := r.URL.Query().Get("comment"); c != "" {
+				capturedComment = c
+			}
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Created, 1)
+		assert.Equal(t, "[musicrename:sort=artist,album;targets=ipod,sdcard]", capturedComment)
+	})
+
+	t.Run("removes the #SORT: key but keeps #TARGETS:, when local #SORT: is removed", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		require.NoError(t, playlist.WriteGlobalPlaylist(path, &playlist.GlobalPlaylist{
+			Name: "Road Trip", NavidromeID: "id-1", HasNavidromeID: true,
+			HasTargets: true, Targets: []string{"ipod"},
+			// No Sort/HasSort: locally removed.
+			Entries: []string{"main/a/artist/album/01 track.flac"},
+		}))
+
+		var capturedComment string
+		mux := http.NewServeMux()
+		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+				`"comment":"[musicrename:sort=artist;targets=ipod]",`+
+				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
+		})
+		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Has("comment") {
+				capturedComment = r.URL.Query().Get("comment")
+			}
+			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+		})
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+
+		result, err := PushOne(testClient(srv.URL), path, false)
+		require.NoError(t, err)
+		require.Len(t, result.Updated, 1)
+		assert.Equal(t, "[musicrename:targets=ipod]", capturedComment)
 	})
 
 	t.Run("a remote #TARGETS: suffix reordered but set-equal to local is Unchanged, no update call made", func(t *testing.T) {

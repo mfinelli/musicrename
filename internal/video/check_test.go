@@ -25,6 +25,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/hasher"
 )
 
 // messages extracts the Message field from a slice of Warning, joined into a
@@ -37,11 +39,15 @@ func messages(warnings []Warning) string {
 	return strings.Join(msgs, "; ")
 }
 
-// stubSums writes a trivial sums.md5 into dir, sufficient for tests that
-// only need Check to see the file exists.
+// stubSums writes a real sums.md5 into dir covering every file currently
+// present there. Named "stub" because tests using it don't care about the
+// checksums' correctness beyond the fact that they're consistent with the
+// directory listing (Check's [hasher.DiffEntries]-based check would
+// otherwise flag any file present on disk but absent from an empty
+// sums.md5).
 func stubSums(t *testing.T, dir string) {
 	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "sums.md5"), []byte(""), 0o644))
+	require.NoError(t, hasher.Hash(dir, nil))
 }
 
 func TestCheck(t *testing.T) {
@@ -104,6 +110,29 @@ func TestCheck(t *testing.T) {
 		check, err := Check(dir, "")
 		require.NoError(t, err)
 		assert.Contains(t, messages(check.Warnings), "missing sums.md5")
+	})
+
+	t.Run("file on disk with no recorded entry is flagged", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "A", Title: "T"})
+		stubSums(t, dir)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.txt"), []byte("d"), 0o644))
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "extra.txt not recorded in sums.md5")
+	})
+
+	t.Run("recorded entry with no file on disk is flagged", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "A", Title: "T"})
+		stubSums(t, dir)
+		sums, _, err := hasher.ReadSums(dir, "sums.md5")
+		require.NoError(t, err)
+		sums["ghost.txt"] = strings.Repeat("0", 32)
+		require.NoError(t, hasher.WriteSums(dir, "sums.md5", sums))
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), `sums.md5 references "ghost.txt" which does not exist`)
 	})
 
 	t.Run("path conformance is skipped when videoRoot is empty", func(t *testing.T) {

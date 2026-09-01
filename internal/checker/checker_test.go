@@ -523,6 +523,41 @@ func TestCheckIntegrity(t *testing.T) {
 		checkIntegrity(album, ar)
 		assert.Empty(t, ar.Warnings)
 	})
+
+	t.Run("file on disk with no recorded entry produces warning", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, hasher.Hash(dir, nil))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "01 track.flac"), []byte("audio"), 0o644))
+		album := makeCheckerAlbum(dir, "Artist", nil, nil)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkIntegrity(album, ar)
+		w := findWarning(ar, "not recorded in "+hasher.SumsFilename)
+		require.NotNil(t, w)
+		assert.Equal(t, filepath.Join(dir, "01 track.flac"), w.Path)
+	})
+
+	t.Run("recorded entry with no file on disk produces warning", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "01 track.flac"), []byte("audio"), 0o644))
+		require.NoError(t, hasher.Hash(dir, nil))
+		require.NoError(t, os.Remove(filepath.Join(dir, "01 track.flac")))
+		album := makeCheckerAlbum(dir, "Artist", nil, nil)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkIntegrity(album, ar)
+		w := findWarning(ar, "01 track.flac")
+		require.NotNil(t, w)
+		assert.Equal(t, dir, w.Path)
+	})
+
+	t.Run("sums.md5 matching disk exactly produces no warning", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "01 track.flac"), []byte("audio"), 0o644))
+		require.NoError(t, hasher.Hash(dir, nil))
+		album := makeCheckerAlbum(dir, "Artist", nil, nil)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkIntegrity(album, ar)
+		assert.Empty(t, ar.Warnings)
+	})
 }
 
 func TestCheckUnknownFiles(t *testing.T) {
@@ -878,6 +913,84 @@ func TestCheckPlaylists(t *testing.T) {
 		assert.Nil(t, findWarning(ar, `stale entry "01 track.flac"`))
 	})
 
+	t.Run("a duplicate entry produces a warning naming the repeat count", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte(
+			"01 track.flac\n01 track.flac\n",
+		), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		w := findWarning(ar, "duplicate entry")
+		require.NotNil(t, w)
+		assert.Equal(t, manifestPath, w.Path)
+		assert.Contains(t, w.Message, `"01 track.flac"`)
+		assert.Contains(t, w.Message, "2 times")
+	})
+
+	t.Run("three occurrences still report the entry once", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte(
+			"01 track.flac\n01 track.flac\n01 track.flac\n",
+		), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		duplicateWarnings := 0
+		for _, w := range ar.Warnings {
+			if strings.Contains(w.Message, "duplicate entry") {
+				duplicateWarnings++
+			}
+		}
+		assert.Equal(t, 1, duplicateWarnings)
+	})
+
+	t.Run("a duplicate stale entry is flagged as both stale and duplicate", func(t *testing.T) {
+		dir := t.TempDir()
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte(
+			"gone.flac\ngone.flac\n",
+		), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist", nil,
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+
+		assert.NotNil(t, findWarning(ar, "stale entry"))
+		assert.NotNil(t, findWarning(ar, "duplicate entry"))
+	})
+
+	t.Run("no duplicates: no duplicate warning", func(t *testing.T) {
+		dir := t.TempDir()
+		trackPath := filepath.Join(dir, "01 track.flac")
+		manifestPath := filepath.Join(dir, "ipod.m3u8")
+		require.NoError(t, os.WriteFile(manifestPath, []byte("01 track.flac\n"), 0o644))
+
+		album := makeCheckerAlbum(dir, "Artist",
+			[]*metadata.Track{{Path: trackPath}},
+			map[metadata.FileCategory][]string{metadata.CatRootText: {manifestPath}},
+		)
+		ar := &AlbumResult{AlbumPath: dir}
+		checkPlaylists(album, ar)
+		assert.Nil(t, findWarning(ar, "duplicate entry"))
+	})
+
 	t.Run("recognized target with every entry matching a track: no warnings", func(t *testing.T) {
 		dir := t.TempDir()
 		trackPath := filepath.Join(dir, "01 track.flac")
@@ -957,6 +1070,7 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 			[]byte("#PLAYLIST:Road Trip\n"+filepath.ToSlash(trackRel)+"\n"),
 			0o644,
 		))
+		require.NoError(t, hasher.Hash(filepath.Join(root, "playlists"), nil))
 
 		result, err := CheckPlaylists(root)
 		require.NoError(t, err)
@@ -1059,6 +1173,7 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 		require.NoError(t, os.WriteFile(
 			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#TARGETS:ipod,sdcard\n"), 0o644,
 		))
+		require.NoError(t, hasher.Hash(filepath.Join(root, "playlists"), nil))
 
 		result, err := CheckPlaylists(root)
 		require.NoError(t, err)
@@ -1071,10 +1186,151 @@ func TestCheckPlaylistsGlobal(t *testing.T) {
 		require.NoError(t, os.WriteFile(
 			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
 		))
+		require.NoError(t, hasher.Hash(filepath.Join(root, "playlists"), nil))
 
 		result, err := CheckPlaylists(root)
 		require.NoError(t, err)
 		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("missing playlists/sums.md5 produces a warning once a playlist exists", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "playlists"), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(root, "playlists", "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "missing "+hasher.SumsFilename)
+		require.NotNil(t, w)
+		assert.Equal(t, filepath.Join(root, "playlists"), w.Path)
+	})
+
+	t.Run("file under playlists/ with no recorded entry produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "second.m3u8"), []byte("#PLAYLIST:Second\n"), 0o644,
+		))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "not recorded in "+hasher.SumsFilename)
+		require.NotNil(t, w)
+		assert.Equal(t, filepath.Join(playlistsDir, "second.m3u8"), w.Path)
+	})
+
+	t.Run("recorded entry with no file under playlists/ produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+		require.NoError(t, os.Remove(filepath.Join(playlistsDir, "roadtrip.m3u8")))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, `sums.md5 references "roadtrip.m3u8" which does not exist`)
+		require.NotNil(t, w)
+		assert.Equal(t, playlistsDir, w.Path)
+	})
+
+	t.Run("playlists/sums.md5 matching the tree exactly produces no warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("duplicate #PLAYLIST: directive within one file produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#PLAYLIST:First\n#PLAYLIST:Second\n"), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "duplicate #PLAYLIST: directive")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+	})
+
+	t.Run("duplicate #SORT: directive within one file produces a warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#SORT:artist\n#SORT:shuffle\n"), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "duplicate #SORT: directive")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+	})
+
+	t.Run("no duplicate directives produces no warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(playlistsDir, "roadtrip.m3u8"), []byte("#PLAYLIST:Road Trip\n"), 0o644,
+		))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Nil(t, findPlaylistWarning(result, "duplicate #"))
+	})
+
+	t.Run("out-of-order directives produce a warning naming both the actual and expected order", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.WriteFile(path, []byte("#TARGETS:ipod\n#PLAYLIST:Road Trip\n"), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		w := findPlaylistWarning(result, "directives out of order")
+		require.NotNil(t, w)
+		assert.Equal(t, path, w.Path)
+		assert.Contains(t, w.Message, "found #TARGETS:,#PLAYLIST:")
+		assert.Contains(t, w.Message, "expected #PLAYLIST:,#TARGETS:")
+	})
+
+	t.Run("a file with directives in canonical order produces no order warning", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		path := filepath.Join(playlistsDir, "roadtrip.m3u8")
+		require.NoError(t, os.MkdirAll(playlistsDir, 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(
+			"#PLAYLIST:Road Trip\n#NAVIDROME-ID:id-1\n#TARGETS:ipod\n#SORT:artist\n",
+		), 0o644))
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		result, err := CheckPlaylists(root)
+		require.NoError(t, err)
+		assert.Nil(t, findPlaylistWarning(result, "directives out of order"))
 	})
 
 	t.Run("subdirectories under playlists/ are walked recursively", func(t *testing.T) {

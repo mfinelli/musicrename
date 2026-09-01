@@ -223,12 +223,126 @@ mrr playlist select ipod ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
 #### `playlist check`
 
 Audits the `playlists/` tree for broken entries, unrecognized `#TARGETS:` names,
-and duplicate `#NAVIDROME-ID` values. Read-only; exits non-zero on findings.
-(Findings for album-local `{target}.m3u8` manifests are reported by `mrr check`
-instead.)
+duplicate `#NAVIDROME-ID` values, a directive repeated within one file or out of
+its normal order, and a missing or stale `playlists/sums.md5` (listing
+comparison only, no hashing). Read-only; exits non-zero on findings. (Findings
+for album-local `{target}.m3u8` manifests are reported by `mrr check` instead.)
 
 ```sh
 mrr playlist check ~/music
+```
+
+#### `playlist rename`
+
+Scans the same `playlists/` tree as `playlist check` and renames each file to a
+filesystem-safe name derived from its `#PLAYLIST:` directive. A file with no
+`#PLAYLIST:` directive, or one that sanitizes to an empty string, is skipped and
+reported rather than treated as an error. If a `playlists/sums.md5` already
+exists, the renamed entry is relabeled to match (hash unchanged).
+
+```sh
+mrr playlist rename ~/music
+```
+
+#### `playlist sums`
+
+Computes MD5 checksums for every file under the `playlists/` tree recursively
+and writes a single `playlists/sums.md5` covering the whole tree (unlike album
+or video `sums.md5`, there's no per-directory split here).
+
+```sh
+mrr playlist sums ~/music
+```
+
+#### `playlist create`
+
+Scaffolds a new file under `playlists/` with a `#PLAYLIST:` directive (and a
+`#TARGETS:` directive, if `--targets` is given) and no entries. Refuses to
+overwrite an existing file.
+
+```sh
+mrr playlist create "Road Trip" ~/music
+mrr playlist create "Workout" ~/music --targets ipod,sdcard
+```
+
+#### `playlist targets`
+
+Edits an existing playlist's `#TARGETS:` scope: `--set` replaces it (an empty
+value means "applies to no target"); `--clear` removes the directive entirely
+("applies to every target").
+
+```sh
+mrr playlist targets playlists/road-trip.m3u8 --set ipod
+mrr playlist targets playlists/road-trip.m3u8 --clear
+```
+
+#### `playlist entries add`
+
+Appends one or more tracks to a playlist, in order. Each path may be relative to
+your current directory or absolute; either way it's resolved and stored relative
+to the library root. A path that doesn't resolve to a real file is skipped and
+reported.
+
+With no paths given, opens an interactive directory browser instead: navigate
+with the arrow keys (or j/k), left/h/backspace goes up (never above the
+library-root-root), right/l/enter descends or, for an album directory, opens a
+checkbox picker for its tracks. `/` filters the current listing. Nothing is
+written until you leave: esc/q saves everything staged across the session in one
+write, ctrl+c discards it all.
+
+```sh
+mrr playlist entries add playlists/road-trip.m3u8 main/a/artist/album/01\ track.flac
+mrr playlist entries add playlists/road-trip.m3u8
+```
+
+#### `playlist entries remove`
+
+With no flags, shows every entry as a pre-checked checkbox: uncheck the ones to
+remove, then confirm. With `--artist`/`--album`, matches and removes
+non-interactively instead (case-insensitive; both must match if both given).
+`--dry-run` previews without changing anything.
+
+```sh
+mrr playlist entries remove playlists/road-trip.m3u8
+mrr playlist entries remove playlists/road-trip.m3u8 --artist "The Beatles"
+```
+
+#### `playlist entries reorder`
+
+Opens a full-screen interactive editor for reordering entries: arrow keys (or
+j/k/Home/End/PgUp/PgDn) move the cursor, space grabs/releases the entry under it
+(movement then moves the entry instead), enter saves, esc/q cancels. Filenames
+show immediately; richer "Artist — Title" labels fill in from the background as
+tags load, without blocking you from reordering in the meantime.
+
+```sh
+mrr playlist entries reorder playlists/road-trip.m3u8
+```
+
+#### `playlist sort`
+
+Reorders a playlist by comma-separated metadata fields (`artist`, `albumartist`,
+`album`, `year`, `disc`, `track`, `title`), first field breaking the most ties.
+With no fields and no `--shuffle`, reapplies whatever was last used (remembered
+in the file itself). `--shuffle` randomizes instead. Duplicate entries are
+removed by default when sorting (`--skip-dedupe` to keep them). `--dry-run`
+previews without writing.
+
+```sh
+mrr playlist sort playlists/road-trip.m3u8 artist,album,track
+mrr playlist sort playlists/road-trip.m3u8 --shuffle
+mrr playlist sort playlists/road-trip.m3u8
+```
+
+#### `playlist entries dedupe`
+
+Removes duplicate entries, keeping each one's first occurrence and leaving every
+other entry's order completely untouched. `--check` exits non-zero if duplicates
+exist; `--dry-run` previews and always exits 0; the two are mutually exclusive.
+
+```sh
+mrr playlist entries dedupe playlists/road-trip.m3u8
+mrr playlist entries dedupe playlists/road-trip.m3u8 --check
 ```
 
 #### `sync ipod` / `sync sdcard`
@@ -247,7 +361,8 @@ mrr sync sdcard /media/you/SDCARD --dry-run
 
 Pull overwrites `playlists/` with the server's current content; push overwrites
 the server with local content. Both accept an optional single playlist path to
-operate on just one instead of everything.
+operate on just one instead of everything. If a `playlists/sums.md5` already
+exists, every local write or delete this makes keeps it current.
 
 ```sh
 mrr sync navidrome pull
@@ -259,7 +374,8 @@ mrr sync navidrome pull playlists/road-trip.m3u8
 
 Permanently deletes one playlist, remotely and locally. Requires the playlist to
 already have a `#NAVIDROME-ID` (i.e. it's been pushed at least once). Prompts
-for confirmation unless `--yes` is passed.
+for confirmation unless `--yes` is passed. Also removes the file's entry from
+`playlists/sums.md5` if one exists.
 
 ```sh
 mrr sync navidrome delete playlists/old-mix.m3u8

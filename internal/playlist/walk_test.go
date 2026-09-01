@@ -27,6 +27,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDir(t *testing.T) {
+	t.Run("joins libraryRootRoot with playlists", func(t *testing.T) {
+		assert.Equal(t, filepath.Join("/library", "playlists"), Dir("/library"))
+	})
+}
+
+func TestLibraryRootRootFor(t *testing.T) {
+	t.Run("flat playlist file", func(t *testing.T) {
+		root := filepath.Join("home", "mario", "music")
+		path := filepath.Join(root, "playlists", "roadtrip.m3u8")
+		assert.Equal(t, root, LibraryRootRootFor(path))
+	})
+
+	t.Run("nested organizational subfolder", func(t *testing.T) {
+		root := filepath.Join("home", "mario", "music")
+		path := filepath.Join(root, "playlists", "roadtrips", "summer.m3u8")
+		assert.Equal(t, root, LibraryRootRootFor(path))
+	})
+
+	t.Run("deeply nested subfolder", func(t *testing.T) {
+		root := filepath.Join("home", "mario", "music")
+		path := filepath.Join(root, "playlists", "a", "b", "c", "list.m3u8")
+		assert.Equal(t, root, LibraryRootRootFor(path))
+	})
+
+	t.Run("is the inverse of Dir for the root it returns", func(t *testing.T) {
+		root := filepath.Join("home", "mario", "music")
+		path := filepath.Join(Dir(root), "roadtrip.m3u8")
+		assert.Equal(t, root, LibraryRootRootFor(path))
+	})
+}
+
 func TestWalkTree(t *testing.T) {
 	t.Run("no playlists/ directory at all is not an error", func(t *testing.T) {
 		root := t.TempDir()

@@ -479,11 +479,17 @@ failed tracks.
   `AlbumPlan.Warnings` from this field and then appends its own planning-phase
   warnings (missing tags, unknown files). The display layer (e.g. `--dry-run`
   output) surfaces all warnings grouped together at the top of the output.
-- **Progress feedback:** `rename`, `sums`, and `lyrics` accept an optional
-  `func`-typed progress callback. The command layer passes a TTY-gated closure
-  that writes `\r`-overwriting lines; passing `nil` disables all progress output
-  (used in tests and non-TTY contexts). TTY detection uses
-  `github.com/mattn/go-isatty`.
+- **Progress feedback:** `rename`, `sums`, `lyrics`, `playlist entries remove`,
+  and `playlist sort` (its field-based path only — `--shuffle` needs no tag
+  reads at all) accept an optional `func`-typed progress callback. The command
+  layer passes a TTY-gated closure that writes `\r`-overwriting lines; passing
+  `nil` disables all progress output (used in tests and non-TTY contexts). TTY
+  detection uses `github.com/mattn/go-isatty`. `playlist.ResolveEntryRows`
+  follows `hasher.Hash`'s exact callback timing (called immediately before each
+  entry is resolved) since a playlist can run to thousands of entries and each
+  tag read is a real file open via go-taglib — without this, the terminal would
+  sit silent for a stretch long enough that a user could reasonably think
+  something had hung.
 - **`internal/checker` second pass:** The checker opens each audio file a second
   time via `taglib.OpenReadOnly` to read `REPLAYGAIN_TRACK_GAIN`,
   `REPLAYGAIN_ALBUM_GAIN`, and embedded image metadata (`Properties().Images`).
@@ -503,15 +509,16 @@ failed tracks.
 
 ### Key Dependencies
 
-| Package                                  | Purpose                                                                                               |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                                      |
-| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`, `lyrics`)                      |
-| `github.com/charmbracelet/huh`           | Interactive form/prompt fields for `video add`/`video edit` (editable, pre-fillable text inputs)      |
-| `github.com/deluan/go-taglib`            | Cross-format metadata reading and writing (maintained fork of `sentriz/go-taglib`, used by Navidrome) |
-| `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`, `lyrics`)                                        |
-| `github.com/spf13/cobra`                 | CLI command management                                                                                |
-| `golang.org/x/time/rate`                 | Token bucket rate limiter for LRCLIB requests (`lyrics`)                                              |
+| Package                                  | Purpose                                                                                                                                                                                                                                                                     |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `github.com/alexsergivan/transliterator` | Unicode -> ASCII transliteration                                                                                                                                                                                                                                            |
+| `github.com/charmbracelet/lipgloss`      | Terminal styling for CLI output (`inspect`, `rename`, `sums`, `check`, `lyrics`)                                                                                                                                                                                            |
+| `github.com/charmbracelet/huh`           | Interactive form/prompt fields for `video add`/`video edit` (editable, pre-fillable text inputs)                                                                                                                                                                            |
+| `github.com/charmbracelet/bubbletea`     | Direct dependency as of `playlist entries reorder` (§9.2): a hand-built TUI (huh has no drag-reorder shape) for the interactive reorder editor, with background tag loading via bubbletea's Cmd/Msg pattern. Previously only pulled in indirectly, as huh's own foundation. |
+| `github.com/deluan/go-taglib`            | Cross-format metadata reading and writing (maintained fork of `sentriz/go-taglib`, used by Navidrome)                                                                                                                                                                       |
+| `github.com/mattn/go-isatty`             | TTY detection for progress output (`rename`, `sums`, `lyrics`, `playlist entries remove`, `playlist sort`)                                                                                                                                                                  |
+| `github.com/spf13/cobra`                 | CLI command management                                                                                                                                                                                                                                                      |
+| `golang.org/x/time/rate`                 | Token bucket rate limiter for LRCLIB requests (`lyrics`)                                                                                                                                                                                                                    |
 
 ## 6. Music Video Support (Experimental)
 
@@ -1467,7 +1474,7 @@ throughout this document — per-album vs. library-wide:
 
 - **Album-local manifests** (`{target}.m3u8`, §7.3): a new finding category in
   the existing `musicrename check` (§4.3), added alongside its other per-album
-  checks. Two things are flagged:
+  checks. Three things are flagged:
   - A manifest for an unrecognized target name (e.g. a stray `xbox.m3u8` —
     target names are a small, hardcoded set, `internal/target`, so this is
     almost certainly a typo or leftover cruft, not a real target).
@@ -1476,6 +1483,17 @@ throughout this document — per-album vs. library-wide:
     condition `playlist select` (§7.3) detects interactively, surfaced here as a
     passive audit finding instead. Not checked on an unrecognized-target
     manifest, since that manifest is already flagged as a whole.
+  - A duplicate entry: the same line appearing more than once — always a real
+    problem here, unlike the equivalent concern in a library-wide playlist
+    (§9.2, below), since a manifest is a selection of an album's own tracks for
+    one target, not an ordered mix where a deliberate repeat could be
+    intentional. Re-running `playlist select` for that target already fixes it
+    as a side effect, without needing a dedicated fix command: its selection
+    model is keyed by filename, so it structurally cannot represent, and
+    therefore cannot write back, two rows for the same track. Reported once per
+    duplicated name regardless of repeat count, matching how a repeated
+    library-wide directive (§8.4) is also reported once rather than once per
+    occurrence.
 - **Global playlists** (`playlists/`, §7.4): a new
   `musicrename playlist check [library-root-root]` command (§9), not folded into
   `musicrename check` itself. `check`'s scope model is "a library root, or a
@@ -1751,31 +1769,48 @@ its top:
   playlist applies to, e.g. `#TARGETS:ipod,sdcard`. Absent entirely means "every
   target." This is what lets one playlist file be scoped to more than one (but
   not all) targets without needing a second on-disk copy.
+- `#SORT:<comma-separated field names, or the sentinel "shuffle">` (§9.2) — the
+  criteria `playlist sort` last used on this file, remembered so a later
+  invocation with no explicit fields/`--shuffle` can reapply them without the
+  caller needing to retype or even remember what they were. Absent means
+  nothing's been remembered yet. Unlike `#TARGETS:`, order here is meaningful
+  (it's sort precedence, not a set) and is never alphabetized on write.
 
-**`#TARGETS:` is reconciled bidirectionally through Navidrome's `comment` field
-(implemented, `internal/navidromesync`, `comment.go`), not treated as local-only
-data.** Navidrome has no directive concept of its own, but does have a plain,
-human-editable comment field on every playlist — musicrename manages a
-recognizable _suffix_ of it, `[musicrename:targets=ipod,sdcard]`, rather than
-owning the whole field, so a real description can still live in the same
-comment. Push composes this suffix onto whatever human text is already there
-(fetched fresh each time, never assumed); pull parses it back out and uses it as
-the source of truth for local `#TARGETS:`, the same way name and entries are
-already treated — not preserved from the existing local file. Local `#TARGETS:`
-being removed reconciles onto the remote side correctly too: push simply stops
-appending a suffix, leaving the human text untouched, and a suffix removed from
-the remote side (by hand, in the Navidrome app, or by any other client)
-reconciles back to "no `#TARGETS:`" on the next pull.
+**Both `#TARGETS:` and `#SORT:` are reconciled bidirectionally through
+Navidrome's `comment` field (implemented, `internal/navidromesync`,
+`comment.go`), not treated as local-only data.** Navidrome has no directive
+concept of its own, but does have a plain, human-editable comment field on every
+playlist — musicrename manages a recognizable _suffix_ of it, e.g.
+`[musicrename:sort=artist,album;targets=ipod,sdcard]`, rather than owning the
+whole field, so a real description can still live in the same comment. Both
+directives share one bracket as a semicolon-separated list of key=value pairs
+(not one bracket each) — safe without any escaping, since target names and sort
+field names are both drawn from small, fixed, punctuation-free vocabularies that
+can never contain a `;` or `]`. Push composes this suffix onto whatever human
+text is already there (fetched fresh each time, never assumed); pull parses it
+back out and uses it as the source of truth for local `#TARGETS:`/`#SORT:`, the
+same way name and entries are already treated — not preserved from the existing
+local file. A local directive being removed reconciles onto the remote side
+correctly too: push simply stops writing that key (dropping the whole suffix if
+neither remains), leaving the human text untouched, and a key removed from the
+remote side (by hand, in the Navidrome app, or by any other client) reconciles
+back to "absent" on the next pull.
 
 Wherever a target list is written — the local `#TARGETS:` directive
 (`playlist.WriteGlobalPlaylist`) or the comment suffix (`composeComment`) — it's
 sorted alphabetically first, so the on-disk/on-server form is always canonical
-regardless of the order targets happened to be added or read in. Change
-detection on both sides compares target lists (or, on push, the fully-composed
-comment string) order-insensitively rather than as raw strings, precisely so a
-list that's semantically identical but happened to arrive in a different order —
-a hand edit, or content from a version predating this convention — doesn't
-register as "changed" and get rewritten for no real reason.
+regardless of the order targets happened to be added or read in. `#SORT:`'s own
+value list is the one deliberate exception to this in both places — its order is
+precedence, not a set, and alphabetizing it would silently corrupt the very
+thing it exists to remember. The _keys_ within the comment suffix are
+alphabetized too (`sort` before `targets`), independent of which struct fields a
+caller happened to set first, for the same "canonical form regardless of
+incidental ordering" reason. Change detection on both sides compares target
+lists (or, on push, the fully-composed comment string) order-insensitively for
+targets, but exactly for sort, rather than as raw strings, precisely so content
+that's semantically identical but happened to arrive in a different order — a
+hand edit, or content from a version predating one of these conventions —
+doesn't register as "changed" and get rewritten for no real reason.
 
 Correlation between a local file and a remote playlist is by the
 `#NAVIDROME-ID`, never by filename or display name — renaming a playlist locally
@@ -1908,19 +1943,28 @@ one place strict error handling is non-negotiable rather than a nicety.
   that fails to resolve to a local track (§8.3), are surfaced as new `check`
   (§4.3) finding categories rather than resolved automatically.
 
-## 9. Command-Line Interface for §7/§8 (Implemented; §9.2 Deferred to Phase 3)
+## 9. Command-Line Interface for §7/§8 (Implemented; §9.2 Fully Implemented)
 
-| Command                                                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `musicrename login [--url] [--username] [--password-stdin]` | **Implemented (§8.1).** Stores the Navidrome server URL, username, and password in a `0600` JSON file under `XDG_CONFIG_HOME` (§8.1). `--url`/`--username` are prompted for if omitted; the password is prompted for (masked) by default, or read from stdin with `--password-stdin` for scripting — never accepted as a flag. Validates via `/rest/ping` before saving.                                                     |
-| `musicrename logout`                                        | **Implemented (§8.1).** Clears stored Navidrome credentials. Pure local file removal; not an error if not logged in.                                                                                                                                                                                                                                                                                                         |
-| `musicrename playlist select <target> [album-path]`         | **Implemented (§7.3).** Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back, targeted-updating (never fully rehashing) `sums.md5` if present (§7.3, §3.4). `album-path` defaults to the current directory, matching `inspect`/`lyrics`. `--skip-md5` suppresses the `sums.md5` update. |
-| `musicrename playlist check [library-root-root]`            | **Implemented (§7.12).** Audits the `playlists/` tree for entries that don't resolve to a file, unrecognized `#TARGETS:` names, and duplicate `#NAVIDROME-ID` values across files. Read-only; exits non-zero on findings, matching `check`'s conventions. Album-local manifest findings live in `musicrename check` instead (§4.3, §7.12), not here.                                                                         |
-| `musicrename sync ipod <device-path> [library-root-root]`   | **Implemented (§7.7).** Full reconciliation sync to an attached iPod: computes the plan, checks device capacity, confirms (unless `--yes`), then applies it. `--dry-run`, `--yes`, `--verbose`.                                                                                                                                                                                                                              |
-| `musicrename sync sdcard <device-path> [library-root-root]` | **Implemented (§7.7).** Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                          |
-| `musicrename sync navidrome pull [playlist]`                | **Implemented.** Pulls all playlists, or one by path if given (§8.5, §8.7). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                          |
-| `musicrename sync navidrome push [playlist]`                | **Implemented.** Mirror of `pull`: pushes all playlists, or one by path if given (§8.5, §8.7). Same flags. A file with no `#NAVIDROME-ID` yet gets one created and written back to the local file.                                                                                                                                                                                                                           |
-| `musicrename sync navidrome delete <playlist>`              | **Implemented.** Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete. No library scan is triggered (§8.2 doesn't apply here).                         |
+| Command                                                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `musicrename login [--url] [--username] [--password-stdin]` | **Implemented (§8.1).** Stores the Navidrome server URL, username, and password in a `0600` JSON file under `XDG_CONFIG_HOME` (§8.1). `--url`/`--username` are prompted for if omitted; the password is prompted for (masked) by default, or read from stdin with `--password-stdin` for scripting — never accepted as a flag. Validates via `/rest/ping` before saving.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `musicrename logout`                                        | **Implemented (§8.1).** Clears stored Navidrome credentials. Pure local file removal; not an error if not logged in.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `musicrename playlist select <target> [album-path]`         | **Implemented (§7.3).** Interactive checkbox editor (`charmbracelet/huh`) listing every track in the album, pre-checked against the existing `{target}.m3u8` if one is present; writes the updated selection back, targeted-updating (never fully rehashing) `sums.md5` if present (§7.3, §3.4). `album-path` defaults to the current directory, matching `inspect`/`lyrics`. `--skip-md5` suppresses the `sums.md5` update.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `musicrename playlist check [library-root-root]`            | **Implemented (§7.12); extended (§9.2).** Audits the `playlists/` tree for entries that don't resolve to a file, unrecognized `#TARGETS:` names, duplicate `#NAVIDROME-ID` values across files, a directive (`#PLAYLIST:`, `#NAVIDROME-ID:`, `#TARGETS:`, `#SORT:`) repeated within one file or appearing in a different relative order than `musicrename` itself would write them in, and a missing or stale `playlists/sums.md5` (listing comparison via `hasher.DiffEntries`, §3.4 — no hashing). Read-only; exits non-zero on findings, matching `check`'s conventions. Album-local manifest findings live in `musicrename check` instead (§4.3, §7.12), not here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `musicrename playlist rename [library-root-root]`           | **Implemented (§7.13); extended (§9.2).** Scans the `playlists/` tree and renames each file to a filesystem-safe name derived from its `#PLAYLIST:` directive; a file with no directive, or one that sanitizes to an empty string, is skipped and reported rather than treated as an error. Content is never touched, only the filename. If `playlists/sums.md5` already exists, the renamed entry is relabeled via `hasher.RenameFile` (§3.4); a stale missing entry is a warning, not silently ignored. `--dry-run`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `musicrename playlist sums [library-root-root]`             | **Implemented (§9.2).** Computes MD5 checksums for every file under `playlists/` recursively and writes a single `playlists/sums.md5` covering the whole tree — unlike album/video `sums.md5`, there is no library-wide-vs-single-item distinction here since the tree itself is the only unit. `--force` to overwrite an existing one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `musicrename playlist create <name> [library-root-root]`    | **Implemented (§9.2).** Scaffolds a new `playlists/` file with a `#PLAYLIST:` directive (and `#TARGETS:`, if `--targets` is given) and no entries; the filename is sanitized the same way `playlist rename` derives one. Errors rather than overwrites if the destination already exists. Adds the new file's entry to an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `musicrename playlist targets <playlist>`                   | **Implemented (§9.2).** Rewrites an existing playlist's `#TARGETS:` directive: `--set` (an empty value is a valid, explicit "applies to no target" state) or `--clear` (removes the directive, "applies to every target"); exactly one is required. Every other directive and all entries are untouched. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `musicrename playlist entries add <playlist> [path]...`     | **Implemented (§9.2).** Appends each path, in order, to the playlist's entries, then rewrites the file. Each path may be cwd-relative or absolute; resolved to library-root-relative before storing, matching every existing entry. A path that doesn't resolve to a real file is skipped and reported, not added — a fail-fast convenience at add time, not a substitute for `playlist check`'s own audit. Always one read plus (if anything's added) one write; no library-wide scan of any kind, so cost stays independent of library size. With no path arguments, opens an interactive directory browser instead — see the write-up below. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `musicrename playlist entries remove <playlist>`            | **Implemented (§9.2).** No flags: interactive checkbox (every current entry pre-checked, uncheck to remove), mirroring `playlist select`. `--artist`/`--album`: non-interactive, removes every entry whose resolved track's tags match (case-insensitive; both given means both must match). Tag reads are scoped to this playlist's own entries only, never a library-wide scan, with a TTY-gated `\r`-overwriting progress indicator (§5, since a playlist can run to thousands of entries). An entry with no resolvable file/tags is shown but never auto-matched by the flags. `--dry-run` previews without writing. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `musicrename playlist entries reorder <playlist>`           | **Implemented (§9.2).** Full-screen interactive editor: arrow/j-k/Home/End/PgUp/PgDn move the cursor; space grabs/releases the entry under it (movement then moves the entry, shifting everything between the old and new position by one); enter saves; esc/ctrl+c/q cancels. Hand-built directly on `bubbletea` — `huh` has no drag-reorder shape — rather than composed from `huh` fields. Filenames render immediately; tags load in the background via `bubbletea`'s Cmd/Msg pattern and fill in as each file is read, correlated to the right row by a stable per-row id rather than position so reordering freely while a load is still in flight never misattributes a result. Same `playlists/sums.md5` discipline as `entries remove`/`sort`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `musicrename playlist sort <playlist> [fields]`             | **Implemented (§9.2).** Reorders entries by comma-separated fields (`artist`, `albumartist`, `album`, `year`, `disc`, `track`, `title`) in precedence order, stably (unbroken ties keep current relative order); a value absent for the field being compared sorts last, and an unresolvable entry sorts after every resolvable one. `--shuffle` randomizes instead — no tag reads needed at all for this path, unlike the field-based one, which gets the same progress indicator `entries remove` has. With neither given, reapplies the criteria remembered in a new `#SORT:` directive (written back on every successful sort/shuffle); errors if nothing's remembered yet. `--dry-run` previews without writing anything, including the remembered criteria. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one. `#SORT:` is reconciled through `sync navidrome pull`/`push` the same way `#TARGETS:` is (§8.4, §9.2) — a locally-set sort criteria round-trips correctly across machines syncing the same Navidrome server. Removes duplicate entries by default before sorting/shuffling (keeps each one's first occurrence; never recorded in `#SORT:`, since it's a one-time cleanup of this invocation's input, not an ongoing criterion) — `--skip-dedupe` turns this off. |
+| `musicrename playlist entries dedupe <playlist>`            | **Implemented (§9.2).** Removes duplicate entries, keeping each one's first occurrence; every other entry's relative order is left completely untouched (unlike `sort`'s default dedupe, this never reorders anything on its own — for a hand-curated playlist where a deliberate repeat is plausible and the existing order matters). `--check` writes nothing and exits non-zero if any duplicates are found, for scripts; `--dry-run` previews and always exits 0, matching every other `--dry-run` flag in this tool; mutually exclusive with each other. Refreshes the file's entry in an existing `playlists/sums.md5`, if there is one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `musicrename sync ipod <device-path> [library-root-root]`   | **Implemented (§7.7).** Full reconciliation sync to an attached iPod: computes the plan, checks device capacity, confirms (unless `--yes`), then applies it. `--dry-run`, `--yes`, `--verbose`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `musicrename sync sdcard <device-path> [library-root-root]` | **Implemented (§7.7).** Same, for the `sdcard` target. Any future §7.2 target gets its own sibling subcommand here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `musicrename sync navidrome pull [playlist]`                | **Implemented; extended (§9.2).** Pulls all playlists, or one by path if given (§8.5, §8.7). Every local write or delete keeps `playlists/sums.md5` current, if it already exists (§3.4). `--dry-run`; `--skip-scan` bypasses the forced library scan (§8.2) when it's known to already be fresh.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `musicrename sync navidrome push [playlist]`                | **Implemented; extended (§9.2).** Mirror of `pull`: pushes all playlists, or one by path if given (§8.5, §8.7). Same flags. A file with no `#NAVIDROME-ID` yet gets one created and written back to the local file, refreshing that entry in `playlists/sums.md5` if it already exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `musicrename sync navidrome delete <playlist>`              | **Implemented; extended (§9.2).** Explicit single-playlist delete (§8.7) — always requires a specific playlist, never bulk. `--yes` skips the confirmation prompt given it's destructive both locally and remotely. Errors immediately, without attempting anything, if the given playlist has no `#NAVIDROME-ID` (§8.4) — there is nothing remote to delete. No library scan is triggered (§8.2 doesn't apply here). Also removes the file's entry from `playlists/sums.md5` if it already exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ### 9.1 Shape Notes
 
@@ -1937,14 +1981,351 @@ one place strict error handling is non-negotiable rather than a nicety.
   `playlist rename` (§7.13) is the one exception, and it only ever touches the
   filename, never the file's content.
 
-### 9.2 Deferred: Robust Global Playlist Management (Phase 3)
+### 9.2 Robust Global Playlist Management (Phase 3) — Fully Implemented
 
-Tooling beyond `playlist select`/`playlist rename` for the global `playlists/`
-tree (§7.4) — e.g. `playlist create <name> [--targets]` to scaffold a new file
-with correctly formatted `#PLAYLIST:`/`#TARGETS:` headers, reordering, editing a
-playlist's `#TARGETS:` scope, or repairing malformed headers — is deferred as a
-later phase of this same work, alongside the video/Rockbox pipeline (§6.5) and
-the on-device sync mechanism (§7) itself. `playlist select`'s narrower
-album-manifest scope, plus `playlist rename`'s narrow filename-only scope, cover
-the immediate need; the rest of the global-playlist authoring experience remains
-manual (a text editor) until this phase is picked up.
+Every originally-planned piece of tooling for the global `playlists/` tree
+(§7.4) —
+`playlist select`/`playlist rename`/`playlist sums`/`playlist check`/`playlist create`/`playlist targets`/`playlist entries add`/`playlist entries remove`/`playlist entries reorder`/`playlist entries dedupe`/`playlist sort`
+— has now landed, alongside the video/Rockbox pipeline (§6.5) and the on-device
+sync mechanism (§7), both already implemented. Duplicate-entry
+detection/removal, both for album-local manifests and global playlists, is done
+too — see immediately below and §4.3's `check` write-up above for the
+album-local half.
+
+`playlist entries dedupe <playlist>` and `playlist sort`'s default dedupe are
+done: `playlist.DedupeEntries` (a small, pure, fully-tested function — keep each
+entry's first occurrence, drop every later repeat, preserve relative order
+otherwise) is shared by both. `sort` runs it automatically before
+sorting/shuffling/reapplying (`--skip-dedupe` to turn that off), on the
+reasoning that once an algorithm is determining the order rather than a human
+curating it by hand, an incidental duplicate is far more likely noise than
+intent — the inverse of a hand-curated, never-sorted playlist, where a
+deliberate repeat is plausible and untouched by this, since `sort` was never run
+on it. `entries dedupe` is the standalone version for exactly that hand-curated
+case: it never reorders anything on its own, only removes duplicates, so a
+curated order survives. Neither command ever records anything about deduping in
+`#SORT:` — it's a one-time cleanup of a given invocation's input, not an ongoing
+criterion worth remembering and reapplying the way sort fields or `--shuffle`
+are. `entries dedupe`'s `--check`/`--dry-run` are mutually exclusive by design,
+not merged into one flag: every other `--dry-run` in this project always exits 0
+(pure preview), so overloading it to also drive the exit code here would make it
+behave differently from every other `--dry-run` in the tool depending on which
+command you're looking at; `--check` (no write, exits non-zero on any duplicate,
+for scripts) stays a separate, single-purpose flag instead, mirroring how
+`playlist check` itself already exits non-zero on findings without needing a
+`--dry-run`-shaped justification for doing so. Deliberately not folded into
+`playlist check` itself, for the same reason "how to surface duplicates" needed
+real discussion in the first place: a repeated track in a library-wide playlist
+can be legitimate (an intentional repeat in a curated mix) in a way no other
+`check` finding is, so baking it into `check`'s always-on,
+uniformly-exit-non-zero audit would force a severity judgment call `check`'s
+existing output model has never had to make. Making duplicate-checking something
+you explicitly opt into via `entries dedupe --check` sidesteps that question
+entirely, rather than resolving it by adding a new "soft, non-failing" finding
+tier to `PlaylistResult`.
+
+`playlist entries add`'s interactive browser mode (no path arguments) is done: a
+single `bubbletea` model spanning two screens — a directory browser, and, when
+an album directory is opened, an embedded `huh` MultiSelect checklist reusing
+`playlist select`'s own track-formatting helpers (`sortTracksForDisplay`,
+`albumHasMultiDisc`, `formatTrackLabel`) and its `metadata.ProcessLibrary`-based
+album read — rather than two separately chained programs, so a session's staged
+selections and current browse position both persist across visiting several
+albums, and everything commits in one write at the end rather than per-album.
+The staging/diffing logic (`playlist.BrowseSelection`) and the directory-
+listing/filtering helpers it needs (`playlist.ListSubdirectories`,
+`playlist.FilterNames`) are pure — no terminal dependency at all — so they live
+in `internal/playlist` with their own tests, the same internal/cmd split
+`entries remove` already established (§9.2, below); only the `bubbletea`
+presentation glue itself (`Update`/`View`/`Init`, key routing, the `huh.Form`
+embedding), which genuinely can't be exercised without a terminal, stays in
+`cmd`. Browsing itself never reads a single file's tags: at the
+library-root-root level, the listing is `internal/devicesync.LibraryRoots` (the
+same "every sibling except the reserved `playlists`/`videos` names" enumeration
+§7.1's own sync-target discovery already uses, called from `cmd` rather than
+from `internal/playlist` itself since `internal/devicesync` already imports
+`internal/playlist` and a reverse import would cycle); at any deeper level it's
+`playlist.ListSubdirectories`, a plain `os.ReadDir` filtered to directories and
+dotfiles excluded. A directory is recognized as an album via `sumsIsAlbumRoot`
+(already used by `sums`) — the presence of an audio file extension directly
+inside it, checked only for the one directory actually being entered, never for
+everything currently on screen — and album subdirectories
+(`artwork`/`scans`/`extras`) are never listed for further descent once that's
+established, since album directories are assumed well-formed. Ascending is
+clamped at library-root-root — never above it — which is also the directory
+`internal/devicesync.LibraryRoots` is called against, so every one of the
+library roots it lists (`main`, `christmas`, `classical`, ...) is reachable from
+the browser's top level, letting a single session add tracks from more than one
+library root without any change to how entries are stored: every one of them
+already shares the same library-root-root every entry is already relative to
+(§7.1), so nothing about the entry format needed to change to support this. A
+`/`-triggered substring filter (`playlist.FilterNames`) narrows the current
+level's listing.
+
+`playlist.BrowseSelection` tracks `original` (the playlist's entries at session
+start, read once via `ReadGlobalPlaylist`, never mutated), `selected` (a set,
+seeded from `original`, toggled by every album visited), and `addedOrder` (rel
+paths in `selected` that aren't in `original`, in the order first staged) —
+`FinalEntries` combines them on exit into original order (minus anything
+unchecked) followed by newly staged entries in staging order. `HasNewEntries`
+(`len(addedOrder) > 0`) is distinct from `StagedCount` (which also counts
+untouched original entries) and from "the entry count went up" (unstaging an
+original entry while also staging a new one can leave the count unchanged, or
+even lower it, while `HasNewEntries` is still true) — it exists specifically to
+answer "was anything genuinely new added this session," for the `#SORT:`
+reminder described below. `Apply` diffs a completed checklist's final selected
+set against the current staged state, for just that album's own candidate
+tracks, in a single pass after the form submits (`huh` reports only the final
+selected set on submission, not incremental toggle events, so there's no need to
+track per-keypress state). Quitting is deliberately asymmetric by design, not by
+accident: `ctrl+c` is intercepted directly in the outer model's `Update`, before
+it can ever reach the embedded `huh.Form`, so it reliably aborts the whole
+session regardless of whatever `huh`'s own internal key handling would otherwise
+do with it; `esc` is instead forwarded to the form like any other key, so within
+the checklist itself it means "back out of just this album's edits"
+(`huh.StateAborted`, reachable now only via `esc` since `ctrl+c` never gets
+there), while at the top-level browser it's the browser's own `Update` that
+treats `esc`/`q` as "save everything staged so far and leave" — the same key
+means "back out one level" everywhere, and doing so from the outermost level
+naturally means "end the session," while `ctrl+c` alone remains the single
+unconditional "discard everything" escape hatch.
+
+Both `entries add` modes also print a `#SORT:` reminder — a small addition
+prompted by a "should adding automatically re-sort?" question that came up after
+everything else here had already landed. The answer settled on was no: `#SORT:`
+records only the _last explicit_ sort criteria used, not a live guarantee the
+playlist is still in that order, and `playlist entries reorder` (below)
+deliberately never touches it, so blindly reapplying it after every add could
+silently discard real hand-curation work the moment reorder and a stored
+`#SORT:` coexist — a combination this whole feature set exists specifically to
+support. Auto-detecting _whether_ the playlist is still sorted first (only
+reapplying if it already matches) was considered and rejected too: answering
+that would mean resolving every entry's tags just to check, undermining
+`entries add`'s own "bounded by what's actually touched" scope for no real gain.
+The reminder is the middle ground — a plain note
+(`Note: this playlist has #SORT:... stored; run 'playlist sort ...' to reapply it.`),
+printed only when something was genuinely added this run (the non-interactive
+path's own `len(added) > 0`; the interactive path's
+`BrowseSelection.HasNewEntries`, since the entry count alone can't distinguish
+"nothing new" from "one added, one unstaged" reliably) and only when `#SORT:` is
+actually stored — no tag reads, no risk of clobbering anything, action left
+entirely up to the person running the command. Not extended to
+`entries remove`/`dedupe` (which only ever narrow what's already there, so can't
+un-sort anything) or to `entries reorder` itself (whose whole purpose is
+intentional manual reordering, so nagging about the stored criteria there would
+just be second-guessing the thing just asked for).
+
+`playlist entries reorder <playlist>` is done: a full-screen interactive editor,
+hand-built directly on `charmbracelet/bubbletea` rather than composed from `huh`
+fields, since `huh` has no drag-reorder shape at all — this is the first direct
+use of `bubbletea` in the project (previously pulled in only indirectly, as
+`huh`'s own foundation; promoted to a direct `go.mod` requirement accordingly).
+Arrow keys (or j/k/Home/End/PgUp/PgDn) move the cursor; space "grabs" the entry
+under the cursor, after which the same movement keys move that entry instead —
+shifting everything strictly between the old and new position over by one to
+make room, the same operation whether the move is by one (an adjacent swap) or
+several places at once (Home/End/PgUp/PgDn), so every movement key routes
+through one function (`moveTo`) rather than duplicating that logic per key.
+
+Filenames render immediately; tags load in the background afterward via
+`bubbletea`'s Cmd/Msg pattern (a goroutine feeding a channel, with a Cmd that
+blocks for exactly one message at a time and gets re-issued after each one — the
+standard idiom for streaming incremental results into a bubbletea update loop
+without blocking it), reusing `metadata.Reader.ReadTrack` the same way
+`entries remove`/`sort` already do. A meaningful correctness/concurrency
+subtlety came up building this: the background loader must never read the
+model's live entry slice directly, since the user is free to reorder while
+loading is still in flight — doing so would be a data race (the update loop
+mutates that slice concurrently), and even race-free, correlating a loaded
+result back to a row by _positional index_ would attach it to the wrong row once
+anything's moved. The fix was a stable per-row `id`, assigned once at model
+creation and never touched again (distinct from the row's _position_, which
+changes freely), plus a `posByID` index (a plain slice, not a map, since ids are
+dense 0..n-1) kept in sync on every reorder; the loader reads from a private
+one-time `(id, rel)` snapshot taken before it starts, so there's nothing shared
+for a concurrent reorder to race against at all, and a `tagLoadedMsg` is
+correlated by that stable id rather than position, so it always lands on the
+right row regardless of how much reordering happened while it was in flight.
+`ResolveEntryRows` was refactored to expose the underlying single-entry step as
+`ResolveEntryRow` (taking an optional shared `*metadata.Reader`) specifically so
+this loader could reuse it, rather than re-implementing "resolve one entry" a
+third time. On save, the new order commits through the already-existing
+`SetEntries` — no new persistence primitive needed, since this is exactly the
+same "replace path's entry list" operation `entries remove` and `sort` already
+perform.
+
+Quitting — by any of enter/esc/ctrl+c/q — cancels the background loader via a
+`context.Context` bound to the model's own lifetime, checked both before opening
+each file and on the channel send itself (which would otherwise block forever
+the moment nothing is calling `waitForTag` anymore, i.e. immediately after
+quitting). This isn't just cleanup hygiene: without it, a genuinely large
+playlist's loader would keep opening files nobody will ever see the result of
+for as long as the OS process happens to stay alive afterward, which is an
+accident of process lifetime, not a guarantee. Cancellation is invoked
+proactively in the quit key handlers, for the earliest possible signal, and
+again via a `defer` in the command layer as a safety net.
+
+`playlist check`'s directive-order consistency check is done:
+`playlist.CheckDirectiveOrder` reports whether a file's directives appear in the
+same relative order `WriteGlobalPlaylist` itself would produce — not necessarily
+alphabetical, but the same relative order across every file (`#PLAYLIST:` first,
+since it's the one directive every file has and reads naturally as the file's
+"identity"; the rest in whatever order `WriteGlobalPlaylist` itself writes them
+in, so "correctly ordered" means "matches what our own write commands would
+themselves produce," not a separately-maintained canonical order) — filtered
+down to whichever directives a given file actually has, so a file missing one
+entirely doesn't create a gap or a false positive. Judged only by each
+directive's first occurrence in the file, independent of `DuplicateDirectives`'s
+own repetition finding — the two are deliberately separate concerns reported
+separately. A misordered file isn't functionally broken — every reader is
+prefix-based and order-independent — so this is a pure style/consistency
+finding, the same posture `check` already takes toward other
+non-functional-but-worth-flagging conditions.
+
+Remote (Navidrome comment) sync for `#SORT:` is done, alongside `#TARGETS:`:
+`comment.go`'s encoding generalized from a single tightly-anchored suffix built
+around exactly one directive (`[musicrename:targets=...]`) to one bracket
+carrying a semicolon-separated list of key=value directives (e.g.
+`[musicrename:sort=artist,album;targets=ipod,sdcard]`) — safe without any
+escaping, since target names and sort field names are both drawn from small,
+fixed, punctuation-free vocabularies that can never contain a `;` or `]`.
+`parseCommentDirectives`/`composeComment` (renamed from their single-directive
+predecessors) return/accept a small `commentDirectives` struct rather than
+positional tuples, with field names mirroring `playlist.GlobalPlaylist`'s own
+`Targets`/`HasTargets`/`Sort`/`HasSort` so values move between the two without
+translation. `composeComment` always writes present keys in a fixed alphabetical
+order (`sort` before `targets`) regardless of which struct fields a caller
+happened to set first, so two logically-identical calls produce byte-identical
+output — this is what lets `pull.go`/`push.go`'s existing "recompose the remote
+comment and compare" change-detection keep working unmodified for the second
+directive, without a spurious "different" result over key order alone.
+`parseCommentDirectives` itself stays liberal about _input_ key order (a
+hand-edited comment, or one written by some future version with its own
+ordering, still parses correctly) — only the writer is strict.
+`applyRemotePlaylist` (`pull.go`) now sources `Sort`/`HasSort` from the parsed
+comment the same way it already does for `Targets`/`HasTargets` — not preserved
+from the existing local file — and the "is this actually unchanged" comparison
+in both `pull.go` and `push.go` was extended to include it, using
+order-sensitive equality (`stringSlicesEqual`) rather than the order-insensitive
+one `Targets` uses (`stringSetsEqual`), since `#SORT:`'s value order is
+precedence, not a set — the same distinction `playlist.WriteGlobalPlaylist`
+already makes locally. This was done ahead of `playlist-mgmt` merging to
+`master`, rather than shipping `#SORT:` as local-only first and retrofitting
+sync afterward, specifically because a multi-machine Navidrome setup (the
+primary motivating use case) would otherwise have silently lost locally-set sort
+criteria on the very first pull from a second machine — worth closing before
+this ever reaches a released version, not worth living with as a known gap in
+already-shipped code.
+
+`playlist sort <playlist> [fields]` is done: reorders entries by comma-separated
+fields — `artist`, `albumartist`, `album`, `year`, `disc`, `track`, `title` — in
+precedence order, via a stable sort so anything left unbroken by every given
+field keeps its current relative order. A value absent for the field being
+compared (empty string; a zero `DiscNumber`, which `metadata.Track` itself
+defines as meaning "tag absent" — unlike `TrackNumber`, where an explicit zero
+is a real hidden/pre-gap track, not absence) sorts after any present value on
+either side. An entry that doesn't resolve to a file at all (the same
+`EntryRow.Missing` concept `entries remove` introduced) sorts after every
+resolvable entry, in original relative order among themselves. `--shuffle`
+randomizes instead via `math/rand`'s package-level Fisher-Yates (cosmetic, not
+security-sensitive, so `crypto/rand`'s overhead isn't warranted) — and since
+shuffling is purely positional, no tag resolution happens at all for this path,
+unlike the field-based one.
+
+With neither fields nor `--shuffle` given, the command reapplies whichever
+criteria were last used, remembered in a new `#SORT:` directive
+(`internal/playlist/global.go`) written back on every successful sort or shuffle
+— errors if nothing's been remembered yet and nothing is given now. The
+directive stores either a field-name list, in the exact order given (unlike
+`#TARGETS:`, which is alphabetized on write since it's a set with no inherent
+order — `#SORT:`'s order is precedence and alphabetizing it would silently
+corrupt the very thing it's meant to remember), or the single-element
+`["shuffle"]` sentinel, meaning "shuffle again" (a fresh random order every
+time, by design) rather than a fixed order to reconstruct. `--dry-run` previews
+the new order without writing anything at all, including the remembered
+criteria.
+
+Field-based tag reading is scoped to this playlist's own entries only —
+`internal/playlist.ResolveEntryRows`, the same function `entries remove` already
+introduced, reused as-is here — never a library-wide scan, with the same
+TTY-gated progress indicator for the same reason (a playlist can run to
+thousands of entries). `internal/playlist.ApplySort` is a new combined "replace
+entries and #SORT: together" mutator, structurally identical to
+`SetEntries`/`SetTargets` but touching both fields in the same read/write pass
+so the entries and the criteria that produced them never briefly disagree on
+disk between two separate writes; it follows the same `playlists/sums.md5`
+discipline as everything else here.
+
+`playlist entries remove <playlist>` is done: with no flags, an interactive
+checkbox — every current entry pre-checked, uncheck to remove — mirroring
+`playlist select`'s exact interaction pattern. With `--artist`/`--album`,
+matches non-interactively instead: every entry whose resolved track's tags match
+all the given flags (case-insensitive) is removed, no prompt (both given means
+both must match, not either). An entry with no resolvable file or tags is shown
+either way but never auto-matched by the flags — there's nothing to compare
+against. Tag reading (`internal/metadata.Reader.ReadTrack`, one file at a time)
+is scoped to this playlist's own entries only, the same "cost bounded by
+playlist size, not library size" principle `entries add` already established; no
+library-wide scan of any kind. `--dry-run` previews the removal set without
+writing. The interactive-selection and tag-matching logic are split cleanly
+along the `internal`/`cmd` boundary (§ Key learnings):
+`internal/playlist.ResolveEntryRows`/`FilterEntryRows` are pure/file-I/O-only
+and unit-tested with real ffmpeg-generated fixtures (mirroring
+`internal/metadata`'s own test pattern) exercising the actual tag-reading path;
+only the `huh` checkbox interaction itself, which inherently needs a terminal,
+lives in `cmd`. `internal/playlist.SetEntries` (new, shared with the future
+`playlist sort`) replaces a file's entire entry list in one write, deliberately
+performing no existence validation of its own — that's `AddEntries`' job for a
+genuinely new entry, and `CheckPlaylists`' job for auditing an already-written
+file — so a caller computing a removal or reordering from an already-read list
+never has an entry silently dropped by a function whose only job is "write this
+list." Follows the same `playlists/sums.md5` discipline as everything else here.
+
+`playlist entries add <playlist> <path>...` is done: appends each path, in
+order, resolving a cwd-relative or absolute path to library-root-relative before
+storing (matching every existing entry). A path that doesn't resolve to a real
+file is skipped with a warning, not added — a fail-fast convenience at add time,
+distinct from (and not a substitute for) `playlist check`'s own audit of an
+already-written file. Always exactly one read, and (only if anything is actually
+added) one write; no library scan at all, so cost is independent of library size
+regardless of how large the library gets. Follows the same `playlists/sums.md5`
+discipline as `create`/ `targets`: refreshes an existing one, never creates it
+from scratch.
+
+`playlist create`/`playlist targets` are done: `create <name> [--targets]`
+scaffolds a new file with `#PLAYLIST:`/`#TARGETS:` headers only (no seeded
+entries), erroring rather than overwriting an existing destination;
+`targets <playlist> [--set/--clear]` rewrites an existing file's `#TARGETS:`
+directive in place, leaving every other directive and all entries untouched.
+Both follow the same `playlists/sums.md5` discipline as everything else in this
+retrofit (see below): they update an existing one, never create it from scratch.
+
+`playlist check` extensions are done: a missing `playlists/sums.md5`; diffing
+its recorded entries against the tree's actual file listing via
+`hasher.DiffEntries`, the same listing-only comparison `check`/`video check`
+already perform for their own sums.md5 (§4.3); and malformed-header findings (a
+directive repeated within one file, an unrecognized name in `#TARGETS:`) — all
+as plain findings with no `--fix`, matching every other `check` command's
+read-only posture.
+
+The `playlists/sums.md5` retrofit is also done: `playlist rename` relabels a
+renamed entry via `hasher.RenameFile` (hash unchanged, only the name moved),
+warning rather than silently ignoring a stale missing entry; `playlist create`
+adds a new file's entry, `playlist targets` refreshes an existing one,
+`playlist entries add` refreshes it again on each append, and
+`playlist entries remove`'s `SetEntries` refreshes it again on each removal, all
+via `hasher.UpdateFile`; and `sync navidrome pull`/`push`/`delete` (§8) keep the
+one entry they touch current the same way — pull's per-file reconciliation and
+bulk self-healing delete, push's new-playlist ID write-back, and delete's
+local-file removal. Every one of these is a no-op, not an error, when
+`playlists/sums.md5` doesn't exist yet; none of them create it from scratch
+(`playlist sums` remains the only command that does), matching the same
+discipline `hasher.UpdateFile`/`RenameFile`/`RemoveFile` already have toward an
+album's own `sums.md5` (§3.4). A genuine update failure is surfaced as a warning
+rather than failing the primary operation, which has typically already succeeded
+by the time the checksum bookkeeping runs.
+
+`playlist select`, `playlist rename`/`sums`/`check`/`create`/`targets`, and the
+full `playlist entries`/`playlist sort` family together now cover every
+originally-planned piece of §9.2, including the file-browser `entries add` mode
+and duplicate-entry detection/removal both noted above — §9.2 is complete.

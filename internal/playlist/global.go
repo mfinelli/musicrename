@@ -30,11 +30,59 @@ import (
 // (ASCII-sanitized) filename.
 const playlistNamePrefix = "#PLAYLIST:"
 
+// sortPrefix is the extended-M3U directive line carrying a library-wide
+// playlist's remembered `playlist sort` criteria, so a later re-run with no
+// explicit fields (or --shuffle) can reapply the same choice without the
+// caller needing to remember or retype it.
+const sortPrefix = "#SORT:"
+
+// playlistDirectivePrefixes lists every directive prefix a library-wide
+// playlist file recognizes, in the fixed order they're written in by
+// [WriteGlobalPlaylist] (not necessarily file order, for a stable,
+// predictable [DuplicateDirectives] result).
+var playlistDirectivePrefixes = []string{playlistNamePrefix, navidromeIDPrefix, targetsPrefix, sortPrefix}
+
+// DuplicateDirectives returns the directive prefixes that appear more than
+// once in the playlist file at path (in playlistDirectivePrefixes order),
+// or nil if none do. A missing file returns (nil, nil).
+//
+// A duplicate is never treated as an error by any reader in this package:
+// [ReadNavidromeID] and [ReadTargets] each resolve to whichever occurrence
+// they encounter first, while [ReadGlobalPlaylist] resolves to whichever it
+// encounters last (parsed via a single switch over all lines in order)
+// so behavior is well-defined either way, just silently inconsistent
+// between readers. DuplicateDirectives exists purely so `playlist check`
+// can surface this as a passive audit finding.
+func DuplicateDirectives(path string) ([]string, error) {
+	lines, err := readLines(path)
+	if err != nil {
+		return nil, err
+	}
+
+	counts := make(map[string]int, len(playlistDirectivePrefixes))
+	for _, line := range lines {
+		for _, prefix := range playlistDirectivePrefixes {
+			if strings.HasPrefix(line, prefix) {
+				counts[prefix]++
+				break
+			}
+		}
+	}
+
+	var dups []string
+	for _, prefix := range playlistDirectivePrefixes {
+		if counts[prefix] > 1 {
+			dups = append(dups, prefix)
+		}
+	}
+	return dups, nil
+}
+
 // GlobalPlaylist is the parsed content of a library-wide playlist file
 // (playlists/*.m3u8): its extended-M3U directives plus its plain entries,
 // in order. Unlike an album-local manifest, entry order here is meaningful.
 //
-// The three "Has*"-paired fields (only NavidromeID and Targets need one;
+// The three "Has*"-paired fields (NavidromeID, Targets, and Sort need one;
 // Name is always meaningful whether empty or not) distinguish "directive
 // absent" from "directive present but empty," since those mean different
 // things: an absent #TARGETS: means "applies to every target", while
@@ -56,6 +104,16 @@ type GlobalPlaylist struct {
 	// itself doesn't distinguish "absent" from "present but empty" on its
 	// own, since both can be a nil/empty slice.
 	HasTargets bool
+	// Sort is the #SORT: directive's value, split on commas, if present:
+	// either a field-name list (e.g. ["artist", "album", "track"]) or the
+	// single-element ["shuffle"] sentinel. Interpreting which (and
+	// validating field names) is `playlist sort`'s job, not this
+	// package's; ReadGlobalPlaylist/WriteGlobalPlaylist treat it exactly
+	// as mechanically as Targets, no semantic awareness of its contents.
+	Sort []string
+	// HasSort reports whether a #SORT: directive was present at all. When
+	// false, there's no remembered sort criteria to reapply.
+	HasSort bool
 	// Entries are the plain, non-directive lines, in file order.
 	Entries []string
 }
@@ -90,6 +148,18 @@ func ReadGlobalPlaylist(path string) (*GlobalPlaylist, error) {
 					}
 				}
 			}
+		case strings.HasPrefix(line, sortPrefix):
+			gp.HasSort = true
+			gp.Sort = []string{}
+			raw := strings.TrimSpace(strings.TrimPrefix(line, sortPrefix))
+			if raw != "" {
+				for p := range strings.SplitSeq(raw, ",") {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						gp.Sort = append(gp.Sort, p)
+					}
+				}
+			}
 		case line == "" || strings.HasPrefix(line, "#"):
 			// Blank line, or a comment/directive this package doesn't
 			// know about (skip rather than treat as an entry, so a
@@ -106,8 +176,12 @@ func ReadGlobalPlaylist(path string) (*GlobalPlaylist, error) {
 // WriteGlobalPlaylist writes gp to path as a library-wide playlist file,
 // creating its parent directory if necessary and overwriting whatever was
 // there before. Directive lines are written in the fixed order
-// #PLAYLIST:, #NAVIDROME-ID:, #TARGETS: (each only if its corresponding
-// Has*/non-empty condition holds), followed by the entries, one per line.
+// #PLAYLIST:, #NAVIDROME-ID:, #TARGETS:, #SORT: (each only if its
+// corresponding Has*/non-empty condition holds), followed by the entries,
+// one per line. Unlike Targets (alphabetized on write, since it's a set and
+// order carries no meaning), Sort is written in the exact order given: for
+// a field list, that order determines sort precedence, so alphabetizing it
+// would silently corrupt the very thing it's meant to remember.
 func WriteGlobalPlaylist(path string, gp *GlobalPlaylist) error {
 	var sb strings.Builder
 
@@ -126,6 +200,11 @@ func WriteGlobalPlaylist(path string, gp *GlobalPlaylist) error {
 		sort.Strings(sorted)
 		sb.WriteString(targetsPrefix)
 		sb.WriteString(strings.Join(sorted, ","))
+		sb.WriteString("\n")
+	}
+	if gp.HasSort {
+		sb.WriteString(sortPrefix)
+		sb.WriteString(strings.Join(gp.Sort, ","))
 		sb.WriteString("\n")
 	}
 	for _, e := range gp.Entries {

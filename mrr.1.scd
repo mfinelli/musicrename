@@ -132,6 +132,8 @@ Checks include:
   *folder.webp* / *folder.mp4*). One static image plus one animated file is
   allowed as a fallback pair.
 - Missing *sums.md5*
+- Playlist manifest issues (*{target}.m3u8*): unrecognized target name, a
+  stale entry with no matching track, or a duplicate entry
 - Path conformance: whether *rename* would move any file (library mode only)
 
 Read-only; makes no filesystem changes.
@@ -199,9 +201,14 @@ If _album-path_ is omitted it defaults to the current directory.
 ## mrr playlist check [_library-root-root_]
 
 Audits the library-wide *playlists/* tree (see *PLAYLISTS* below) for
-broken entries, unrecognized names in a *#TARGETS:* directive, and
-duplicate *#NAVIDROME-ID* values across files. Read-only; exits non-zero if
-any findings are present.
+broken entries, unrecognized names in a *#TARGETS:* directive, duplicate
+*#NAVIDROME-ID* values across files, a directive (*#PLAYLIST:*,
+*#NAVIDROME-ID:*, *#TARGETS:*, or *#SORT:*) repeated within a single file,
+those same directives appearing in a different relative order than
+musicrename itself would write them in, and a missing or stale
+*playlists/sums.md5* (files present with no recorded entry, or entries
+with no matching file). Read-only; exits non-zero if any findings are
+present.
 
 Findings for album-local *{target}.m3u8* manifests (the ones *playlist
 select* writes) are reported by *mrr check* instead, not here.
@@ -211,7 +218,9 @@ If _library-root-root_ is omitted it defaults to the current directory.
 ## mrr playlist rename [_library-root-root_]
 
 Scans the same *playlists/* tree as *playlist check* and renames each file
-to a filesystem-safe name derived from its *#PLAYLIST:* directive.
+to a filesystem-safe name derived from its *#PLAYLIST:* directive. If a
+*playlists/sums.md5* already exists, the renamed file's entry is relabeled
+to its new name.
 
 A file with no *#PLAYLIST:* directive, or one whose name sanitizes to an
 empty string, is skipped and reported rather than treated as an error. A
@@ -221,6 +230,152 @@ If _library-root-root_ is omitted it defaults to the current directory.
 
 *--dry-run*
 	Preview all planned renames without touching the filesystem.
+
+## mrr playlist sums [_library-root-root_]
+
+Computes MD5 checksums for every file under the library-wide *playlists/*
+tree (see *PLAYLISTS* below) recursively, and writes them to a single
+*playlists/sums.md5* covering the whole tree. Unlike album or video
+*sums.md5*, which are one per directory, there is no library-wide-vs-
+single-item distinction to make here.
+
+If _library-root-root_ is omitted it defaults to the current directory.
+
+*--force*
+	Overwrite an existing *playlists/sums.md5*.
+
+## mrr playlist create <_name_> [_library-root-root_]
+
+Creates a new file under the library-wide *playlists/* tree with a
+*#PLAYLIST:* directive set to _name_ (and a *#TARGETS:* directive, if
+*--targets* is given) and no entries.
+
+An existing file at that destination is an error; this command never overwrites
+an existing file. If a *playlists/sums.md5* already exists, the new file's
+entry is added to it.
+
+If _library-root-root_ is omitted it defaults to the current directory.
+
+*--targets* _t1,t2_
+	Comma-separated target names; omit the flag entirely for "applies to
+	every target".
+
+## mrr playlist targets <_playlist_> [*--set* _t1,t2_ | *--clear*]
+
+Rewrites _playlist_'s *#TARGETS:* directive: *--set* replaces it with the
+given comma-separated target list (an empty value is valid and means
+"applies to no target" which is distinct from omitting the flag); *--clear*
+removes the directive entirely, meaning the playlist applies to every
+target again. Exactly one of *--set*/*--clear* is required.
+
+_playlist_ must already exist; this command will never create a new file (use
+*playlist create* for that).
+
+## mrr playlist entries add <_playlist_> [_path_]...
+
+Appends each given _path_, in order, to _playlist_'s entry list, then
+rewrites the file. Each _path_ may be relative to the current working
+directory or absolute; either way it's resolved and stored relative to the
+library root.
+
+A _path_ that doesn't resolve to a real file under the library root is
+skipped and reported.
+
+With no _path_ arguments, opens an interactive directory browser instead:
+arrow keys (or *j*/*k*) move the cursor, *left*/*h*/*backspace* goes up a
+level, *right*/*l*/*enter* descends into a directory or, if is an album,
+opens a checkbox picker for its tracks. Press */* to filter the current
+directory's listing by substring.
+
+Nothing is written until the browser is left: *esc*/*q* at the top level saves
+everything staged across the whole session; *ctrl+c* discards all changes.
+
+_playlist_ must already exist (use *playlist create* to scaffold a new one
+first).
+
+## mrr playlist entries remove <_playlist_> [*--artist* _name_] [*--album* _name_] [*--dry-run*]
+
+With neither *--artist* nor *--album* given, shows every current entry as a
+pre-checked checkbox (like *playlist select*); uncheck the ones to remove,
+then confirm. With either flag given, matches non-interactively instead:
+every entry whose resolved track's tags match all the given flags
+(case-insensitive) is removed.
+
+Reading tags is scoped to this playlist's entries only. An entry that doesn't
+resolve to a real file, or whose tags can't be read, is shown but never
+auto-matched by *--artist*/*--album* (since there's nothing to match against);
+it stays unless explicitly unchecked in interactive mode.
+
+_playlist_ must already exist.
+
+*--artist* _name_
+	Remove entries whose ARTIST tag matches _name_ (case-insensitive).
+*--album* _name_
+	Remove entries whose ALBUM tag matches _name_ (case-insensitive). Combined
+	with *--artist*, both must match.
+*--dry-run*
+	Preview what would be removed without changing the file.
+
+## mrr playlist entries reorder <_playlist_>
+
+Opens an interactive full-screen editor listing _playlist_'s current
+entries. Move the cursor with the arrow keys (or *j*/*k*, *Home*/*End*,
+*PgUp*/*PgDn*); press *space* to "grab" the entry under the cursor, then
+the same movement keys move it instead of the cursor, shifting everything
+between the old and new position by one to make room; press *space* again
+to release it. Press *enter* to save the new order, or
+*esc*/*ctrl+c*/*q* to cancel without changing anything.
+
+Filenames are shown immediately; track metadata loads in the background
+afterward, filling in as each file is read but you can reorder freely while
+it's still loading.
+
+_playlist_ must already exist.
+
+## mrr playlist sort <_playlist_> [_fields_] [*--shuffle*] [*--dry-run*]
+
+Reorders _playlist_'s entries by _fields_, a comma-separated list of track
+metadata fields in precedence order (the first breaks the most ties):
+*artist*, *albumartist*, *album*, *year*, *disc*, *track*, *title*. An
+entry with no value for the field being compared sorts after any entry
+that has one; an entry that doesn't resolve to a real file at all sorts
+after every resolvable one. Ties left unbroken by every given field keep
+their current relative order.
+
+With neither _fields_ nor *--shuffle* given, reapplies whichever criteria
+were last used on this playlist (remembered in a *#SORT:* directive
+written back on every successful sort or shuffle) but this errors if
+nothing has been remembered yet and none is given now. Explicit _fields_
+or *--shuffle* always supersede and become the new remembered criteria.
+
+By default duplicate entries are removed when sorting. Pass *--skip-dedupe* to
+turn this off.
+
+_playlist_ must already exist.
+
+*--shuffle*
+	Randomize entry order instead of sorting by fields.
+*--dry-run*
+	Preview the new order without changing the file or its remembered
+	criteria.
+*--skip-dedupe*
+	Do not remove duplicate entries before sorting.
+
+## mrr playlist entries dedupe <_playlist_> [*--check*] [*--dry-run*]
+
+Removes duplicate entries from _playlist_, keeping each one's first
+occurrence; every other entry's relative order is left completely
+untouched.
+
+*--check* and *--dry-run* are mutually exclusive: *--check* exits non-zero if
+any duplicates are found; *--dry-run* previews what would be removed.
+
+_playlist_ must already exist.
+
+*--check*
+	Report whether duplicates exist.
+*--dry-run*
+	Preview what would be removed without changing the file.
 
 ## mrr sync ipod <_device-path_> [_path_]
 
@@ -278,7 +433,9 @@ If _path_ is omitted it defaults to the current directory.
 
 Pulls playlists from the configured Navidrome server (*mrr login*) into the
 *playlists/* tree, overwriting local content with whatever the server
-currently holds. See *NAVIDROME SYNC* below for the intended workflow.
+currently holds. See *NAVIDROME SYNC* below for the intended workflow. If a
+*playlists/sums.md5* already exists, every local write (create or update)
+and delete keeps that one entry current.
 
 With no argument, pulls every playlist. With _playlist_ given (a path to an
 existing local playlist file), pulls just that one; if the server confirms
@@ -307,7 +464,8 @@ given, pushes just that one.
 ## mrr sync navidrome delete <_playlist_>
 
 Permanently deletes one playlist: removes it from the Navidrome server,
-then removes the local file. _playlist_ must already have a
+then removes the local file (and, if a *playlists/sums.md5* already
+exists, that file's entry in it). _playlist_ must already have a
 *#NAVIDROME-ID* (i.e. it's been pushed at least once); this command errors
 immediately, without deleting anything, otherwise. Prompts for confirmation
 unless *--yes* is passed (this cannot be undone).
@@ -420,8 +578,9 @@ a phone) *during* an open pull-edit-push session gets silently overwritten
 by the eventual push: treat this as a checkout/check-in, not a continuous
 merge.
 
-A *#TARGETS:* directive is synced through the Navidrome playlist's comment
-field, appended as a *[musicrename:targets=...]* suffix so a normal,
+A *#TARGETS:* or *#SORT:* directive is synced through the Navidrome
+playlist's comment field, appended as a *[musicrename:sort=...;targets=...]*
+suffix (either or both keys present, as applicable) so a normal,
 human-written description can still live in the same field.
 
 Deleting a playlist outside of *mrr sync navidrome delete* is handled

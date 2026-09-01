@@ -25,6 +25,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/hasher"
 )
 
 func writePlaylistFile(t *testing.T, path, content string) {
@@ -148,11 +150,11 @@ func TestPlanRenames(t *testing.T) {
 func TestExecuteRenames(t *testing.T) {
 	t.Run("performs the rename", func(t *testing.T) {
 		root := t.TempDir()
-		oldPath := filepath.Join(root, "old.m3u8")
-		newPath := filepath.Join(root, "new.m3u8")
+		oldPath := filepath.Join(root, "playlists", "old.m3u8")
+		newPath := filepath.Join(root, "playlists", "new.m3u8")
 		writePlaylistFile(t, oldPath, "#PLAYLIST:New\n")
 
-		warnings, err := ExecuteRenames([]RenameOp{{OldPath: oldPath, NewPath: newPath}})
+		warnings, err := ExecuteRenames(root, []RenameOp{{OldPath: oldPath, NewPath: newPath}})
 		require.NoError(t, err)
 		assert.Empty(t, warnings)
 		assert.NoFileExists(t, oldPath)
@@ -161,12 +163,12 @@ func TestExecuteRenames(t *testing.T) {
 
 	t.Run("race condition at destination is skipped with a warning, not an error", func(t *testing.T) {
 		root := t.TempDir()
-		oldPath := filepath.Join(root, "old.m3u8")
-		newPath := filepath.Join(root, "new.m3u8")
+		oldPath := filepath.Join(root, "playlists", "old.m3u8")
+		newPath := filepath.Join(root, "playlists", "new.m3u8")
 		writePlaylistFile(t, oldPath, "#PLAYLIST:New\n")
 		writePlaylistFile(t, newPath, "#PLAYLIST:Already here\n")
 
-		warnings, err := ExecuteRenames([]RenameOp{{OldPath: oldPath, NewPath: newPath}})
+		warnings, err := ExecuteRenames(root, []RenameOp{{OldPath: oldPath, NewPath: newPath}})
 		require.NoError(t, err)
 		require.Len(t, warnings, 1)
 		assert.Contains(t, warnings[0], "race condition")
@@ -176,15 +178,15 @@ func TestExecuteRenames(t *testing.T) {
 
 	t.Run("a later op still runs after an earlier race-condition skip", func(t *testing.T) {
 		root := t.TempDir()
-		skippedOld := filepath.Join(root, "skipped-old.m3u8")
-		skippedNew := filepath.Join(root, "skipped-new.m3u8")
-		okOld := filepath.Join(root, "ok-old.m3u8")
-		okNew := filepath.Join(root, "ok-new.m3u8")
+		skippedOld := filepath.Join(root, "playlists", "skipped-old.m3u8")
+		skippedNew := filepath.Join(root, "playlists", "skipped-new.m3u8")
+		okOld := filepath.Join(root, "playlists", "ok-old.m3u8")
+		okNew := filepath.Join(root, "playlists", "ok-new.m3u8")
 		writePlaylistFile(t, skippedOld, "#PLAYLIST:Skipped\n")
 		writePlaylistFile(t, skippedNew, "#PLAYLIST:Already here\n")
 		writePlaylistFile(t, okOld, "#PLAYLIST:OK\n")
 
-		warnings, err := ExecuteRenames([]RenameOp{
+		warnings, err := ExecuteRenames(root, []RenameOp{
 			{OldPath: skippedOld, NewPath: skippedNew},
 			{OldPath: okOld, NewPath: okNew},
 		})
@@ -193,5 +195,78 @@ func TestExecuteRenames(t *testing.T) {
 		assert.FileExists(t, skippedOld)
 		assert.NoFileExists(t, okOld)
 		assert.FileExists(t, okNew)
+	})
+
+	t.Run("no sums.md5 at all: rename succeeds, no attempt to update it", func(t *testing.T) {
+		root := t.TempDir()
+		oldPath := filepath.Join(root, "playlists", "old.m3u8")
+		newPath := filepath.Join(root, "playlists", "new.m3u8")
+		writePlaylistFile(t, oldPath, "#PLAYLIST:New\n")
+
+		warnings, err := ExecuteRenames(root, []RenameOp{{OldPath: oldPath, NewPath: newPath}})
+		require.NoError(t, err)
+		assert.Empty(t, warnings)
+		assert.NoFileExists(t, filepath.Join(root, "playlists", hasher.SumsFilename))
+	})
+
+	t.Run("existing sums.md5 entry is relabeled to the new name, hash unchanged", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		oldPath := filepath.Join(playlistsDir, "old.m3u8")
+		newPath := filepath.Join(playlistsDir, "new.m3u8")
+		writePlaylistFile(t, oldPath, "#PLAYLIST:New\n")
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		before, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		wantHash := before["old.m3u8"]
+		require.NotEmpty(t, wantHash)
+
+		warnings, err := ExecuteRenames(root, []RenameOp{{OldPath: oldPath, NewPath: newPath}})
+		require.NoError(t, err)
+		assert.Empty(t, warnings)
+
+		after, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotContains(t, after, "old.m3u8")
+		assert.Equal(t, wantHash, after["new.m3u8"])
+	})
+
+	t.Run("subdirectory rename updates the entry with its subdirectory-relative name", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		oldPath := filepath.Join(playlistsDir, "ipod", "old.m3u8")
+		newPath := filepath.Join(playlistsDir, "ipod", "new.m3u8")
+		writePlaylistFile(t, oldPath, "#PLAYLIST:New\n")
+		require.NoError(t, hasher.Hash(playlistsDir, nil))
+
+		warnings, err := ExecuteRenames(root, []RenameOp{{OldPath: oldPath, NewPath: newPath}})
+		require.NoError(t, err)
+		assert.Empty(t, warnings)
+
+		after, _, err := hasher.ReadSums(playlistsDir, hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotContains(t, after, filepath.Join("ipod", "old.m3u8"))
+		assert.Contains(t, after, filepath.Join("ipod", "new.m3u8"))
+	})
+
+	t.Run("sums.md5 exists but has no entry for the old name: warns, doesn't fail", func(t *testing.T) {
+		root := t.TempDir()
+		playlistsDir := filepath.Join(root, "playlists")
+		oldPath := filepath.Join(playlistsDir, "old.m3u8")
+		newPath := filepath.Join(playlistsDir, "new.m3u8")
+		writePlaylistFile(t, oldPath, "#PLAYLIST:New\n")
+		// A sums.md5 exists but predates old.m3u8, so it has no entry for it.
+		require.NoError(t, hasher.WriteSums(playlistsDir, hasher.SumsFilename, map[string]string{
+			"unrelated.m3u8": strings.Repeat("0", 32),
+		}))
+
+		warnings, err := ExecuteRenames(root, []RenameOp{{OldPath: oldPath, NewPath: newPath}})
+		require.NoError(t, err)
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "has no entry for old.m3u8")
+		// The rename itself still succeeded despite the stale-bookkeeping warning.
+		assert.NoFileExists(t, oldPath)
+		assert.FileExists(t, newPath)
 	})
 }

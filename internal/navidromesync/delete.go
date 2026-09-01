@@ -23,6 +23,7 @@ import (
 
 	subsonic "github.com/supersonic-app/go-subsonic/subsonic"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/navidrome"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
@@ -43,30 +44,40 @@ import (
 // actual end state being asked for, and it's already half-achieved. Any
 // other remote failure (auth, network, 5xx) aborts without touching the local
 // file at all: a generic failure must never be treated as confirmed absence.
-func DeleteOne(client *subsonic.Client, path string) error {
+//
+// warning is non-empty if the local delete succeeded but updating
+// playlists/sums.md5 for it (via [removeLocalSums]) failed; err is nil in
+// that case, since the deletion itself (the operation actually asked
+// for) already completed successfully and shouldn't be reported as a
+// failure over secondary checksum bookkeeping.
+func DeleteOne(client *subsonic.Client, path string) (warning string, err error) {
 	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("%s: %w", path, err)
+		return "", fmt.Errorf("%s: %w", path, err)
 	}
 
 	gp, err := playlist.ReadGlobalPlaylist(path)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", path, err)
+		return "", fmt.Errorf("reading %s: %w", path, err)
 	}
 	if !gp.HasNavidromeID {
-		return fmt.Errorf("%s has no #NAVIDROME-ID; nothing to delete remotely", path)
+		return "", fmt.Errorf("%s has no #NAVIDROME-ID; nothing to delete remotely", path)
 	}
 
 	if err := client.DeletePlaylist(gp.NavidromeID); err != nil {
 		if code, ok := navidrome.ErrCode(err); !(ok && code == navidrome.ErrCodeNotFound) {
-			return fmt.Errorf("deleting remote playlist: %w", err)
+			return "", fmt.Errorf("deleting remote playlist: %w", err)
 		}
 		// Already gone remotely; still remove the local file below, since
 		// that's the desired end state either way.
 	}
 
 	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("removing %s: %w", path, err)
+		return "", fmt.Errorf("removing %s: %w", path, err)
 	}
 
-	return nil
+	if sumsErr := removeLocalSums(libraryRootRootFor(path), path); sumsErr != nil {
+		return fmt.Sprintf("updating %s for removed %s: %v", hasher.SumsFilename, path, sumsErr), nil
+	}
+
+	return "", nil
 }

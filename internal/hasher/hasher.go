@@ -110,6 +110,16 @@ func Hash(dir string, progress func(string)) error {
 // collectFiles walks dir recursively and returns all file paths relative to
 // dir in sorted order, excluding SumsFilename.
 func collectFiles(dir string) ([]string, error) {
+	return collectFilesExcept(dir, SumsFilename)
+}
+
+// collectFilesExcept is [collectFiles] generalized to exclude an arbitrary
+// filename within dir instead of always excluding SumsFilename. Used by
+// [DiffEntries] so it can be pointed at a sums file under any name (a
+// {target}.src.md5 sidecar, or a checksum file for a tree that isn't an
+// album at all, e.g. the library-wide playlists/ tree) without hardcoding
+// SumsFilename as the thing being excluded from the disk listing.
+func collectFilesExcept(dir, filename string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -122,7 +132,7 @@ func collectFiles(dir string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if rel == SumsFilename {
+		if rel == filename {
 			return nil
 		}
 		files = append(files, rel)
@@ -365,6 +375,60 @@ func RenameFile(dir, oldRel, newRel string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// DiffEntries compares dir's current on-disk file listing against the
+// entries recorded in dir/filename (a sums.md5-formatted file, via
+// [ReadSums]) without hashing anything at all (this is a pure listing
+// comparison, not a corruption check). Verifying that recorded hashes still
+// match file contents is out of scope here (and everywhere else this
+// package's callers perform this kind of audit); that's what `md5sum -c` is
+// for.
+//
+// missingFromSums lists files present on disk with no recorded entry;
+// missingOnDisk lists recorded entries with no corresponding file on disk.
+// Both are returned in sorted order (nil, not empty, when there's nothing
+// to report).
+//
+// If dir/filename does not exist at all, DiffEntries returns (nil, nil,
+// nil): there is nothing recorded to diff against, and callers that care
+// about a missing sums file entirely already check for that separately
+// (e.g., internal/checker's checkIntegrity), so DiffEntries doesn't
+// duplicate that finding.
+func DiffEntries(dir, filename string) (missingFromSums, missingOnDisk []string, err error) {
+	sums, existed, err := ReadSums(dir, filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !existed {
+		return nil, nil, nil
+	}
+
+	files, err := collectFilesExcept(dir, filename)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scanning %s: %w", dir, err)
+	}
+
+	onDisk := make(map[string]bool, len(files))
+	for _, f := range files {
+		onDisk[f] = true
+		if _, ok := sums[f]; !ok {
+			missingFromSums = append(missingFromSums, f)
+		}
+	}
+
+	recorded := make([]string, 0, len(sums))
+	for name := range sums {
+		recorded = append(recorded, name)
+	}
+	sort.Strings(recorded)
+	for _, name := range recorded {
+		if !onDisk[name] {
+			missingOnDisk = append(missingOnDisk, name)
+		}
+	}
+
+	return missingFromSums, missingOnDisk, nil
 }
 
 // RemoveFile deletes dir/rel's line from dir/sums.md5, if present, leaving

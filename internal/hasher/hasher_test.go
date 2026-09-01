@@ -286,6 +286,105 @@ func TestCollectFiles(t *testing.T) {
 	})
 }
 
+func TestDiffEntries(t *testing.T) {
+	t.Run("nil, nil, nil when sums.md5 does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.Nil(t, missingFromSums)
+		assert.Nil(t, missingOnDisk)
+	})
+
+	t.Run("no findings when sums.md5 exactly matches disk", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.Nil(t, missingFromSums)
+		assert.Nil(t, missingOnDisk)
+	})
+
+	t.Run("flags a file on disk with no recorded entry", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+		makeFile(t, filepath.Join(dir, "02 track.flac"), "audio2")
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"02 track.flac"}, missingFromSums)
+		assert.Nil(t, missingOnDisk)
+	})
+
+	t.Run("flags a recorded entry with no file on disk", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+		require.NoError(t, os.Remove(filepath.Join(dir, "01 track.flac")))
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.Nil(t, missingFromSums)
+		assert.Equal(t, []string{"01 track.flac"}, missingOnDisk)
+	})
+
+	t.Run("reports both directions independently, sorted", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		makeFile(t, filepath.Join(dir, "02 track.flac"), "audio2")
+		require.NoError(t, Hash(dir, nil))
+		require.NoError(t, os.Remove(filepath.Join(dir, "02 track.flac")))
+		makeFile(t, filepath.Join(dir, "03 track.flac"), "audio3")
+		makeFile(t, filepath.Join(dir, "00 track.flac"), "audio0")
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"00 track.flac", "03 track.flac"}, missingFromSums)
+		assert.Equal(t, []string{"02 track.flac"}, missingOnDisk)
+	})
+
+	t.Run("excludes filename itself from the disk listing", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.Nil(t, missingFromSums)
+		assert.Nil(t, missingOnDisk)
+	})
+
+	t.Run("works against an arbitrary filename, not just sums.md5", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, WriteSums(dir, "ipod.src.md5", map[string]string{
+			"01 track.flac": md5hex("audio"),
+		}))
+		makeFile(t, filepath.Join(dir, "02 track.flac"), "audio2")
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, "ipod.src.md5")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"02 track.flac"}, missingFromSums)
+		assert.Nil(t, missingOnDisk)
+	})
+
+	t.Run("includes files from subdirectories", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+		makeFile(t, filepath.Join(dir, "artwork", "cover.jpg"), "image")
+
+		missingFromSums, missingOnDisk, err := DiffEntries(dir, SumsFilename)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"artwork/cover.jpg"}, missingFromSums)
+		assert.Nil(t, missingOnDisk)
+	})
+}
+
 func TestUpdateFile(t *testing.T) {
 	t.Run("no-op when sums.md5 does not exist", func(t *testing.T) {
 		dir := t.TempDir()
