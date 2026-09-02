@@ -171,6 +171,125 @@ func TestCheck(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, messages(check.Warnings), "path does not match")
 	})
+
+	t.Run("correctly extracted and up-to-date derived audio has no findings", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "Beyoncé", Title: "Crazy in Love"})
+		audioPath := makeAudioFile(t, dir, "title.m4a")
+		require.NoError(t, WriteDerivedAudioTags(audioPath, NFO{Artist: "Beyoncé", Title: "Crazy in Love"}))
+		require.NoError(t, hasher.WriteSums(dir, AudioSrcSumsFilename, map[string]string{
+			"title.mp4": hashHex(t, "fake video data"),
+		}))
+		// audio.src.md5 must exist before stubSums runs, so sums.md5's
+		// listing includes it too (otherwise the pre-existing
+		// DiffEntries-based check below would spuriously flag it as "not
+		// recorded in sums.md5").
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.False(t, check.HasWarnings())
+	})
+
+	t.Run("orphaned audio.src.md5 with no derived audio file is flagged", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "A", Title: "T"})
+		require.NoError(t, hasher.WriteSums(dir, AudioSrcSumsFilename, map[string]string{
+			"title.mp4": hashHex(t, "fake video data"),
+		}))
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "audio.src.md5 exists but no derived audio file was found")
+	})
+
+	t.Run("multiple derived audio files is flagged", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "A", Title: "T"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "title.m4a"), []byte("a"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "title.opus"), []byte("a"), 0o644))
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "multiple derived audio files found")
+	})
+
+	t.Run("drifted derived audio tags are flagged", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "Beyoncé", Title: "Crazy in Love (Remastered)"})
+		audioPath := makeAudioFile(t, dir, "title.m4a")
+		// Tags still reflect the old title, simulating a `video edit` that
+		// wasn't followed by `video extract-audio --retag`.
+		require.NoError(t, WriteDerivedAudioTags(audioPath, NFO{Artist: "Beyoncé", Title: "Crazy in Love"}))
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "derived audio tags do not match musicvideo.nfo")
+	})
+
+	t.Run("tag drift is not checked when nfo is missing title or artist", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{})
+		makeAudioFile(t, dir, "title.m4a")
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.NotContains(t, messages(check.Warnings), "derived audio tags do not match")
+	})
+
+	t.Run("derived audio with no audio.src.md5 sidecar is flagged", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "Beyoncé", Title: "Crazy in Love"})
+		audioPath := makeAudioFile(t, dir, "title.m4a")
+		require.NoError(t, WriteDerivedAudioTags(audioPath, NFO{Artist: "Beyoncé", Title: "Crazy in Love"}))
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "derived audio exists but no audio.src.md5 sidecar was found")
+	})
+
+	t.Run("audio.src.md5 with no entry for the current video filename is unverifiable", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "Beyoncé", Title: "Crazy in Love"})
+		audioPath := makeAudioFile(t, dir, "title.m4a")
+		require.NoError(t, WriteDerivedAudioTags(audioPath, NFO{Artist: "Beyoncé", Title: "Crazy in Love"}))
+		require.NoError(t, hasher.WriteSums(dir, AudioSrcSumsFilename, map[string]string{
+			"stale-old-name.mp4": hashHex(t, "fake video data"),
+		}))
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "has no entry for the current video filename; can't verify")
+	})
+
+	t.Run("missing sums.md5 with derived audio present is unverifiable rather than silently skipped", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "Beyoncé", Title: "Crazy in Love"})
+		audioPath := makeAudioFile(t, dir, "title.m4a")
+		require.NoError(t, WriteDerivedAudioTags(audioPath, NFO{Artist: "Beyoncé", Title: "Crazy in Love"}))
+		// No stubSums call (sums.md5 doesn't exist).
+		require.NoError(t, hasher.WriteSums(dir, AudioSrcSumsFilename, map[string]string{
+			"title.mp4": hashHex(t, "fake video data"),
+		}))
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "sums.md5 is missing; run 'video sums'")
+	})
+
+	t.Run("content drift is flagged when audio.src.md5's hash no longer matches sums.md5", func(t *testing.T) {
+		dir := setupFiledVideoDir(t, &NFO{Artist: "Beyoncé", Title: "Crazy in Love"})
+		audioPath := makeAudioFile(t, dir, "title.m4a")
+		require.NoError(t, WriteDerivedAudioTags(audioPath, NFO{Artist: "Beyoncé", Title: "Crazy in Love"}))
+		// Records a hash different from what's actually in sums.md5,
+		// simulating the video's content having changed since extraction.
+		require.NoError(t, hasher.WriteSums(dir, AudioSrcSumsFilename, map[string]string{
+			"title.mp4": hashHex(t, "a completely different video"),
+		}))
+		stubSums(t, dir)
+
+		check, err := Check(dir, "")
+		require.NoError(t, err)
+		assert.Contains(t, messages(check.Warnings), "derived audio may be stale")
+	})
 }
 
 func TestCheckAll(t *testing.T) {
