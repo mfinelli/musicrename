@@ -44,7 +44,11 @@ type RenameMove struct {
 	NewVideoPath string
 
 	HasInfoTxt bool
-	IsNoOp     bool
+	// OldAudioPath/NewAudioPath are the derived audio file's paths,
+	// empty if no derived audio file exists for this video.
+	OldAudioPath string
+	NewAudioPath string
+	IsNoOp       bool
 	// IsCaseOnly is true when NewDir differs from OldDir only in case,
 	// relevant on case-insensitive filesystems (e.g. macOS's default
 	// HFS+/APFS).
@@ -141,6 +145,31 @@ func planEntry(videoRoot, dir string) (*RenameMove, string, error) {
 		hasInfoTxt = true
 	}
 
+	// A derived audio file, if one exists, needs its own new path
+	// computed: same directory as the video, same stem as NewVideoPath
+	// (title-derived, identically to the video itself), its own existing
+	// extension carried forward unchanged. More than one existing derived
+	// audio file is the same kind of ambiguous state soleVideoFile already
+	// refuses to guess at above and so is skipped with a warning rather
+	// than moving all of them or picking one arbitrarily, matching
+	// ExtractAudio's posture toward the same condition.
+	audioFiles, err := DerivedAudioFiles(videoPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("finding derived audio for %s: %w", videoPath, err)
+	}
+	var oldAudioPath, newAudioPath string
+	switch len(audioFiles) {
+	case 0:
+		// no derived audio to carry
+	case 1:
+		oldAudioPath = audioFiles[0]
+		audioExt := filepath.Ext(oldAudioPath)
+		newStem := strings.TrimSuffix(filepath.Base(newVideoPath), ext)
+		newAudioPath = filepath.Join(newDir, newStem+audioExt)
+	default:
+		return nil, fmt.Sprintf("%s: multiple derived audio files, skipping", dir), nil
+	}
+
 	return &RenameMove{
 		Bucket:       bucket,
 		Artist:       nfo.Artist,
@@ -150,6 +179,8 @@ func planEntry(videoRoot, dir string) (*RenameMove, string, error) {
 		OldVideoPath: videoPath,
 		NewVideoPath: newVideoPath,
 		HasInfoTxt:   hasInfoTxt,
+		OldAudioPath: oldAudioPath,
+		NewAudioPath: newAudioPath,
 		IsNoOp:       dir == newDir,
 		IsCaseOnly:   dir != newDir && strings.EqualFold(dir, newDir),
 	}, "", nil
@@ -179,21 +210,25 @@ type RenameResult struct {
 }
 
 // Execute performs the moves in plan, moving each video's file, its
-// musicvideo.nfo, its info.txt (if present), and its sums.md5 (if present)
-// together as a unit. No-op moves are skipped. Case-only moves rename the
-// whole directory via a temporary intermediate name rather than moving files
-// individually, since on a case-insensitive filesystem OldDir and NewDir
-// would otherwise collide; sums.md5 travels with the directory in that case
-// and needs no further update, since its filename entries are unaffected by
-// a directory-only move.
+// musicvideo.nfo, its info.txt (if present), its derived audio file, and its
+// sums.md5/audio.src.md5 (if present) together as a unit. No-op moves are
+// skipped. Case-only moves rename the whole directory via a temporary
+// intermediate name rather than moving files individually, since on a
+// case-insensitive filesystem OldDir and NewDir would otherwise collide;
+// sums.md5/audio.src.md5 travel with the directory in that case and need no
+// further update, since their filename entries are unaffected by a
+// directory-only move.
 //
 // When a real (non-case-only) move also changes the video's filename
 // (title-driven, so it can differ from the directory rename) and sums.md5
 // exists, that one entry's filename is updated in place (the hash is left
 // untouched, since the file's content didn't change) unless skipMD5 is
-// true. A sums.md5 that exists but has no entry for the old filename
-// produces a warning rather than an error, since it most likely means the
-// checksum file was already out of date.
+// true and the derived audio file's own sums.md5 entry, and audio.src.md5's
+// single entry (keyed by the video's filename), are updated the same way,
+// since both change under exactly the same title-driven condition as the
+// video's filename. A sums.md5/audio.src.md5 that exists but has no entry for
+// the old filename produces a warning rather than an error, since it most
+// likely means the checksum file was already out of date.
 //
 // If progress is non-nil, it is called after each real (non-no-op) move.
 // Now-empty source directories are removed afterward, bubbling upward but
@@ -244,6 +279,11 @@ func Execute(plan *RenamePlan, videoRoot string, skipMD5 bool, progress func(Ren
 				return nil, fmt.Errorf("moving info.txt: %w", err)
 			}
 		}
+		if move.OldAudioPath != "" {
+			if err := moveVideoFile(move.OldAudioPath, move.NewAudioPath); err != nil {
+				return nil, fmt.Errorf("moving derived audio: %w", err)
+			}
+		}
 
 		// sums.md5, if present, travels with the directory like nfo/info.txt
 		// above (moving it is not gated by skipMD5, since leaving it behind
@@ -258,14 +298,35 @@ func Execute(plan *RenamePlan, videoRoot string, skipMD5 bool, progress func(Ren
 			}
 		}
 
+		// audio.src.md5, if present, travels with the directory the
+		// same way (independently of whether a derived audio file
+		// currently exists for this move, so an orphaned sidecar
+		// still moves along rather than getting left behind).
+		audioSumsOld := filepath.Join(move.OldDir, AudioSrcSumsFilename)
+		audioSumsNew := filepath.Join(move.NewDir, AudioSrcSumsFilename)
+		hadAudioSums := false
+		if _, err := os.Stat(audioSumsOld); err == nil {
+			hadAudioSums = true
+			if err := moveVideoFile(audioSumsOld, audioSumsNew); err != nil {
+				return nil, fmt.Errorf("moving %s: %w", AudioSrcSumsFilename, err)
+			}
+		}
+
 		// The video's filename is title-derived and so can change
-		// independently of the directory move. If it did, and sums.md5
-		// exists, update that one entry in place (hash unchanged; only
-		// skipMD5 gates this content update, not the move above).
-		if hadSums && !skipMD5 {
-			oldBase := filepath.Base(move.OldVideoPath)
-			newBase := filepath.Base(move.NewVideoPath)
-			if oldBase != newBase {
+		// independently of the directory move (an artist-only change moves
+		// the directory but leaves the title-derived filename itself
+		// unchanged). If it did change, and sums.md5 exists, update that
+		// one entry in place and the derived audio file's sums.md5
+		// entry the same way, since its filename is driven by the
+		// identical title-derived stem as the video's. audio.src.md5's
+		// single entry (keyed by the video's filename, not the audio's) is
+		// renamed the same way, via a small local helper since
+		// hasher.RenameFile is hardcoded to sums.md5 specifically rather
+		// than parameterized by filename the way ReadSums/WriteSums are.
+		oldBase := filepath.Base(move.OldVideoPath)
+		newBase := filepath.Base(move.NewVideoPath)
+		if oldBase != newBase && !skipMD5 {
+			if hadSums {
 				found, err := hasher.RenameFile(move.NewDir, oldBase, newBase)
 				if err != nil {
 					warnings = append(warnings, fmt.Sprintf(
@@ -274,6 +335,34 @@ func Execute(plan *RenamePlan, videoRoot string, skipMD5 bool, progress func(Ren
 				} else if !found {
 					warnings = append(warnings, fmt.Sprintf(
 						"sums.md5 exists but has no entry for %s; leaving as-is", oldBase,
+					))
+				}
+
+				if move.OldAudioPath != "" {
+					oldAudioBase := filepath.Base(move.OldAudioPath)
+					newAudioBase := filepath.Base(move.NewAudioPath)
+					found, err := hasher.RenameFile(move.NewDir, oldAudioBase, newAudioBase)
+					if err != nil {
+						warnings = append(warnings, fmt.Sprintf(
+							"updating sums.md5 for %s: %v", newAudioBase, err,
+						))
+					} else if !found {
+						warnings = append(warnings, fmt.Sprintf(
+							"sums.md5 exists but has no entry for %s; leaving as-is", oldAudioBase,
+						))
+					}
+				}
+			}
+
+			if hadAudioSums {
+				found, err := renameNamedSumsEntry(move.NewDir, AudioSrcSumsFilename, oldBase, newBase)
+				if err != nil {
+					warnings = append(warnings, fmt.Sprintf(
+						"updating %s: %v", AudioSrcSumsFilename, err,
+					))
+				} else if !found {
+					warnings = append(warnings, fmt.Sprintf(
+						"%s exists but has no entry for %s; leaving as-is", AudioSrcSumsFilename, oldBase,
 					))
 				}
 			}
@@ -291,6 +380,39 @@ func Execute(plan *RenamePlan, videoRoot string, skipMD5 bool, progress func(Ren
 	}
 
 	return &RenameResult{Warnings: warnings}, nil
+}
+
+// renameNamedSumsEntry is [hasher.RenameFile] generalized to an arbitrary
+// sums.md5-formatted filename within dir (needed here because
+// hasher.RenameFile is hardcoded to sums.md5 specifically, unlike
+// hasher.ReadSums/WriteSums, which are already parameterized by filename).
+// Kept local to this package rather than added to internal/hasher's public
+// API, since audio.src.md5 is currently the only named sidecar that ever
+// needs a single-entry rename.
+//
+// Mirrors hasher.RenameFile's exact contract: found reports whether an
+// existing entry for oldRel was located and renamed (false with a nil error
+// if the file existed but had no such entry, or didn't exist at all).
+func renameNamedSumsEntry(dir, filename, oldRel, newRel string) (found bool, err error) {
+	sums, existed, err := hasher.ReadSums(dir, filename)
+	if err != nil {
+		return false, err
+	}
+	if !existed {
+		return false, nil
+	}
+
+	hash, ok := sums[oldRel]
+	if !ok {
+		return false, nil
+	}
+
+	delete(sums, oldRel)
+	sums[newRel] = hash
+	if err := hasher.WriteSums(dir, filename, sums); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // renameDirCaseInsensitive moves oldDir to newDir via a temporary

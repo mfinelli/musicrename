@@ -158,6 +158,21 @@ func TestScan(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, plan.Moves, 2)
 	})
+
+	t.Run("more than one derived audio file is a warning, not a move", func(t *testing.T) {
+		root := t.TempDir()
+		dir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "video.m4a"), []byte("a"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "video.opus"), []byte("a"), 0o644))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		assert.Empty(t, plan.Moves)
+		require.Len(t, plan.Warnings, 1)
+		assert.Contains(t, plan.Warnings[0], "multiple derived audio files")
+	})
 }
 
 func TestExecute(t *testing.T) {
@@ -349,6 +364,140 @@ func TestExecute(t *testing.T) {
 		result, err := Execute(plan, root, false, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("derived audio file travels with the directory", func(t *testing.T) {
+		root := t.TempDir()
+		oldDir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		require.NoError(t, os.WriteFile(filepath.Join(oldDir, "video.m4a"), []byte("audio"), 0o644))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		newDir := plan.Moves[0].NewDir
+
+		result, err := Execute(plan, root, false, nil)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+
+		assert.FileExists(t, filepath.Join(newDir, "title.m4a"))
+		assert.NoFileExists(t, filepath.Join(oldDir, "video.m4a"))
+	})
+
+	t.Run("derived audio file and its sums.md5 entry are renamed when title changes", func(t *testing.T) {
+		root := t.TempDir()
+		oldDir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		require.NoError(t, os.WriteFile(filepath.Join(oldDir, "video.m4a"), []byte("audio"), 0o644))
+		audioHash := hashHex(t, "audio")
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, hasher.SumsFilename),
+			[]byte(hashHex(t, "data")+" *video.mp4\n"+audioHash+" *video.m4a\n"),
+			0o644,
+		))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		newDir := plan.Moves[0].NewDir
+
+		_, err = Execute(plan, root, false, nil)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(filepath.Join(newDir, hasher.SumsFilename))
+		require.NoError(t, err)
+		assert.NotContains(t, string(got), "video.m4a")
+		assert.Contains(t, string(got), audioHash+" *title.m4a\n")
+	})
+
+	t.Run("audio.src.md5's entry is renamed alongside sums.md5 when title changes", func(t *testing.T) {
+		root := t.TempDir()
+		oldDir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		require.NoError(t, os.WriteFile(filepath.Join(oldDir, "video.m4a"), []byte("audio"), 0o644))
+		videoHash := hashHex(t, "data")
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, AudioSrcSumsFilename),
+			[]byte(videoHash+" *video.mp4\n"),
+			0o644,
+		))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		newDir := plan.Moves[0].NewDir
+
+		result, err := Execute(plan, root, false, nil)
+		require.NoError(t, err)
+		assert.Empty(t, result.Warnings)
+
+		sums, existed, err := hasher.ReadSums(newDir, AudioSrcSumsFilename)
+		require.NoError(t, err)
+		require.True(t, existed)
+		assert.Equal(t, videoHash, sums["title.mp4"])
+		_, oldStillPresent := sums["video.mp4"]
+		assert.False(t, oldStillPresent)
+	})
+
+	t.Run("audio.src.md5 travels with the directory but its entry is untouched when only artist changes", func(t *testing.T) {
+		root := t.TempDir()
+		// The old directory is under the wrong artist entirely (a
+		// different bucket/artist path than Correct Artist sanitizes to),
+		// so a real move happens but the title (and so the sanitized
+		// video filename) is the same before and after, the same
+		// distinction the existing sums.md5 tests above exercise for the
+		// video's entry, extended here to audio.src.md5.
+		oldDir := place(t, root, filepath.Join("w", "totally wrong", "video"), NFO{
+			Artist: "Correct Artist", Title: "Video",
+		}, false)
+		videoHash := hashHex(t, "data")
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, AudioSrcSumsFilename),
+			[]byte(videoHash+" *video.mp4\n"),
+			0o644,
+		))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		require.Len(t, plan.Moves, 1)
+		require.False(t, plan.Moves[0].IsNoOp)
+		require.False(t, plan.Moves[0].IsCaseOnly)
+		require.Equal(t, "video.mp4", filepath.Base(plan.Moves[0].NewVideoPath),
+			"fixture must keep the video's own filename unchanged so this actually exercises the oldBase == newBase path")
+		newDir := plan.Moves[0].NewDir
+
+		_, err = Execute(plan, root, false, nil)
+		require.NoError(t, err)
+
+		sums, existed, err := hasher.ReadSums(newDir, AudioSrcSumsFilename)
+		require.NoError(t, err)
+		require.True(t, existed)
+		assert.Equal(t, videoHash, sums["video.mp4"])
+	})
+
+	t.Run("skipMD5 moves audio.src.md5 but does not rewrite its entry", func(t *testing.T) {
+		root := t.TempDir()
+		oldDir := place(t, root, filepath.Join("w", "wrong", "wrong"), NFO{
+			Artist: "Artist", Title: "Title",
+		}, false)
+		require.NoError(t, os.WriteFile(
+			filepath.Join(oldDir, AudioSrcSumsFilename),
+			[]byte(hashHex(t, "data")+" *video.mp4\n"),
+			0o644,
+		))
+
+		plan, err := Scan(root)
+		require.NoError(t, err)
+		newDir := plan.Moves[0].NewDir
+
+		_, err = Execute(plan, root, true, nil)
+		require.NoError(t, err)
+
+		got, err := os.ReadFile(filepath.Join(newDir, AudioSrcSumsFilename))
+		require.NoError(t, err)
+		assert.Contains(t, string(got), "video.mp4",
+			"skipMD5 must still move the file but leave its content alone")
 	})
 }
 
