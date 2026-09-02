@@ -719,6 +719,26 @@ exits non-zero if any findings are present.
 Displays a video's raw and sanitized Title/Artist from *musicvideo.nfo*,
 alongside Album/Year as stored. Read-only.
 
+## mrr video extract-audio _file_
+
+Remuxes (not re-encodes) a video's audio stream into a standalone file next to
+it, tags it from *musicvideo.nfo*, and computes ReplayGain via *rsgain*.
+Requires an existing *musicvideo.nfo* with both artist and title set.
+
+By default, errors if a derived audio file already exists.
+
+*--retag*
+	Update only the derived audio file's tags (doesn't recompute
+	ReplayGain). For when *video edit* changed artist/title but the video's
+	actual content is unchanged.
+*--force*
+	Fully re-extract even if a derived audio file already exists. For when
+	the source video's actual content changed (e.g., a re-fetch).
+
+*--retag* and *--force* are mutually exclusive. More than one existing
+derived audio file for the video is an error, even with *--force* so you
+need resolve it manually first.
+
 # SEE ALSO
 
-*md5sum*(1) *yt-dlp*(1)
+*ffmpeg*(1) *md5sum*(1) *rsgain*(1) *yt-dlp*(1)

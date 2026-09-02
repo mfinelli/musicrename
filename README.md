@@ -415,6 +415,7 @@ mrr video add <file>    # sanitize, file into place, write musicvideo.nfo
 mrr video rename        # reconcile locations after any edits
 mrr video sums          # generate md5 checksums
 mrr video check         # audit for issues
+mrr video extract-audio <file>  # pull a standalone, tagged audio file out of a video
 ```
 
 ### Video Commands
@@ -481,6 +482,19 @@ Displays a video's raw and sanitized title/artist. Read-only.
 
 ```sh
 mrr video inspect "crazy in love.mp4"
+```
+
+#### `video extract-audio`
+
+Remuxes (not re-encodes) a video's audio stream into a standalone file next to
+it, tagged from `musicvideo.nfo`, with ReplayGain computed via `rsgain` (must be
+installed and on `PATH`). This is what makes a video-only track reachable via
+Navidrome and syncable to targets without video support. Errors if a derived
+audio file already exists; pass `--retag` to update only its tags, or `--force`
+to fully re-extract.
+
+```sh
+mrr video extract-audio "crazy in love.mp4"
 ```
 
 ## Contributing
