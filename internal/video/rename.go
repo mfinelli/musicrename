@@ -121,7 +121,7 @@ func Scan(videoRoot string) (*RenamePlan, error) {
 // planEntry computes the RenameMove for the video directory at dir, or a
 // warning string (with a nil move and nil error) if dir can't be planned.
 func planEntry(videoRoot, dir string) (*RenameMove, string, error) {
-	videoPath, err := soleVideoFile(dir)
+	videoPath, err := SoleVideoFile(dir)
 	if err != nil {
 		return nil, fmt.Sprintf("%s: %v", dir, err), nil
 	}
@@ -149,7 +149,7 @@ func planEntry(videoRoot, dir string) (*RenameMove, string, error) {
 	// computed: same directory as the video, same stem as NewVideoPath
 	// (title-derived, identically to the video itself), its own existing
 	// extension carried forward unchanged. More than one existing derived
-	// audio file is the same kind of ambiguous state soleVideoFile already
+	// audio file is the same kind of ambiguous state SoleVideoFile already
 	// refuses to guess at above and so is skipped with a warning rather
 	// than moving all of them or picking one arbitrarily, matching
 	// ExtractAudio's posture toward the same condition.
@@ -186,9 +186,9 @@ func planEntry(videoRoot, dir string) (*RenameMove, string, error) {
 	}, "", nil
 }
 
-// soleVideoFile returns the single video file directly inside dir, erroring
+// SoleVideoFile returns the single video file directly inside dir, erroring
 // if there isn't exactly one (assume exactly one video per directory for now).
-func soleVideoFile(dir string) (string, error) {
+func SoleVideoFile(dir string) (string, error) {
 	files, err := videoFilesIn(dir)
 	if err != nil {
 		return "", err

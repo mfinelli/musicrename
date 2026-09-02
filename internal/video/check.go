@@ -78,7 +78,7 @@ func (r *CheckResult) HasWarnings() bool {
 func Check(dir, videoRoot string) (*CheckResult, error) {
 	result := &CheckResult{}
 
-	videoPath, soleErr := soleVideoFile(dir)
+	videoPath, soleErr := SoleVideoFile(dir)
 	if soleErr != nil {
 		result.Warnings = append(result.Warnings, Warning{Path: dir, Message: soleErr.Error()})
 	}
