@@ -26,6 +26,15 @@ import (
 	"github.com/mfinelli/musicrename/internal/transcode"
 )
 
+// AudioSrcSumsFilename is the derived-audio content-drift sidecar: records
+// the source video's hash as of extraction time, in the same md5sum-compatible
+// format sums.md5 itself uses (via [hasher.WriteSums]/[hasher.ReadSums]).
+// Structurally it's the same idea as the on-device {target}.src.md5 sidecar
+// ([target.SrcSumsFilename]), just fixed to one name rather than parameterized
+// by target, since there's exactly one derived audio file per video directory
+// rather than one per sync target.
+const AudioSrcSumsFilename = "audio.src.md5"
+
 // DerivedAudioFiles returns every file directly inside videoPath's directory
 // that is a candidate derived audio file for it i.e., same base filename stem
 // as videoPath, with an extension transcode.RemuxAudio could have produced.

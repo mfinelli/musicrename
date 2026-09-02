@@ -23,13 +23,30 @@ import (
 	"go.senan.xyz/taglib"
 )
 
+// ownedAudioTagKeys are the tags WriteDerivedAudioTags manages (the only
+// ones it's entitled to add, change, or remove). Everything else on the file
+// (REPLAYGAIN_* written separately by internal/replaygain, whatever the
+// source encoder happened to leave behind, anything else) is preserved
+// untouched.
+var ownedAudioTagKeys = map[string]bool{
+	taglib.Title:  true,
+	taglib.Artist: true,
+	taglib.Album:  true,
+	taglib.Date:   true,
+}
+
 // WriteDerivedAudioTags writes path's ARTIST/TITLE (and ALBUM/YEAR, if
-// present) tags to exactly match nfo and replaces whatever tags path
-// currently has entirely ([taglib.Clear]) rather than merging into them,
-// since path's tags should authoritatively reflect nfo's current state after
-// this call, including removing a tag nfo no longer has (e.g. a `video edit`
-// that dropped Album since the last extraction), not just adding whatever nfo
-// currently lists on top of whatever was already there.
+// present) tags to exactly match nfo, including removing a tag nfo no
+// longer has (e.g., a `video edit` that dropped Album since the last
+// extraction). The four tags in ownedAudioTagKeys above authoritatively
+// reflect nfo's current state after this call.
+//
+// This needs a read-modify-write, not a plain [taglib.Clear] write of just
+// those four tags: Clear wipes *every* existing tag on the file first, and
+// path may already carry tags this function has no business touching
+// (REPLAYGAIN_TRACK_GAIN/PEAK in particular, written separately by
+// internal/replaygain), which a `--retag` run (rewriting tags without
+// touching ReplayGain, by design) must leave completely alone.
 //
 // nfo.Title and nfo.Artist are required since "video check" already flags a
 // missing title/artist as its own finding well before extraction would ever
@@ -41,10 +58,20 @@ func WriteDerivedAudioTags(path string, nfo NFO) error {
 		return fmt.Errorf("%s: nfo is missing title or artist", path)
 	}
 
-	tags := map[string][]string{
-		taglib.Title:  {nfo.Title},
-		taglib.Artist: {nfo.Artist},
+	existing, err := taglib.ReadTags(path)
+	if err != nil {
+		return fmt.Errorf("reading existing tags from %s: %w", path, err)
 	}
+
+	tags := make(map[string][]string, len(existing)+4)
+	for k, v := range existing {
+		if !ownedAudioTagKeys[k] {
+			tags[k] = v
+		}
+	}
+
+	tags[taglib.Title] = []string{nfo.Title}
+	tags[taglib.Artist] = []string{nfo.Artist}
 	if nfo.Album != "" {
 		tags[taglib.Album] = []string{nfo.Album}
 	}

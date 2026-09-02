@@ -110,6 +110,43 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 		assert.Empty(t, got[taglib.Album])
 	})
 
+	t.Run("preserves tags it doesn't own, e.g. REPLAYGAIN written separately", func(t *testing.T) {
+		dir := t.TempDir()
+		path := makeAudioFile(t, dir, "track.m4a")
+
+		require.NoError(t, taglib.WriteTags(path, map[string][]string{
+			"REPLAYGAIN_TRACK_GAIN": {"3.75 dB"},
+		}, taglib.WriteOption(0)))
+
+		require.NoError(t, WriteDerivedAudioTags(path, NFO{Title: "Crazy in Love", Artist: "Beyoncé"}))
+
+		got, err := taglib.ReadTags(path)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"3.75 dB"}, got["REPLAYGAIN_TRACK_GAIN"])
+	})
+
+	t.Run("preserves a foreign tag across a second call that also clears a stale owned tag", func(t *testing.T) {
+		// Combines the two behaviors WriteDerivedAudioTags must hold at
+		// once: it clears its own stale ALBUM (nfo dropped it) while
+		// leaving an unrelated foreign tag alone.
+		dir := t.TempDir()
+		path := makeAudioFile(t, dir, "track.m4a")
+
+		require.NoError(t, taglib.WriteTags(path, map[string][]string{
+			"REPLAYGAIN_TRACK_GAIN": {"3.75 dB"},
+		}, taglib.WriteOption(0)))
+		require.NoError(t, WriteDerivedAudioTags(path, NFO{
+			Title: "Crazy in Love", Artist: "Beyoncé", Album: "Dangerously in Love",
+		}))
+
+		require.NoError(t, WriteDerivedAudioTags(path, NFO{Title: "Crazy in Love", Artist: "Beyoncé"}))
+
+		got, err := taglib.ReadTags(path)
+		require.NoError(t, err)
+		assert.Empty(t, got[taglib.Album])
+		assert.Equal(t, []string{"3.75 dB"}, got["REPLAYGAIN_TRACK_GAIN"])
+	})
+
 	t.Run("errors when title is missing", func(t *testing.T) {
 		dir := t.TempDir()
 		path := makeAudioFile(t, dir, "track.m4a")
