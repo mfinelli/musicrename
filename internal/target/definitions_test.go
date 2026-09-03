@@ -62,6 +62,35 @@ func TestDefinitionFor(t *testing.T) {
 		assert.Equal(t, FormatMP3, def.TranscodeFormat)
 		assert.True(t, def.EmbedArt)
 	})
+
+	t.Run("ipod supports video with real WinFF-derived transcode settings", func(t *testing.T) {
+		def, ok := DefinitionFor("ipod")
+		require.True(t, ok)
+		assert.True(t, def.SupportsVideo)
+		assert.Equal(t, 400, def.Video.VideoBitrateKbps)
+		assert.Equal(t, 128, def.Video.AudioBitrateKbps)
+		assert.Equal(t, VideoScale{Width: 320, Height: 240}, def.Video.Fullscreen)
+		assert.Equal(t, VideoScale{Width: 320, Height: 176}, def.Video.Widescreen)
+	})
+
+	t.Run("sdcard does not support video", func(t *testing.T) {
+		def, ok := DefinitionFor("sdcard")
+		require.True(t, ok)
+		assert.False(t, def.SupportsVideo)
+	})
+
+	t.Run("every target with SupportsVideo has real (non-zero) video settings", func(t *testing.T) {
+		for name := range definitions {
+			def, _ := DefinitionFor(name)
+			if !def.SupportsVideo {
+				continue
+			}
+			assert.NotZero(t, def.Video.VideoBitrateKbps, "target %q supports video but has no video bitrate set", name)
+			assert.NotZero(t, def.Video.AudioBitrateKbps, "target %q supports video but has no audio bitrate set", name)
+			assert.NotZero(t, def.Video.Fullscreen, "target %q supports video but has no fullscreen scale set", name)
+			assert.NotZero(t, def.Video.Widescreen, "target %q supports video but has no widescreen scale set", name)
+		}
+	})
 }
 
 func TestDefinitionAccepts(t *testing.T) {
