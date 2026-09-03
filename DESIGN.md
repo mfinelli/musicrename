@@ -763,81 +763,191 @@ printing empty fields.
   filename-matched) on that basis; revisit if/when multiple videos per track
   become a real need.
 
-### 6.5 Video Device Sync (Future Work, Design Settled)
+### 6.5 Video Device Sync (Implemented — Encode Values Pending On-Device Tuning)
 
 Video sync reuses the existing `internal/target.Definition` (§7.2) rather than
 introducing a parallel video-target type: `ipod` and `sdcard` are each a single
 sync policy already, not two independent concept-spaces, and giving them a
 second, disconnected "video definition" would mean two sources of truth for what
-one target wants. `Definition` gains:
+one target wants. `Definition` gained:
 
 - `SupportsVideo bool` — whether this target can play video at all.
-- Video-specific transcode settings (exact fields TBD at implementation time —
-  at minimum a resolution cap, framerate, and container/codec), used only when
-  `SupportsVideo` is true.
+- `Video VideoTranscodeSettings` — `VideoBitrateKbps`, `AudioBitrateKbps`, and
+  two `VideoScale{Width, Height}` values, `Fullscreen`/`Widescreen`, since which
+  one applies depends on the _source_ video's own aspect ratio, not anything
+  about the target.
 
 `ipod` sets `SupportsVideo: true`. Real research (Rockbox's own `MPEGplayer`
 documentation, real hardware testing shared by others, and a device-specific
 WinFF preset — the full findings, sources, and exact `ffmpeg` invocations tried
 live in `VIDEO.md`, kept separate from this settled-decisions document so raw
-research doesn't clutter it) confirms the actual target is much more specific
+research doesn't clutter it) confirmed the actual target is much more specific
 than "a uniform resolution/format/framerate": Rockbox's video plugin decodes
 **MPEG-1/MPEG-2 only, entirely in software on the main CPU** — no modern codec
 (H.264, the actual format `yt-dlp` sources are in) is supported at all. The real
 encode target is MPEG-2 video plus MP3 audio, muxed as an MPEG Program Stream
-(`.mpg`). **Exact resolution/bitrate/framerate remain open pending real
-on-device testing** against the actual device this is being built for (an iPod
-Video 5.5G) — the sources gathered so far meaningfully disagree with each other
-(a device-specific preset's bitrate is roughly 10x lower than
-independently-tested real-world numbers; suggested resolutions differ too), so
-nothing is finalized as fact until verified with a real converted file on real
-hardware, not reasoned about from written sources alone.
+(`.mpg`). `ipod`'s current `Video` values are WinFF's iPod 5th Gen preset
+numbers (400/128kbps, 320x240/320x176) — a real starting point, not yet
+confirmed-correct: independently-tested real-world numbers in `VIDEO.md`
+disagree with WinFF's bitrate by roughly 10x, and nothing is finalized as fact
+until verified with a real converted file on the actual iPod Video 5.5G this was
+built for. Revisit `ipod`'s `Video` values once that testing happens; no other
+part of this design depends on the exact numbers being right.
 
-**No metadata embedding.** This reverses an earlier instinct in this same
+**Fullscreen vs. widescreen is chosen automatically per source, not
+configured.** `internal/transcode.ProbeAspectRatio` reads the source's real
+display aspect ratio (accounting for non-square pixels via ffprobe's
+`display_aspect_ratio` where available, falling back to raw pixel dimensions
+otherwise), and `ChooseVideoScale` picks whichever of `Fullscreen`/`Widescreen`
+is numerically closer, split at the exact midpoint between 4:3 and 16:9
+(≈1.556). A source outside a sane landscape range (`[1.0, 2.5]` — catching a
+portrait/vertical source, or something absurdly ultra-wide) is refused outright
+with a clear error rather than force-fit into either preset, which would produce
+something visibly broken (badly cropped or squeezed) rather than just imperfect.
+
+**No metadata embedding.** This reversed an earlier instinct in this same
 document to embed it regardless "since it's cheap" — that assumed an MP4-style
-container, where embedding is well-trodden ground; now that the real target is
+container, where embedding is well-trodden ground; once the real target was
 confirmed to be MPEG-PS, there's no established, well-supported metadata
 convention for that container the way MP4 atoms or ID3 have, so it's unclear the
 metadata would even survive the mux, separate from the original open question of
 whether Rockbox's video plugin reads it at all. Combined with no evidence,
 across any researched source, that `MPEGplayer` displays any metadata during
-playback, this isn't worth the implementation cost anymore. Videos are
-identified by filename only, as originally suspected.
+playback, this wasn't worth the implementation cost. Videos are identified by
+filename only, as originally suspected.
 
-`sdcard` sets `SupportsVideo: false`. Attempting to select or sync video against
-a target with `SupportsVideo: false` is a hard, immediate error at the command
-level ("target %q does not support video") — not a silent no-op, and not a
-fallback to something else. Currently only `ipod` is valid for video selection
-(below) or `video sync <target>`. Getting a video's audio onto a target like
-`sdcard` is handled entirely through §6.6's derived-audio file plus the
-ordinary, already-existing playlist-driven audio sync path (see §6.6's
-sync/Navidrome interaction write-up below) — not through any video-sync-specific
-fallback logic. An earlier draft of this section routed `sdcard`'s audio through
-video-sync's own selection/diff logic directly; that turned out to be
-unnecessary complexity once it became clear playlist membership already handles
-this for free through the existing, unmodified §7.7 algorithm.
+`sdcard` sets `SupportsVideo: false`. Attempting to select video for a target
+with `SupportsVideo: false` (`video select`, below) is a hard, immediate error
+("target %q does not support video") — not a silent no-op, and not a fallback to
+something else; the same check applies to `sync sdcard --video-only` (see "Sync
+execution" below). Getting a video's audio onto a target like `sdcard` is
+handled entirely through §6.6's derived-audio file plus the ordinary,
+already-existing playlist-driven audio sync path (see §6.6's sync/Navidrome
+interaction write-up) — not through any video-sync-specific fallback logic. An
+earlier draft of this section routed `sdcard`'s audio through video-sync's own
+selection/diff logic directly; that turned out to be unnecessary complexity once
+it became clear playlist membership already handles this for free through the
+existing, unmodified §7.7 algorithm.
 
-#### Selection: `videos/{target}.m3u8`
+#### Selection: `video select <target> [video-root]`, `videos/{target}.m3u8`
 
 Unlike audio (§7.3, selection scoped per-album, since an album is naturally a
 small, human-sized group of tracks), video selection is scoped at the video-root
 level: a single `videos/{target}.m3u8` per target, listing the selected videos'
-paths — valid only for a target with `SupportsVideo: true` (above); attempting
-this against `sdcard` errors immediately. A flat, all-at-once checklist across a
-library that may hold hundreds or thousands of videos would be unusable, so this
-reuses §9.2's `playlist entries add` interactive-browser machinery
-(`playlist.BrowseSelection` for staging, the shared directory-browser model)
-rather than a flat form: browsing to an artist directory presents every video by
-that artist (tens, not thousands) as one multi-select screen, exactly the same
-shape as the audio checkbox list, just one directory level up (artist instead of
-album — a video's own directory holds exactly one video, so there's no
-meaningful per-directory sub-selection the way an album's tracks have). Despite
-the `.m3u8` extension, this is the same "reuse the file format, not its playback
-semantics" move as the album-local manifests — nothing here depends on any
-player interpreting these files, since `musicrename` is the only thing that ever
-reads or writes them.
+library-root-relative paths — valid only for a target with `SupportsVideo: true`
+(above); attempting this against `sdcard` errors immediately. A flat,
+all-at-once checklist across a library that may hold hundreds or thousands of
+videos would be unusable, so `video select` reuses §9.2's `playlist entries add`
+interactive-browser machinery (`playlist.BrowseSelection` for staging, the
+shared directory-browser model, factored out as `videoOptionsForArtist` and
+shared between the two commands) rather than a flat form: browsing to an artist
+directory presents every video by that artist (tens, not thousands) as one
+multi-select screen, exactly the same shape as the audio checkbox list, just one
+directory level up (artist instead of album — a video's own directory holds
+exactly one video, so there's no meaningful per-directory sub-selection the way
+an album's tracks have). Despite the `.m3u8` extension, this is the same "reuse
+the file format, not its playback semantics" move as the album-local manifests —
+nothing here depends on any player interpreting these files, and in fact the
+read/write mechanics are literally the same
+`playlist.ReadManifest`/`WriteManifest` functions the album-local manifests
+already use, just given a full relative path per line instead of a bare
+filename.
 
-### 6.6 Audio Extraction from Video (Future Work, Design Settled)
+#### Sync reconciliation: reusing the audio engine almost entirely unchanged
+
+The single biggest implementation finding in this whole section:
+`internal/ devicesync`'s existing audio reconciliation engine (§7.6/§7.7) turned
+out to already be root-agnostic, not audio-specific the way it looked at a
+glance — confirmed by reading through all of it before writing any
+video-specific code, not assumed. `CurrentState`, `Diff`, `CheckCapacity`,
+`CountChanges`, and `FormatBytes` are reused for video **completely unchanged**:
+none of them hardcode anything about audio, they operate purely on generic
+`DesiredEntry {Root, Rel}`/`DeviceEntry` values, and `CurrentState` already
+walks _every_ on-device root directory looking for `sums.md5` with no name
+restriction at all — a `videos/` root was already discoverable before any
+video-specific code existed.
+
+Only two places in the shared engine actually needed to learn about video:
+
+- `deviceRelFor` (the function that translates a source-relative path to its
+  on-device equivalent) gained an unconditional case: any of `internal/ video`'s
+  recognized source extensions (`.mp4`/`.webm`/`.mkv`), or an already-`.mpg`
+  path, always maps to `.mpg` — no "already accepted, copy through as-is" branch
+  the way audio has, since Rockbox never plays a source container directly.
+- `executeAlbum`'s per-entry write branch (audio via `PrepareTrack`, artwork via
+  `artwork.ResizeFile`) gained a third case, video via `PrepareVideo` — a new,
+  much simpler sibling to `PrepareTrack`: always transcodes (via
+  `transcode.TranscodeVideo`, which itself calls `ProbeAspectRatio`/
+  `ChooseVideoScale`), no tag migration, no artwork embedding, since Rockbox's
+  video plugin reads neither.
+
+Everything else in `Execute` — grouping entries by directory, dry-run handling,
+on-device `sums.md5`/`{target}.src.md5` read-modify-write, empty-directory
+cleanup — needed no changes at all: a video's own directory just becomes a
+size-one "album" group with nothing further to special-case. The
+`{target}.src.md5` drift-tracking sidecar (§7.6) carries over unmodified too,
+and matters just as much here as it does for a transcoded audio file: a video's
+on-device `.mpg` bytes never equal its source's hash directly (it's a full
+re-encode into a different container/codec entirely), so without that sidecar
+recording which source hash actually produced the on-device file, every sync
+would re-transcode from scratch — confirmed by an end-to-end test that runs a
+real sync twice and checks the second run reports a clean skip, not a wasted
+re-transcode.
+
+Two new, genuinely video-specific pieces sit on top of that reused engine:
+
+- `VideoDesiredState(libraryRootRoot, targetName)` — much simpler than audio's
+  `DesiredState`: reads the single flat `videos/{target}.m3u8` manifest above,
+  no per-album manifest union, no global-playlist union, no artwork entries.
+  Takes `libraryRootRoot`, not the video root directly, matching
+  `DesiredState`'s own parameter exactly — every returned entry's `Root` is the
+  fixed string `"videos"`, and `Diff`/`CheckCapacity` reconstruct the real path
+  as `libraryRootRoot/videos/Rel`, so passing the video root directly here would
+  have silently doubled that path segment. (This mismatch was caught and fixed
+  before `VideoPlan` was ever built on top of it, precisely by checking
+  `sync ipod`'s actual CLI calling convention rather than guessing at what
+  `VideoDesiredState`'s signature should be.)
+- `VideoPlan(libraryRootRoot, devicePath, targetName)` — wires
+  `VideoDesiredState` together with the _reused_ `CurrentState`/`Diff`/
+  `CheckCapacity`, mirroring `Plan`'s exact shape.
+
+#### Sync execution: merged into `sync ipod`/`sync sdcard`, not a separate command
+
+An earlier draft of this design planned a standalone
+`video sync <target> <device-path>` command, mirroring
+`sync ipod`/`sync sdcard`. That was dropped in favor of folding video into the
+_existing_ `sync ipod`/`sync sdcard` commands directly — running two separate
+sync commands for one device turned out to be more friction than the
+separate-command design was worth, and the merge turned out to be cheap:
+`Execute` already dispatches each entry independently by its own extension (the
+`executeAlbum` branch above), so a single `Execute` call handed a diff
+containing a mix of audio and video entries together already works correctly
+with no changes to `Execute` itself.
+
+`devicesync.MergePlans(audio, video *PlanResult) *PlanResult` combines an audio
+`Plan` result with a video `VideoPlan` result into one: `Diff.Changes` and every
+warning list are concatenated, and the two `CapacityReport`s are combined by
+summing `NeededBytes`/`FreedBytes` (genuinely additive across the two plans)
+while taking `AvailableBytes` from the audio side only (both `CheckCapacity`
+calls already queried the same real device's free space independently; summing
+would double-count it, not combine two different quantities). `video == nil`
+returns the audio plan unchanged, so the same merge call covers every
+combination without a separate branch per case.
+
+`sync ipod`/`sync sdcard` gained `--no-video` (skip video entirely) and
+`--video-only` (skip audio) flags, mutually exclusive; `--video-only` against a
+target with `SupportsVideo: false` is a hard error (matching `video select`'s
+posture toward the same condition), not a silent no-op. By default (no flags), a
+video-capable target's `sync` computes both an audio `Plan` and a `VideoPlan`,
+merges them via `MergePlans`, and everything downstream — the confirmation
+prompt, `--dry-run` output, the single `Execute` call — proceeds against the
+merged plan exactly as it did for audio alone before video sync existed.
+`--verbose` output (both the dry-run itemization and the post-sync summary)
+splits into separate "Audio:"/"Video:" sections whenever both are actually in
+scope, falling back to one flat list otherwise, so a `sdcard` sync or an
+`--no-video`/`--video-only` run never shows an empty section header.
+
+### 6.6 Audio Extraction from Video (Implemented)
 
 Some tracks exist only as a music video (published to YouTube, never released as
 a standalone single/album), which makes them invisible to Navidrome (no video
