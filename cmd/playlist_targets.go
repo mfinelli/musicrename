@@ -23,7 +23,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/target"
 )
 
 var playlistTargetsCmd = &cobra.Command{
@@ -37,12 +39,14 @@ Exactly one of --set/--clear is required.
 
 playlist must already exist; this command never creates a new file (use
 'playlist create' for that).`,
-	Args: cobra.ExactArgs(1),
-	RunE: runPlaylistTargets,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completion.PlaylistArg,
+	RunE:              runPlaylistTargets,
 }
 
 func init() {
 	playlistTargetsCmd.Flags().String("set", "", "Comma-separated target names to set (may be empty)")
+	playlistTargetsCmd.RegisterFlagCompletionFunc("set", completion.CommaSeparated(target.Names))
 	playlistTargetsCmd.Flags().Bool("clear", false, "Remove the #TARGETS: directive entirely")
 	playlistCmd.AddCommand(playlistTargetsCmd)
 }

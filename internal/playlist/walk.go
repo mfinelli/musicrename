@@ -81,7 +81,7 @@ func WalkTree(libraryRootRoot string, fn func(path string) error) error {
 		if d.IsDir() {
 			return nil
 		}
-		if strings.ToLower(filepath.Ext(path)) != ".m3u8" {
+		if strings.ToLower(filepath.Ext(path)) != Ext {
 			return nil
 		}
 		return fn(path)

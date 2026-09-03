@@ -251,3 +251,48 @@ func TestArtistFolderPath(t *testing.T) {
 		assert.Equal(t, filepath.Join("d", "dave matthews band"), path)
 	})
 }
+
+func TestIsVideoExt(t *testing.T) {
+	t.Run("returns true for recognized video extensions", func(t *testing.T) {
+		for _, ext := range []string{".mp4", ".webm", ".mkv"} {
+			assert.True(t, IsVideoExt(ext), "expected %q to be a video extension", ext)
+		}
+	})
+
+	t.Run("returns false for non-video extensions", func(t *testing.T) {
+		for _, ext := range []string{".flac", ".jpg", ".m3u8", ""} {
+			assert.False(t, IsVideoExt(ext), "did not expect %q to be a video extension", ext)
+		}
+	})
+
+	t.Run("comparison is case-insensitive", func(t *testing.T) {
+		assert.True(t, IsVideoExt(".MP4"))
+		assert.True(t, IsVideoExt(".Webm"))
+	})
+}
+
+func TestVideoExtensions(t *testing.T) {
+	t.Run("every extension is recognized by IsVideoExt with a leading dot added", func(t *testing.T) {
+		for _, ext := range VideoExtensions {
+			assert.True(t, IsVideoExt("."+ext), "expected %q to be a video extension", ext)
+		}
+	})
+
+	t.Run("stays in the expected stable order", func(t *testing.T) {
+		assert.Equal(t, []string{"mp4", "webm", "mkv"}, VideoExtensions)
+	})
+}
+
+func TestDottedExtList(t *testing.T) {
+	t.Run("renders VideoExtensions as a comma-separated, dotted list", func(t *testing.T) {
+		assert.Equal(t, ".mp4, .webm, .mkv", DottedExtList(VideoExtensions))
+	})
+
+	t.Run("handles a single-element slice with no separator", func(t *testing.T) {
+		assert.Equal(t, ".flac", DottedExtList([]string{"flac"}))
+	})
+
+	t.Run("handles an empty slice", func(t *testing.T) {
+		assert.Equal(t, "", DottedExtList(nil))
+	})
+}

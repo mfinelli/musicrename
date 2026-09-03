@@ -67,7 +67,7 @@ func Create(libraryRootRoot string, opts CreateOptions) (path, warning string, e
 	}
 
 	playlistsDir := Dir(libraryRootRoot)
-	rel := stem + ".m3u8"
+	rel := stem + Ext
 	dest := filepath.Join(playlistsDir, rel)
 
 	if _, statErr := os.Stat(dest); statErr == nil {

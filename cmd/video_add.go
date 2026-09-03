@@ -47,7 +47,7 @@ If video-root is omitted it defaults to the current working directory.`,
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			// Restrict file completion to supported video extensions.
-			return []string{"mp4", "webm", "mkv"}, cobra.ShellCompDirectiveFilterFileExt
+			return video.VideoExtensions, cobra.ShellCompDirectiveFilterFileExt
 		}
 		// video-root: fall back to normal directory/file completion.
 		return nil, cobra.ShellCompDirectiveDefault

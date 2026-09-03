@@ -78,8 +78,8 @@ func newPlaylistFilename(playlistsDir, name string) string {
 
 	candidate := stem
 	for i := 2; ; i++ {
-		if _, err := os.Stat(filepath.Join(playlistsDir, candidate+".m3u8")); os.IsNotExist(err) {
-			return candidate + ".m3u8"
+		if _, err := os.Stat(filepath.Join(playlistsDir, candidate+playlist.Ext)); os.IsNotExist(err) {
+			return candidate + playlist.Ext
 		}
 		candidate = fmt.Sprintf("%s-%d", stem, i)
 	}

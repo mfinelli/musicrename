@@ -26,6 +26,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
@@ -44,8 +45,9 @@ but never auto-matched by --artist/--album (since there's nothing to match
 against); it stays unless explicitly unchecked in interactive mode.
 
 playlist must already exist.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runPlaylistEntriesRemove,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completion.PlaylistArg,
+	RunE:              runPlaylistEntriesRemove,
 }
 
 func init() {

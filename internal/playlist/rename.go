@@ -97,7 +97,7 @@ func PlanRenames(libraryRootRoot string) (ops []RenameOp, skipped []Skipped, err
 			return nil
 		}
 
-		newPath := filepath.Join(filepath.Dir(path), stem+".m3u8")
+		newPath := filepath.Join(filepath.Dir(path), stem+Ext)
 		if newPath == path {
 			// Already correctly named; nothing to do.
 			return nil

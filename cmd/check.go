@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/checker"
+	"github.com/mfinelli/musicrename/internal/metadata"
 )
 
 var (
@@ -57,6 +58,11 @@ If path is omitted it defaults to the current working directory.
 Exits with a non-zero status code when any findings are present, enabling use
 in scripts.`,
 	Args: cobra.MaximumNArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Either an audio file or a directory is valid here, so fall back
+		// to normal completion rather than filtering to audio extensions.
+		return nil, cobra.ShellCompDirectiveDefault
+	},
 	RunE: runCheck,
 }
 
@@ -85,15 +91,13 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	if !info.IsDir() {
 		// Single audio file mode.
 		ext := strings.ToLower(filepath.Ext(absPath))
-		switch ext {
-		case ".flac", ".mp3", ".m4a":
-			return runCheckTrack(out, absPath)
-		default:
+		if !metadata.IsAudioExt(ext) {
 			return fmt.Errorf(
-				"%q is not a supported audio file (expected .flac, .mp3, or .m4a)",
-				filepath.Base(absPath),
+				"%q is not a supported audio file (expected one of: %s)",
+				filepath.Base(absPath), metadata.DottedExtList(metadata.AudioExtensions),
 			)
 		}
+		return runCheckTrack(out, absPath)
 	}
 
 	// Directory mode: check whether the directory directly contains audio to

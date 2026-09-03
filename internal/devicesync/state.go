@@ -29,6 +29,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/playlist"
 	"github.com/mfinelli/musicrename/internal/target"
 	"github.com/mfinelli/musicrename/internal/transcode"
+	"github.com/mfinelli/musicrename/internal/video"
 )
 
 // DesiredEntry identifies one file that should exist on a target device, as
@@ -120,10 +121,6 @@ func findPrimaryArt(albumDir string) (name string, found bool, err error) {
 	return "", false, nil
 }
 
-// videoExts are the source video extensions [deviceRelFor] recognizes,
-// matching internal/video's recognized set exactly (duplicated here).
-var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mkv": true}
-
 // deviceRelFor returns the on-device relative path for a desired entry's
 // source-relative path rel, given def (which may differ from rel itself
 // whenever the on-device file's extension isn't the same as the source's).
@@ -167,7 +164,7 @@ func deviceRelFor(rel string, def target.Definition) string {
 
 	ext := strings.ToLower(filepath.Ext(rel))
 
-	if videoExts[ext] || ext == transcode.VideoExt {
+	if video.IsVideoExt(ext) || ext == transcode.VideoExt {
 		// The second condition covers a source rel that's already
 		// .mpg even if that's not something a real DesiredEntry's Rel
 		// is ever expected to be (a video's *source* extension is

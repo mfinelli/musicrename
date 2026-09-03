@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/navidrome"
 	"github.com/mfinelli/musicrename/internal/navidromesync"
 	"github.com/mfinelli/musicrename/internal/playlist"
@@ -48,8 +49,9 @@ current filesystem state.
 
 Prompts for confirmation before doing anything, since this is destructive
 both locally and remotely and cannot be undone; --yes skips the prompt.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runSyncNavidromeDelete,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completion.PlaylistArg,
+	RunE:              runSyncNavidromeDelete,
 }
 
 func init() {

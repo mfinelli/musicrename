@@ -26,6 +26,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestExtension(t *testing.T) {
+	t.Run("Ext is Extension with a leading dot", func(t *testing.T) {
+		assert.Equal(t, ".m3u8", Ext)
+		assert.Equal(t, "m3u8", Extension)
+		assert.Equal(t, "."+Extension, Ext)
+	})
+}
+
 func TestManifestFilename(t *testing.T) {
 	assert.Equal(t, "ipod.m3u8", ManifestFilename("ipod"))
 	assert.Equal(t, "sdcard.m3u8", ManifestFilename("sdcard"))

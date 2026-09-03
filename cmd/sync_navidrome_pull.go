@@ -28,6 +28,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/navidrome"
 	"github.com/mfinelli/musicrename/internal/navidromesync"
 )
@@ -54,8 +55,9 @@ of the filesystem is current; --skip-scan bypasses this when it's already
 known to be fresh.
 
 --dry-run prints what would happen without changing any files.`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runSyncNavidromePull,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completion.PlaylistArg,
+	RunE:              runSyncNavidromePull,
 }
 
 func init() {

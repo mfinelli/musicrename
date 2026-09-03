@@ -26,6 +26,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
@@ -50,6 +51,14 @@ turn this off.
 
 playlist must already exist.`,
 	Args: cobra.RangeArgs(1, 2),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return completion.PlaylistArg(cmd, args, toComplete)
+		}
+		// The [fields] argument: a comma-separated list drawn from
+		// playlist.ValidSortFieldNames.
+		return completion.CommaSeparated(playlist.ValidSortFieldNames)(cmd, args, toComplete)
+	},
 	RunE: runPlaylistSort,
 }
 
@@ -217,11 +226,8 @@ func parseSortFieldList(spec []string) ([]playlist.SortField, error) {
 	fields := make([]playlist.SortField, 0, len(spec))
 	for _, p := range spec {
 		if !playlist.ValidSortField(p) {
-			names := make([]string, len(playlist.ValidSortFields))
-			for i, f := range playlist.ValidSortFields {
-				names[i] = string(f)
-			}
-			return nil, fmt.Errorf("unknown sort field %q; valid fields are: %s", p, strings.Join(names, ", "))
+			return nil, fmt.Errorf("unknown sort field %q; valid fields are: %s",
+				p, strings.Join(playlist.ValidSortFieldNames, ", "))
 		}
 		fields = append(fields, playlist.SortField(p))
 	}

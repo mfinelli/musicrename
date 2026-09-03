@@ -49,6 +49,11 @@ In single-video mode, an existing sums.md5 is always an error unless --force
 is passed. In video-root mode, video directories that already have a
 sums.md5 are silently skipped; pass --force to regenerate them all.`,
 	Args: cobra.MaximumNArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// path here is always a directory (a single video's
+		// directory, or a video-root) and not the video file itself.
+		return nil, cobra.ShellCompDirectiveFilterDirs
+	},
 	RunE: runVideoSums,
 }
 
@@ -94,16 +99,12 @@ func dirIsVideoDir(dir string) (bool, error) {
 		return false, err
 	}
 	for _, e := range entries {
-		if !e.IsDir() && videoSumsExts[strings.ToLower(filepath.Ext(e.Name()))] {
+		if !e.IsDir() && video.IsVideoExt(strings.ToLower(filepath.Ext(e.Name()))) {
 			return true, nil
 		}
 	}
 	return false, nil
 }
-
-// videoSumsExts mirrors the video extension set used by internal/video.
-// Duplicated here for the same reason sums.go duplicates sumsAudioExts.
-var videoSumsExts = map[string]bool{".mp4": true, ".webm": true, ".mkv": true}
 
 // runVideoSumsSingle generates sums.md5 for a single video's directory. It
 // refuses to proceed if sums.md5 already exists unless force is true.

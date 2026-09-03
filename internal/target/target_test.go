@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValid(t *testing.T) {
@@ -46,4 +47,29 @@ func TestValid(t *testing.T) {
 func TestSrcSumsFilename(t *testing.T) {
 	assert.Equal(t, "ipod.src.md5", SrcSumsFilename("ipod"))
 	assert.Equal(t, "sdcard.src.md5", SrcSumsFilename("sdcard"))
+}
+
+func TestVideoCapableNames(t *testing.T) {
+	t.Run("every name is in Names and actually supports video", func(t *testing.T) {
+		for _, n := range VideoCapableNames {
+			assert.True(t, Valid(n), "expected %q to be a valid target", n)
+			def, ok := DefinitionFor(n)
+			require.True(t, ok, "expected a Definition for %q", n)
+			assert.True(t, def.SupportsVideo, "%q is in VideoCapableNames but its Definition doesn't support video", n)
+		}
+	})
+
+	t.Run("every video-capable name in Names is included", func(t *testing.T) {
+		for _, n := range Names {
+			def, ok := DefinitionFor(n)
+			require.True(t, ok)
+			if def.SupportsVideo {
+				assert.Contains(t, VideoCapableNames, n)
+			}
+		}
+	})
+
+	t.Run("matches the current known set (ipod only)", func(t *testing.T) {
+		assert.Equal(t, []string{"ipod"}, VideoCapableNames)
+	})
 }

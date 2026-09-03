@@ -40,6 +40,22 @@ func TestValidSortField(t *testing.T) {
 	})
 }
 
+func TestValidSortFieldNames(t *testing.T) {
+	t.Run("is ValidSortFields as plain strings, same order", func(t *testing.T) {
+		wantNames := make([]string, len(ValidSortFields))
+		for i, f := range ValidSortFields {
+			wantNames[i] = string(f)
+		}
+		assert.Equal(t, wantNames, ValidSortFieldNames)
+	})
+
+	t.Run("every name is itself a valid sort field", func(t *testing.T) {
+		for _, n := range ValidSortFieldNames {
+			assert.True(t, ValidSortField(n))
+		}
+	})
+}
+
 func TestSortEntries(t *testing.T) {
 	rowFor := func(rel string, track *metadata.Track) EntryRow {
 		return EntryRow{Rel: rel, Track: track}

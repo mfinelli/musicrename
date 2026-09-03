@@ -27,6 +27,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/artwork"
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/video"
 )
 
 // ExecuteResult summarizes what Execute actually did (or, in dry-run mode,
@@ -221,7 +222,7 @@ func executeAlbum(
 		switch {
 		case isArtworkName(sourceName):
 			writeErr = artwork.ResizeFile(sourcePath, destPath, def.ArtMaxDimension)
-		case videoExts[strings.ToLower(filepath.Ext(sourceName))]:
+		case video.IsVideoExt(strings.ToLower(filepath.Ext(sourceName))):
 			// A video (unlike audio) always transcodes, matching
 			// deviceRelFor's own unconditional video handling above;
 			// there's no passthrough case here.

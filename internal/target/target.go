@@ -31,6 +31,20 @@ func Valid(name string) bool {
 	return slices.Contains(Names, name)
 }
 
+// VideoCapableNames lists every target name whose Definition has
+// SupportsVideo set, in the same stable order as Names.
+var VideoCapableNames = videoCapableNames()
+
+func videoCapableNames() []string {
+	names := make([]string, 0, len(Names))
+	for _, n := range Names {
+		if def, ok := DefinitionFor(n); ok && def.SupportsVideo {
+			names = append(names, n)
+		}
+	}
+	return names
+}
+
 // SrcSumsFilename returns the on-device {target}.src.md5 sidecar filename
 // for the given target: the source-hash record for a derived file (transcoded
 // audio, resized artwork), sharing the same md5sum-compatible line format as

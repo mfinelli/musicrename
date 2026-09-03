@@ -54,7 +54,7 @@ an error (even with --force) so you need resolve it manually first.`,
 	Args: cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		// Restrict file completion to supported video extensions.
-		return []string{"mp4", "webm", "mkv"}, cobra.ShellCompDirectiveFilterFileExt
+		return video.VideoExtensions, cobra.ShellCompDirectiveFilterFileExt
 	},
 	RunE: runVideoExtractAudio,
 }
@@ -69,13 +69,10 @@ func runVideoExtractAudio(cmd *cobra.Command, args []string) error {
 	path := args[0]
 
 	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".mp4", ".webm", ".mkv":
-		// supported
-	default:
+	if !video.IsVideoExt(ext) {
 		return fmt.Errorf(
-			"%q is not a supported video file (expected .mp4, .webm, or .mkv)",
-			filepath.Base(path),
+			"%q is not a supported video file (expected one of: %s)",
+			filepath.Base(path), video.DottedExtList(video.VideoExtensions),
 		)
 	}
 

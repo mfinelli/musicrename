@@ -45,6 +45,19 @@ var ValidSortFields = []SortField{
 	SortArtist, SortAlbumArtist, SortAlbum, SortYear, SortDisc, SortTrack, SortTitle,
 }
 
+// ValidSortFieldNames is [ValidSortFields] as plain strings, derived
+// so the two can never drift apart. Exported for callers that need the bare
+// string form.
+var ValidSortFieldNames = validSortFieldNames()
+
+func validSortFieldNames() []string {
+	names := make([]string, len(ValidSortFields))
+	for i, f := range ValidSortFields {
+		names[i] = string(f)
+	}
+	return names
+}
+
 // ValidSortField reports whether s names a recognized SortField.
 func ValidSortField(s string) bool {
 	for _, f := range ValidSortFields {

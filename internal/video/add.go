@@ -32,8 +32,45 @@ import (
 // NFOFilename is the fixed sidecar filename within a video's directory.
 const NFOFilename = "musicvideo.nfo"
 
-// videoExts is the set of file extensions recognized as video files.
-var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mkv": true}
+// VideoExtensions lists every recognized video file extension without the
+// leading dot (e.g. "mp4"), in a stable order. videoExts, used for fast
+// lookup elsewhere in this file, is derived from this slice so the two can
+// never drift apart.
+var VideoExtensions = []string{"mp4", "webm", "mkv"}
+
+// videoExts is the set of file extensions (with the leading dot) recognized
+// as video files, derived from VideoExtensions.
+var videoExts = dottedExtSet(VideoExtensions)
+
+// IsVideoExt reports whether ext (including the leading dot, e.g. ".mp4")
+// is a recognized video file extension. Comparison is case-insensitive.
+func IsVideoExt(ext string) bool {
+	return videoExts[strings.ToLower(ext)]
+}
+
+// dottedExtSet builds a lookup set (e.g. {".mp4": true}) from a slice of
+// bare extensions (e.g. []string{"mp4"}), for extension slices that are
+// authored without their leading dot (the form cobra's
+// ShellCompDirectiveFilterFileExt expects) but are also checked against
+// filepath.Ext's dotted output elsewhere.
+func dottedExtSet(exts []string) map[string]bool {
+	set := make(map[string]bool, len(exts))
+	for _, e := range exts {
+		set["."+e] = true
+	}
+	return set
+}
+
+// DottedExtList renders a bare extension slice (e.g. VideoExtensions) as a
+// comma-separated, dotted list (".mp4, .webm, .mkv") for error messages and
+// help text.
+func DottedExtList(exts []string) string {
+	dotted := make([]string, len(exts))
+	for i, e := range exts {
+		dotted[i] = "." + e
+	}
+	return strings.Join(dotted, ", ")
+}
 
 // videoFilesIn returns every file directly inside dir with a recognized
 // video extension, in directory-entry order. Shared primitive behind
@@ -108,9 +145,10 @@ func Add(videoRoot string, in AddInput) (*AddResult, error) {
 	}
 
 	ext := strings.ToLower(filepath.Ext(in.SourcePath))
-	if !videoExts[ext] {
+	if !IsVideoExt(ext) {
 		return nil, fmt.Errorf(
-			"unsupported video extension %q (expected .mp4, .webm, or .mkv)", ext,
+			"unsupported video extension %q (expected one of: %s)",
+			ext, DottedExtList(VideoExtensions),
 		)
 	}
 

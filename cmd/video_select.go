@@ -47,6 +47,15 @@ target must support video; this refuses outright for one that doesn't.
 
 If video-root is omitted it defaults to the current working directory.`,
 	Args: cobra.RangeArgs(1, 2),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			// Only video-capable targets are valid here; target must
+			// support video, matching runVideoSelect's own check below.
+			return target.VideoCapableNames, cobra.ShellCompDirectiveNoFileComp
+		}
+		// video-root: fall back to normal directory/file completion.
+		return nil, cobra.ShellCompDirectiveDefault
+	},
 	RunE: runVideoSelect,
 }
 

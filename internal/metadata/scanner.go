@@ -26,9 +26,17 @@ import (
 	"github.com/mfinelli/musicrename/internal/hasher"
 )
 
+// AudioExtensions lists every recognized audio file extension without the
+// leading dot (e.g. "flac"), in a stable order. Exported so callers outside
+// this package share the same set instead of each hand-typing their own copy.
+// audioExts, used for fast lookup elsewhere in this file, is derived from
+// this slice so the two can never drift apart.
+var AudioExtensions = []string{"flac", "mp3", "m4a"}
+
 var (
-	// audioExts is the set of file extensions treated as audio tracks.
-	audioExts = map[string]bool{".flac": true, ".mp3": true, ".m4a": true}
+	// audioExts is the set of file extensions (with the leading dot) treated
+	// as audio tracks, derived from AudioExtensions.
+	audioExts = dottedExtSet(AudioExtensions)
 
 	// textExts is the set of file extensions treated as plain-text metadata
 	// files that live at the album root (e.g. ripping logs, cue sheets).
@@ -54,6 +62,32 @@ var (
 // extension set.
 func IsAudioExt(ext string) bool {
 	return audioExts[strings.ToLower(ext)]
+}
+
+// dottedExtSet builds a lookup set (e.g. {".flac": true}) from a slice of
+// bare extensions (e.g. []string{"flac"}), for extension slices that are
+// authored without their leading dot (the form cobra's
+// ShellCompDirectiveFilterFileExt expects) but are also checked against
+// filepath.Ext's dotted output elsewhere.
+func dottedExtSet(exts []string) map[string]bool {
+	set := make(map[string]bool, len(exts))
+	for _, e := range exts {
+		set["."+e] = true
+	}
+	return set
+}
+
+// DottedExtList renders a bare extension slice (e.g. AudioExtensions) as a
+// comma-separated, dotted list (".flac, .mp3, .m4a") for error messages and
+// help text. Exported so cmd-layer callers building "not a supported audio
+// file" style errors share the same rendering instead of hand-typing the
+// list themselves.
+func DottedExtList(exts []string) string {
+	dotted := make([]string, len(exts))
+	for i, e := range exts {
+		dotted[i] = "." + e
+	}
+	return strings.Join(dotted, ", ")
 }
 
 // categorizeRootFile determines the category of a file at the album root level.

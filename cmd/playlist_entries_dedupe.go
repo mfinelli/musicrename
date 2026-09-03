@@ -24,6 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
 
@@ -37,8 +38,9 @@ occurrence; every other entry's relative order is left unchanged.
 duplicates are found; --dry-run previews what would be removed.
 
 playlist must already exist.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runPlaylistEntriesDedupe,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completion.PlaylistArg,
+	RunE:              runPlaylistEntriesDedupe,
 }
 
 func init() {

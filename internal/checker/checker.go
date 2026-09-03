@@ -544,7 +544,7 @@ func checkPlaylists(album *metadata.Album, ar *AlbumResult) {
 	}
 
 	for _, path := range album.Assets[metadata.CatRootText] {
-		if strings.ToLower(filepath.Ext(path)) != ".m3u8" {
+		if strings.ToLower(filepath.Ext(path)) != playlist.Ext {
 			continue
 		}
 

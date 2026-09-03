@@ -28,10 +28,20 @@ import (
 	"strings"
 )
 
+// Extension is the file extension (without the leading dot) used for both
+// album-local target-selection manifests (ipod.m3u8, sdcard.m3u8) and
+// library-wide playlist files (playlists/*.m3u8). The two share a format
+// (extended M3U) even though their content conventions differ.
+const Extension = "m3u8"
+
+// Ext is [Extension] with its leading dot (".m3u8"), the form matched
+// against filepath.Ext's output.
+const Ext = "." + Extension
+
 // ManifestFilename returns the album-local selection manifest filename for
 // the given target, e.g. "ipod.m3u8".
 func ManifestFilename(target string) string {
-	return target + ".m3u8"
+	return target + Ext
 }
 
 // ReadManifest returns the filenames currently listed in albumDir's

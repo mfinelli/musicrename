@@ -29,6 +29,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.senan.xyz/taglib"
 
+	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
 
@@ -51,7 +52,7 @@ sanitized equivalents (the values that would be used when renaming).`,
 	Args: cobra.ExactArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		// Restrict file completion to supported audio extensions.
-		return []string{"flac", "mp3", "m4a"}, cobra.ShellCompDirectiveFilterFileExt
+		return metadata.AudioExtensions, cobra.ShellCompDirectiveFilterFileExt
 	},
 	RunE: runInspect,
 }
@@ -64,13 +65,10 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	path := args[0]
 
 	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".flac", ".mp3", ".m4a":
-		// supported
-	default:
+	if !metadata.IsAudioExt(ext) {
 		return fmt.Errorf(
-			"%q is not a supported audio file (expected .flac, .mp3, or .m4a)",
-			filepath.Base(path),
+			"%q is not a supported audio file (expected one of: %s)",
+			filepath.Base(path), metadata.DottedExtList(metadata.AudioExtensions),
 		)
 	}
 

@@ -29,6 +29,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/devicesync"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/playlist"
@@ -61,6 +62,15 @@ staged across the whole session while ctrl+c discards all changes.
 playlist must already exist (use 'playlist create' to scaffold a new one
 first).`,
 	Args: cobra.MinimumNArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return completion.PlaylistArg(cmd, args, toComplete)
+		}
+		// Subsequent [path]... arguments are library files (audio tracks,
+		// or derived-audio files under the video root), not restricted to
+		// a single extension set, so fall back to normal completion.
+		return nil, cobra.ShellCompDirectiveDefault
+	},
 	RunE: runPlaylistEntriesAdd,
 }
 

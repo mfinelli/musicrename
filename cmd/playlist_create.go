@@ -24,6 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
 	"github.com/mfinelli/musicrename/internal/target"
 )
@@ -33,7 +34,7 @@ var playlistCreateCmd = &cobra.Command{
 	Short: "Scaffold a new library-wide playlist file",
 	Long: `Creates a new file under library-root-root's playlists/ tree with a
 #PLAYLIST: directive set to name (and a #TARGETS: directive, if --targets is
-given) and no entries. 
+given) and no entries.
 
 An existing file at the destination is an error; this command never overwrites
 a file.
@@ -49,6 +50,7 @@ directory.`,
 func init() {
 	playlistCreateCmd.Flags().String("targets", "",
 		"Comma-separated target names (e.g. ipod,sdcard); omit the flag entirely for every target")
+	playlistCreateCmd.RegisterFlagCompletionFunc("targets", completion.CommaSeparated(target.Names))
 	playlistCmd.AddCommand(playlistCreateCmd)
 }
 

@@ -51,6 +51,14 @@ If path is omitted it defaults to the current working directory.
 
 Exits with a non-zero status code when any findings are present.`,
 	Args: cobra.MaximumNArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Unlike audio's check/lyrics/sums, path here is always a
+		// directory (a single video's directory, or a video-root) and
+		// not the video file itself, so completion can be usefully
+		// restricted to directories rather than falling back to
+		// unfiltered default completion.
+		return nil, cobra.ShellCompDirectiveFilterDirs
+	},
 	RunE: runVideoCheck,
 }
 

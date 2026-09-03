@@ -28,6 +28,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/playlist"
 )
@@ -59,8 +60,9 @@ afterward, filling in as each file is read but you can reorder freely while
 it's still loading.
 
 playlist must already exist.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runPlaylistEntriesReorder,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completion.PlaylistArg,
+	RunE:              runPlaylistEntriesReorder,
 }
 
 func init() {

@@ -43,9 +43,6 @@ var (
 	lyricsFailedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("9")) // red
 )
 
-// lyricsAudioExts mirrors the audio extension set used by the metadata package.
-var lyricsAudioExts = map[string]bool{".flac": true, ".mp3": true, ".m4a": true}
-
 var lyricsCmd = &cobra.Command{
 	Use:   "lyrics [path]",
 	Short: "Fetch and embed lyrics from LRCLIB",
@@ -66,6 +63,11 @@ If path is omitted it defaults to the current working directory.
 
 Existing lyrics tags are never overwritten unless --force is passed.`,
 	Args: cobra.MaximumNArgs(1),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Either an audio file or a directory is valid here, so fall back
+		// to normal completion rather than filtering to audio extensions.
+		return nil, cobra.ShellCompDirectiveDefault
+	},
 	RunE: runLyrics,
 }
 
@@ -96,8 +98,9 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 
 	if !info.IsDir() {
 		ext := strings.ToLower(filepath.Ext(abs))
-		if !lyricsAudioExts[ext] {
-			return fmt.Errorf("%s is not a supported audio file (.flac, .mp3, .m4a)", abs)
+		if !metadata.IsAudioExt(ext) {
+			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
+				abs, metadata.DottedExtList(metadata.AudioExtensions))
 		}
 		return runLyricsTrack(ctx, out, abs, force)
 	}
@@ -120,7 +123,7 @@ func lyricsIsAlbumRoot(dir string) (bool, error) {
 		return false, err
 	}
 	for _, e := range entries {
-		if !e.IsDir() && lyricsAudioExts[strings.ToLower(filepath.Ext(e.Name()))] {
+		if !e.IsDir() && metadata.IsAudioExt(strings.ToLower(filepath.Ext(e.Name()))) {
 			return true, nil
 		}
 	}
@@ -156,7 +159,7 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool) 
 
 	var paths []string
 	for _, e := range entries {
-		if !e.IsDir() && lyricsAudioExts[strings.ToLower(filepath.Ext(e.Name()))] {
+		if !e.IsDir() && metadata.IsAudioExt(strings.ToLower(filepath.Ext(e.Name()))) {
 			paths = append(paths, filepath.Join(dir, e.Name()))
 		}
 	}

@@ -26,6 +26,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/navidrome"
 	"github.com/mfinelli/musicrename/internal/navidromesync"
 )
@@ -55,8 +56,9 @@ known to be fresh.
 
 --dry-run prints what would happen without changing anything, locally or
 remotely.`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runSyncNavidromePush,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completion.PlaylistArg,
+	RunE:              runSyncNavidromePush,
 }
 
 func init() {

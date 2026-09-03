@@ -109,6 +109,32 @@ func TestIsAudioExt(t *testing.T) {
 	})
 }
 
+func TestAudioExtensions(t *testing.T) {
+	t.Run("every extension is recognized by IsAudioExt with a leading dot added", func(t *testing.T) {
+		for _, ext := range AudioExtensions {
+			assert.True(t, IsAudioExt("."+ext), "expected %q to be an audio extension", ext)
+		}
+	})
+
+	t.Run("stays in the expected stable order", func(t *testing.T) {
+		assert.Equal(t, []string{"flac", "mp3", "m4a"}, AudioExtensions)
+	})
+}
+
+func TestDottedExtList(t *testing.T) {
+	t.Run("renders AudioExtensions as a comma-separated, dotted list", func(t *testing.T) {
+		assert.Equal(t, ".flac, .mp3, .m4a", DottedExtList(AudioExtensions))
+	})
+
+	t.Run("handles a single-element slice with no separator", func(t *testing.T) {
+		assert.Equal(t, ".mp4", DottedExtList([]string{"mp4"}))
+	})
+
+	t.Run("handles an empty slice", func(t *testing.T) {
+		assert.Equal(t, "", DottedExtList(nil))
+	})
+}
+
 func TestProcessDirectory(t *testing.T) {
 	t.Run("empty directory is not an album", func(t *testing.T) {
 		dir := t.TempDir()
