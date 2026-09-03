@@ -4,6 +4,20 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v4.2.0 — 2026-09-03
+
+Add `video extract-audio`, which remuxes a video's audio stream into a
+standalone tagged file which can be used for tracks that only ever existed as a
+music video, making them reachable via Navidrome and syncable to targets without
+video support. `playlist entries add`'s interactive browser can now reach into
+the `videos/` library root to add these derived audio tracks to a playlist.
+
+Add video device sync. `video select` chooses which videos sync to a target, the
+same way `playlist select` does for audio tracks. Selected videos are transcoded
+to MPEG-2 video / MP3 audio in an MPEG Program Stream (the only format Rockbox's
+`MPEGplayer` plugin can decode). Videos are now synced alongside audio when
+running `sync ipod`.
+
 ## v4.1.0 — 2026-09-01
 
 Round out global playlist management: `playlist create`/`targets` scaffold and
