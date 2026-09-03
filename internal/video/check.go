@@ -69,10 +69,16 @@ func (r *CheckResult) HasWarnings() bool {
 //     the directory's current file listing (a pure listing comparison via
 //     hasher.DiffEntries, performed without hashing anything; verifying the
 //     checksums themselves is out of scope, use `md5sum -c sums.md5`).
+//   - a derived audio file, if present, has tags matching musicvideo.nfo
+//     (drift after a `video edit` that wasn't followed by `video
+//     extract-audio --retag`) and content that isn't stale relative to the
+//     video (drift after the video's actual content changed). More than one
+//     derived audio file, or an audio.src.md5 with no corresponding derived
+//     file, is its own finding.
 func Check(dir, videoRoot string) (*CheckResult, error) {
 	result := &CheckResult{}
 
-	videoPath, soleErr := soleVideoFile(dir)
+	videoPath, soleErr := SoleVideoFile(dir)
 	if soleErr != nil {
 		result.Warnings = append(result.Warnings, Warning{Path: dir, Message: soleErr.Error()})
 	}
@@ -86,9 +92,10 @@ func Check(dir, videoRoot string) (*CheckResult, error) {
 		return nil, fmt.Errorf("reading nfo in %s: %w", dir, err)
 	}
 
+	var titleOK, artistOK bool
 	if nfo != nil {
-		titleOK := strings.TrimSpace(nfo.Title) != ""
-		artistOK := strings.TrimSpace(nfo.Artist) != ""
+		titleOK = strings.TrimSpace(nfo.Title) != ""
+		artistOK = strings.TrimSpace(nfo.Artist) != ""
 		if !titleOK {
 			result.Warnings = append(result.Warnings, Warning{Path: dir, Message: "musicvideo.nfo missing title"})
 		}
@@ -105,6 +112,49 @@ func Check(dir, videoRoot string) (*CheckResult, error) {
 					Message: fmt.Sprintf("path does not match musicvideo.nfo (expected %s)", wantDir),
 				})
 			}
+		}
+	}
+
+	// Derived audio, if any. Only meaningful with a confirmed single
+	// video file (soleErr == nil), since videoPath itself isn't
+	// trustworthy otherwise.
+	if soleErr == nil {
+		audioFiles, aerr := DerivedAudioFiles(videoPath)
+		if aerr != nil {
+			return nil, fmt.Errorf("finding derived audio in %s: %w", dir, aerr)
+		}
+
+		switch len(audioFiles) {
+		case 0:
+			if _, err := os.Stat(filepath.Join(dir, AudioSrcSumsFilename)); err == nil {
+				result.Warnings = append(result.Warnings, Warning{
+					Path: dir, Message: "audio.src.md5 exists but no derived audio file was found",
+				})
+			}
+		case 1:
+			audioPath := audioFiles[0]
+
+			if nfo != nil && titleOK && artistOK {
+				msg, terr := derivedAudioTagDriftMessage(audioPath, *nfo)
+				if terr != nil {
+					return nil, fmt.Errorf("reading tags for %s: %w", audioPath, terr)
+				}
+				if msg != "" {
+					result.Warnings = append(result.Warnings, Warning{Path: dir, Message: msg})
+				}
+			}
+
+			msg, cerr := derivedAudioContentDriftMessage(dir, videoPath)
+			if cerr != nil {
+				return nil, fmt.Errorf("checking derived audio freshness in %s: %w", dir, cerr)
+			}
+			if msg != "" {
+				result.Warnings = append(result.Warnings, Warning{Path: dir, Message: msg})
+			}
+		default:
+			result.Warnings = append(result.Warnings, Warning{
+				Path: dir, Message: "multiple derived audio files found",
+			})
 		}
 	}
 

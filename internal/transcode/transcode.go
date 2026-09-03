@@ -15,10 +15,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Package transcode shells out to ffmpeg to convert an audio file's codec
-// for a sync target, mirroring the yt-dlp shell-out pattern already used for
-// music video fetching (internal/video) rather than linking a codec library
-// directly.
+// Package transcode shells out to ffmpeg (and, for codec detection, ffprobe)
+// for audio-level operations: transcoding an audio file's codec for a sync
+// target, and remuxing a video's audio stream out into a standalone file
+// which mirrors the yt-dlp shell-out pattern already used for music video
+// fetching (internal/video) rather than linking a codec library directly.
 //
 // This package intentionally does nothing with tags or artwork.
 package transcode

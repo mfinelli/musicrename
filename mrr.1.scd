@@ -388,6 +388,11 @@ FLAC, MP3, and M4A tracks are copied through unchanged; nothing is
 transcoded for this target. Album artwork is resized to fit within 400
 pixels and shipped as a separate file alongside the tracks.
 
+Also syncs selected videos (see *mrr video select*), transcoding each to
+MPEG-2 video / MP3 audio in an MPEG Program Stream (the only format
+Rockbox's MPEGplayer plugin decodes). *--no-video* skips video entirely;
+*--video-only* skips audio and syncs only video.
+
 Compares the library against whatever is already on the device, checks
 that there's enough free space for the changes, then asks for
 confirmation before adding, updating, or removing anything on the
@@ -402,6 +407,10 @@ If _path_ is omitted it defaults to the current directory.
 	Skip the confirmation prompt.
 *--verbose*
 	List every file added, updated, or removed instead of just totals.
+*--no-video*
+	Skip video entirely, sync audio only.
+*--video-only*
+	Skip audio, sync only video.
 
 ## mrr sync sdcard <_device-path_> [_path_]
 
@@ -428,6 +437,10 @@ If _path_ is omitted it defaults to the current directory.
 	Skip the confirmation prompt.
 *--verbose*
 	List every file added, updated, or removed instead of just totals.
+*--no-video*
+	No effect on this target (no video support).
+*--video-only*
+	Errors: this target has no video support.
 
 ## mrr sync navidrome pull [_playlist_]
 
@@ -719,6 +732,39 @@ exits non-zero if any findings are present.
 Displays a video's raw and sanitized Title/Artist from *musicvideo.nfo*,
 alongside Album/Year as stored. Read-only.
 
+## mrr video extract-audio _file_
+
+Remuxes (not re-encodes) a video's audio stream into a standalone file next to
+it, tags it from *musicvideo.nfo*, and computes ReplayGain via *rsgain*.
+Requires an existing *musicvideo.nfo* with both artist and title set.
+
+By default, errors if a derived audio file already exists.
+
+*--retag*
+	Update only the derived audio file's tags (doesn't recompute
+	ReplayGain). For when *video edit* changed artist/title but the video's
+	actual content is unchanged.
+*--force*
+	Fully re-extract even if a derived audio file already exists. For when
+	the source video's actual content changed (e.g., a re-fetch).
+
+*--retag* and *--force* are mutually exclusive. More than one existing
+derived audio file for the video is an error, even with *--force* so you
+need resolve it manually first.
+
+## mrr video select _target_ [_video-root_]
+
+Opens an interactive directory browser scoped to _video-root_ for choosing
+which videos are selected to sync to _target_: arrow keys (or j/k) move the
+cursor, left/h/backspace goes up a level, right/l/enter descends into a
+bucket letter or, from there, opens a checkbox picker of that artist's
+videos. Press / to filter the current directory's listing by substring.
+Nothing is written until you leave the browser: esc/q at the top level saves
+the selection to _video-root_/_target_.m3u8, ctrl+c discards all changes.
+
+_target_ must support video. If _video-root_ is omitted it defaults to the
+current working directory.
+
 # SEE ALSO
 
-*md5sum*(1) *yt-dlp*(1)
+*ffmpeg*(1) *md5sum*(1) *rsgain*(1) *yt-dlp*(1)

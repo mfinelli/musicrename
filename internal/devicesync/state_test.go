@@ -435,6 +435,31 @@ func TestDeviceRelFor(t *testing.T) {
 		assert.Equal(t, "a/artist/album/folder.jpg", deviceRelFor("a/artist/album/folder.jpg", ipod))
 		assert.Equal(t, "a/artist/album/folder.jpg", deviceRelFor("a/artist/album/Folder.JPG", ipod))
 	})
+
+	t.Run("a video always becomes .mpg, regardless of source container", func(t *testing.T) {
+		assert.Equal(t, "b/beyonce/crazy in love/crazy in love.mpg",
+			deviceRelFor("b/beyonce/crazy in love/crazy in love.mp4", ipod))
+		assert.Equal(t, "b/beyonce/crazy in love/crazy in love.mpg",
+			deviceRelFor("b/beyonce/crazy in love/crazy in love.webm", ipod))
+		assert.Equal(t, "b/beyonce/crazy in love/crazy in love.mpg",
+			deviceRelFor("b/beyonce/crazy in love/crazy in love.mkv", ipod))
+	})
+
+	t.Run("an already-.mpg video is unchanged", func(t *testing.T) {
+		assert.Equal(t, "b/beyonce/crazy in love/crazy in love.mpg",
+			deviceRelFor("b/beyonce/crazy in love/crazy in love.mpg", ipod))
+	})
+
+	t.Run("a video's translation doesn't depend on the target's audio settings at all", func(t *testing.T) {
+		// sdcard has no video support, but deviceRelFor itself is a pure
+		// path-translation function with no SupportsVideo check so that
+		// gate belongs to whatever decides a video is even in scope for
+		// a given target in the first place (video select/sync), not
+		// here. Confirms this function doesn't (and shouldn't) need to
+		// know about SupportsVideo to do its one job correctly.
+		assert.Equal(t, "b/beyonce/crazy in love/crazy in love.mpg",
+			deviceRelFor("b/beyonce/crazy in love/crazy in love.mp4", sdcard))
+	})
 }
 
 func TestIsArtworkName(t *testing.T) {

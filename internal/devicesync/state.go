@@ -28,6 +28,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/playlist"
 	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/transcode"
 )
 
 // DesiredEntry identifies one file that should exist on a target device, as
@@ -119,13 +120,17 @@ func findPrimaryArt(albumDir string) (name string, found bool, err error) {
 	return "", false, nil
 }
 
+// videoExts are the source video extensions [deviceRelFor] recognizes,
+// matching internal/video's recognized set exactly (duplicated here).
+var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mkv": true}
+
 // deviceRelFor returns the on-device relative path for a desired entry's
 // source-relative path rel, given def (which may differ from rel itself
 // whenever the on-device file's extension isn't the same as the source's).
 //
 // This exists because a desired entry's own Rel always reflects the
 // *source* file (e.g., "01 track.flac"), not the target-specific result
-// of producing it but two of this project's established behaviors mean the
+// of producing it but three of this project's established behaviors mean the
 // two can differ:
 //
 //   - An audio file whose source extension isn't in def's accepted formats
@@ -136,6 +141,11 @@ func findPrimaryArt(albumDir string) (name string, found bool, err error) {
 //     (internal/artwork.Resize always outputs JPEG, even for an
 //     already-fitting source and a PNG source is always converted), so
 //     a "folder.png" source becomes "folder.jpg" on-device.
+//   - A video file always becomes .mpg on-device. Unlike audio, there's no
+//     "already accepted, copy through as-is" case for video at all: Rockbox's
+//     MPEGplayer plugin only decodes one specific format (MPEG-2 video / MP3
+//     audio, muxed as an MPEG Program Stream), never a source container/codec
+//     directly, regardless of what def otherwise accepts for audio.
 //
 // Without translating between the two, nothing that compares a source-keyed
 // desired entry against an on-device-keyed current entry  could ever match a
@@ -156,6 +166,19 @@ func deviceRelFor(rel string, def target.Definition) string {
 	}
 
 	ext := strings.ToLower(filepath.Ext(rel))
+
+	if videoExts[ext] || ext == transcode.VideoExt {
+		// The second condition covers a source rel that's already
+		// .mpg even if that's not something a real DesiredEntry's Rel
+		// is ever expected to be (a video's *source* extension is
+		// should always be  whatever yt-dlp downloaded), but
+		// deviceRelFor should still be idempotent on it rather than
+		// falling through to the audio-transcode-fallback branch
+		// below and producing something wrong.
+		stem := strings.TrimSuffix(rel, filepath.Ext(rel))
+		return stem + transcode.VideoExt
+	}
+
 	if def.Accepts(ext) {
 		return rel
 	}

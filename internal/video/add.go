@@ -37,7 +37,7 @@ var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mkv": true}
 
 // videoFilesIn returns every file directly inside dir with a recognized
 // video extension, in directory-entry order. Shared primitive behind
-// dirHasVideoFile (edit.go) and soleVideoFile (rename.go).
+// dirHasVideoFile (edit.go) and SoleVideoFile (rename.go).
 func videoFilesIn(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

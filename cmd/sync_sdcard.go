@@ -51,5 +51,7 @@ func init() {
 	syncSdcardCmd.Flags().Bool("dry-run", false, "Show the plan without changing anything")
 	syncSdcardCmd.Flags().Bool("yes", false, "Skip the confirmation prompt")
 	syncSdcardCmd.Flags().Bool("verbose", false, "Itemize every change instead of just the summary counts")
+	syncSdcardCmd.Flags().Bool("no-video", false, "No effect on this target (no video support)")
+	syncSdcardCmd.Flags().Bool("video-only", false, "Errors: this target has no video support")
 	syncCmd.AddCommand(syncSdcardCmd)
 }

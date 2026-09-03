@@ -29,6 +29,12 @@ type AudioFormat string
 // FormatMP3 is the MP3 audio format, encoded via libmp3lame.
 const FormatMP3 AudioFormat = "mp3"
 
+// FormatAAC is the AAC audio format (in an .m4a container), encoded via
+// ffmpeg's native "aac" encoder. Used as ipod's defensive fallback for a
+// derived-audio source format outside its accepted set; real library tracks
+// never hit this, since they're always already FLAC/MP3/M4A.
+const FormatAAC AudioFormat = "aac"
+
 // EncodeParams are the actual ffmpeg codec and arguments used to produce a
 // given AudioFormat: the one place codec-level specifics (which encoder,
 // which quality setting) live, so adding or tuning a format never requires
@@ -47,6 +53,12 @@ type EncodeParams struct {
 // settings.
 var encodeParams = map[AudioFormat]EncodeParams{
 	FormatMP3: {Codec: "libmp3lame", Args: []string{"-q:a", "0"}, Ext: ".mp3"},
+	// 256k is a plain constant-bitrate target, not a VBR quality level like
+	// FormatMP3's "-q:a 0": ffmpeg's native aac encoder doesn't have as
+	// well-established a VBR scale as libmp3lame's, so CBR is the more
+	// predictable, portable choice here. Roughly the same quality ballpark
+	// as FormatMP3's ~245kbps V0 target.
+	FormatAAC: {Codec: "aac", Args: []string{"-b:a", "256k"}, Ext: ".m4a"},
 }
 
 // EncodeParamsFor returns the encode parameters for format. ok is false
@@ -56,9 +68,44 @@ func EncodeParamsFor(format AudioFormat) (params EncodeParams, ok bool) {
 	return params, ok
 }
 
+// VideoScale is a target resolution to scale video to, kept as separate
+// width/height (not a "WxH" string) so callers can build the ffmpeg
+// -vf scale=... argument directly, no string parsing required.
+type VideoScale struct {
+	Width  int
+	Height int
+}
+
+// VideoTranscodeSettings are a video-capable target's encode parameters:
+// MPEG-2 video + MP3 audio muxed as an MPEG Program Stream, for Rockbox's
+// MPEGplayer plugin which is the only video format it decodes at all.
+//
+// Two separate scale targets are needed, because the correct one depends on
+// the source video's aspect ratio, and not anything about the target itself.
+// (VIDEO.md: real hardware testing found 4:3 content needs noticeably more
+// aggressive cropping than 16:9 content does to hold a stable framerate.)
+// Fullscreen/Widescreen name which of WinFF's two device-specific presets
+// ("RB Apple iPod Video Fullscreen"/"...Widescreen") applies to a given
+// source.
+//
+// These specific numbers are WinFF's Rockbox iPod 5th Gen preset values (the
+// only ones found in research actually built for this exact device) used as a
+// starting point to test against real hardware. See the reasearch in VIDEO.md
+// because testing found meaningfully higher bitrates were needed elsewhere
+// for full quality without frame drops.
+//
+// TODO: revisit these once some converted files have been tested on device.
+type VideoTranscodeSettings struct {
+	VideoBitrateKbps int
+	AudioBitrateKbps int
+	Fullscreen       VideoScale
+	Widescreen       VideoScale
+}
+
 // Definition is a target's full sync policy: which source audio formats it
-// accepts unchanged, what format anything else gets transcoded to, and how it
-// wants artwork delivered.
+// accepts unchanged, what format anything else gets transcoded to, how it
+// wants artwork delivered, and (if it supports video at all) its video
+// transcode settings.
 type Definition struct {
 	// AcceptedFormats are source extensions (lowercase, including the
 	// leading dot) copied through to this target unchanged.
@@ -76,6 +123,14 @@ type Definition struct {
 	// external file becomes redundant once art travels with the audio
 	// file itself, sync does not copy it to a target with EmbedArt set.
 	EmbedArt bool
+	// SupportsVideo reports whether this target can play video at all
+	// A target with SupportsVideo false never receives video files (video
+	// select/sync commands refuse outright rather than silently doing
+	// nothing) and Video below is meaningless.
+	SupportsVideo bool
+	// Video is this target's video transcode settings. Only meaningful
+	// when SupportsVideo is true.
+	Video VideoTranscodeSettings
 }
 
 // definitions maps each valid target name (see Names, Valid) to its full
@@ -83,17 +138,34 @@ type Definition struct {
 // versa (enforced by TestDefinitionsMatchNames).
 var definitions = map[string]Definition{
 	"ipod": {
-		AcceptedFormats: []string{".flac", ".mp3", ".m4a"},
-		// No TranscodeFormat: Rockbox plays every format this tool
-		// already manages, so ipod never needs to transcode anything.
+		// .opus/.ogg are here purely for derived-audio files, whose
+		// extension follows their source video's codec rather than
+		// one fixed format — Rockbox's documented native codec support
+		// covers both, so these are true passthrough, not transcoded.
+		// In general no real library tracks are .opus/.ogg.
+		AcceptedFormats: []string{".flac", ".mp3", ".m4a", ".opus", ".ogg"},
+		// TranscodeFormat is a defensive fallback only, for whatever
+		// unexpected source format might show up via a derived-audio
+		// file that isn't already in AcceptedFormats above but this
+		// should rarely or never actually trigger: every real library
+		// track this tool manages is already FLAC/MP3/M4A.
+		TranscodeFormat: FormatAAC,
 		ArtMaxDimension: 400, // iPod screen is 320x240; a little headroom
 		EmbedArt:        false,
+		SupportsVideo:   true,
+		Video: VideoTranscodeSettings{
+			VideoBitrateKbps: 400,
+			AudioBitrateKbps: 128,
+			Fullscreen:       VideoScale{Width: 320, Height: 240},
+			Widescreen:       VideoScale{Width: 320, Height: 176},
+		},
 	},
 	"sdcard": {
 		AcceptedFormats: []string{".mp3"},
 		TranscodeFormat: FormatMP3,
 		ArtMaxDimension: 500,
 		EmbedArt:        true,
+		SupportsVideo:   false,
 	},
 }
 

@@ -49,10 +49,10 @@ func TestDefinitionFor(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	t.Run("ipod never transcodes", func(t *testing.T) {
+	t.Run("ipod falls back to aac for anything outside its accepted set", func(t *testing.T) {
 		def, ok := DefinitionFor("ipod")
 		require.True(t, ok)
-		assert.Empty(t, def.TranscodeFormat)
+		assert.Equal(t, FormatAAC, def.TranscodeFormat)
 		assert.False(t, def.EmbedArt)
 	})
 
@@ -62,16 +62,47 @@ func TestDefinitionFor(t *testing.T) {
 		assert.Equal(t, FormatMP3, def.TranscodeFormat)
 		assert.True(t, def.EmbedArt)
 	})
+
+	t.Run("ipod supports video with real WinFF-derived transcode settings", func(t *testing.T) {
+		def, ok := DefinitionFor("ipod")
+		require.True(t, ok)
+		assert.True(t, def.SupportsVideo)
+		assert.Equal(t, 400, def.Video.VideoBitrateKbps)
+		assert.Equal(t, 128, def.Video.AudioBitrateKbps)
+		assert.Equal(t, VideoScale{Width: 320, Height: 240}, def.Video.Fullscreen)
+		assert.Equal(t, VideoScale{Width: 320, Height: 176}, def.Video.Widescreen)
+	})
+
+	t.Run("sdcard does not support video", func(t *testing.T) {
+		def, ok := DefinitionFor("sdcard")
+		require.True(t, ok)
+		assert.False(t, def.SupportsVideo)
+	})
+
+	t.Run("every target with SupportsVideo has real (non-zero) video settings", func(t *testing.T) {
+		for name := range definitions {
+			def, _ := DefinitionFor(name)
+			if !def.SupportsVideo {
+				continue
+			}
+			assert.NotZero(t, def.Video.VideoBitrateKbps, "target %q supports video but has no video bitrate set", name)
+			assert.NotZero(t, def.Video.AudioBitrateKbps, "target %q supports video but has no audio bitrate set", name)
+			assert.NotZero(t, def.Video.Fullscreen, "target %q supports video but has no fullscreen scale set", name)
+			assert.NotZero(t, def.Video.Widescreen, "target %q supports video but has no widescreen scale set", name)
+		}
+	})
 }
 
 func TestDefinitionAccepts(t *testing.T) {
-	t.Run("ipod accepts flac, mp3, and m4a", func(t *testing.T) {
+	t.Run("ipod accepts flac, mp3, m4a, opus, and ogg", func(t *testing.T) {
 		def, ok := DefinitionFor("ipod")
 		require.True(t, ok)
 		assert.True(t, def.Accepts(".flac"))
 		assert.True(t, def.Accepts(".mp3"))
 		assert.True(t, def.Accepts(".m4a"))
-		assert.False(t, def.Accepts(".ogg"))
+		assert.True(t, def.Accepts(".opus"))
+		assert.True(t, def.Accepts(".ogg"))
+		assert.False(t, def.Accepts(".wav"))
 	})
 
 	t.Run("sdcard accepts only mp3", func(t *testing.T) {
@@ -94,6 +125,14 @@ func TestEncodeParamsFor(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "libmp3lame", params.Codec)
 		assert.Equal(t, ".mp3", params.Ext)
+		assert.NotEmpty(t, params.Args)
+	})
+
+	t.Run("aac is defined", func(t *testing.T) {
+		params, ok := EncodeParamsFor(FormatAAC)
+		require.True(t, ok)
+		assert.Equal(t, "aac", params.Codec)
+		assert.Equal(t, ".m4a", params.Ext)
 		assert.NotEmpty(t, params.Args)
 	})
 

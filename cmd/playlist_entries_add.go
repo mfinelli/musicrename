@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,6 +32,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/devicesync"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/video"
 )
 
 var playlistEntriesAddCmd = &cobra.Command{
@@ -49,10 +51,12 @@ skipped and reported.
 With no path arguments, opens an interactive directory browser instead of
 requiring paths up front: arrow keys (or j/k) move the cursor, left/h/
 backspace goes up a level, right/l/enter descends into a directory or, if it
-is an album, opens a checkbox picker for its tracks. Press / to filter the
-current directory's listing by substring. Nothing is written until you leave
-the browser: esc/q at the top level saves everything staged across the whole
-session while ctrl+c discards all changes.
+is an album, opens a checkbox picker for its tracks. Inside the videos
+library root specifically, entering an artist instead opens a checkbox
+picker of that artist's videos (but only for videos that have derived audio).
+Press / to filter the current directory's listing by substring. Nothing is
+written until you leave the browser: esc/q at the top level saves everything
+staged across the whole session while ctrl+c discards all changes.
 
 playlist must already exist (use 'playlist create' to scaffold a new one
 first).`,
@@ -233,15 +237,27 @@ func newEntriesAddModel(libraryRootRoot, playlistPath string, original []string)
 // loadDir lists dir's browsable children into allEntries/dirEntries and
 // resets cursor/scroll/filter state for the new listing. At
 // libraryRootRoot itself, the listing is every library root
-// (devicesync.LibraryRoots (but excluding the reserved playlists/videos
-// siblings and dotfiles); at any deeper level, playlist.ListSubdirectories
-// (every subdirectory except dotfiles). Neither case reads any file's
-// tags (this is a plain directory listing, nothing more).
+// (devicesync.LibraryRoots, excluding the reserved playlists siblings and
+// dotfiles) plus the videos sibling, appended separately rather
+// than by changing LibraryRoots (which stays correct as-is for its other
+// callers, e.g. device sync). Videos holds no real "album" tracks the
+// normal way, but a video's derived audio file is a legitimate playlist entry,
+// so it needs to be reachable here even though it's still excluded from every
+// LibraryRoots-driven operation elsewhere. At any deeper level,
+// playlist.ListSubdirectories (every subdirectory except dotfiles). Neither
+// case reads any file's tags (this is a plain directory listing, nothing
+// more).
 func (m *entriesAddModel) loadDir(dir string) error {
 	var names []string
 	var err error
 	if dir == m.libraryRootRoot {
 		names, err = devicesync.LibraryRoots(dir)
+		if err == nil {
+			if _, statErr := os.Stat(filepath.Join(dir, "videos")); statErr == nil {
+				names = append(names, "videos")
+				sort.Strings(names)
+			}
+		}
 	} else {
 		names, err = playlist.ListSubdirectories(dir)
 	}
@@ -278,15 +294,25 @@ func (m *entriesAddModel) up() {
 	}
 }
 
-// enter opens the selected directory: descends into it, or (if it
-// directly contains audio files) opens the album checklist for it
-// instead (see openAlbum). A read error is reported via errMsg rather than
-// navigating into an unreadable directory.
+// enter opens the selected directory: descends into it, or (if it directly
+// contains audio files) opens the album checklist for it instead (see
+// openAlbum). Inside the videos library root specifically, entering an
+// artist directory (one level below a bucket letter, i.e. m.currentDir's
+// parent is libraryRootRoot/videos) instead opens an aggregated checklist
+// of that artist's videos that have a derived audio file since a video's leaf
+// directory only ever has exactly one possible entry, checking each one
+// individually one directory at a time would be far more friction than it'
+// s worth. A read error is reported via errMsg rather than navigating into an
+// unreadable directory.
 func (m *entriesAddModel) enter() tea.Cmd {
 	if len(m.dirEntries) == 0 {
 		return nil
 	}
 	full := filepath.Join(m.currentDir, m.dirEntries[m.cursor])
+
+	if filepath.Dir(m.currentDir) == filepath.Join(m.libraryRootRoot, "videos") {
+		return m.openArtistVideos(full)
+	}
 
 	isAlbum, err := sumsIsAlbumRoot(full)
 	if err != nil {
@@ -340,6 +366,48 @@ func (m *entriesAddModel) openAlbum(dir string) tea.Cmd {
 	m.albumSelection = nil
 	field := huh.NewMultiSelect[string]().
 		Title(fmt.Sprintf("Select tracks from %s", filepath.Base(dir))).
+		Options(options...).
+		Value(&m.albumSelection)
+
+	m.form = huh.NewForm(huh.NewGroup(field))
+	m.mode = entriesAddModeAlbum
+	return m.form.Init()
+}
+
+// openArtistVideos builds a huh MultiSelect, via videoOptionsForArtist, of
+// every video under artistDir that has a derived audio file, resolving each
+// one to its derived audio file's path (a video with no derived audio yet, or
+// the anomalous multiple-derived-audio-files state, is silently omitted rather
+// than surfaced here since video check already owns flagging that specific
+// problem).
+//
+// Never navigates m.currentDir at all (mirroring openAlbum, which also
+// builds directly on top of the current listing). Completing or
+// cancelling the form returns to the bucket-level artist listing, without
+// ever having "visually" entered artistDir.
+func (m *entriesAddModel) openArtistVideos(artistDir string) tea.Cmd {
+	relPaths, options, err := videoOptionsForArtist(m.libraryRootRoot, artistDir, m.selection.IsSelected,
+		func(videoPath string) (string, bool) {
+			audioFiles, aerr := video.DerivedAudioFiles(videoPath)
+			if aerr != nil || len(audioFiles) != 1 {
+				return "", false // none yet, or the ambiguous multiple-files state
+			}
+			return audioFiles[0], true
+		},
+	)
+	if err != nil {
+		m.errMsg = err.Error()
+		return nil
+	}
+	if len(options) == 0 {
+		m.errMsg = fmt.Sprintf("%s has no videos with extracted audio yet", artistDir)
+		return nil
+	}
+
+	m.albumRelPaths = relPaths
+	m.albumSelection = nil
+	field := huh.NewMultiSelect[string]().
+		Title(fmt.Sprintf("Select videos from %s", filepath.Base(artistDir))).
 		Options(options...).
 		Value(&m.albumSelection)
 

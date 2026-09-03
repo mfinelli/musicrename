@@ -169,14 +169,16 @@ christmas/m/mariah carey/[1994] merry christmas/01 all i want for christmas is y
 
 ```sh
 mrr playlist select ipod        # choose which tracks to include, per album
+mrr video select ipod           # choose which videos to include (ipod only)
 mrr sync ipod /media/you/IPOD   # copy them to the device
 ```
 
-Only tracks selected for a target are copied to it. Each sync compares the
-library against whatever's already on the device, adds anything missing, updates
-anything changed, and removes anything no longer selected (removals only ever
-affect the device copy, never the source library). Free space on the device is
-checked and confirmation is required before anything changes.
+Only tracks (and, for a video-capable target, videos) selected for a target are
+copied to it. Each sync compares the library against whatever's already on the
+device, adds anything missing, updates anything changed, and removes anything no
+longer selected (removals only ever affect the device copy, never the source
+library). Free space on the device is checked and confirmation is required
+before anything changes.
 
 `ipod` copies FLAC/MP3/M4A through unchanged and ships artwork as a separate
 file; `sdcard` transcodes anything that isn't already MP3 and embeds artwork
@@ -352,8 +354,12 @@ confirmation before adding, updating, or removing anything. `--dry-run` previews
 without changing anything; `--verbose` lists every file instead of just totals;
 `--yes` skips the confirmation prompt.
 
+`sync ipod` also syncs selected videos (see `video select`) alongside audio in
+the same run; `--no-video` skips video entirely, `--video-only` skips audio.
+
 ```sh
 mrr sync ipod /media/you/IPOD
+mrr sync ipod /media/you/IPOD --video-only
 mrr sync sdcard /media/you/SDCARD --dry-run
 ```
 
@@ -415,6 +421,8 @@ mrr video add <file>    # sanitize, file into place, write musicvideo.nfo
 mrr video rename        # reconcile locations after any edits
 mrr video sums          # generate md5 checksums
 mrr video check         # audit for issues
+mrr video extract-audio <file>  # pull a standalone, tagged audio file out of a video
+mrr video select ipod           # choose which videos sync to a target
 ```
 
 ### Video Commands
@@ -481,6 +489,30 @@ Displays a video's raw and sanitized title/artist. Read-only.
 
 ```sh
 mrr video inspect "crazy in love.mp4"
+```
+
+#### `video extract-audio`
+
+Remuxes (not re-encodes) a video's audio stream into a standalone file next to
+it, tagged from `musicvideo.nfo`, with ReplayGain computed via `rsgain` (must be
+installed and on `PATH`). This is what makes a video-only track reachable via
+Navidrome and syncable to targets without video support. Errors if a derived
+audio file already exists; pass `--retag` to update only its tags, or `--force`
+to fully re-extract.
+
+```sh
+mrr video extract-audio "crazy in love.mp4"
+```
+
+#### `video select`
+
+Opens an interactive browser (arrow keys/j/k to move, enter to open a bucket
+letter or an artist's video checklist, / to filter, esc/q to save, ctrl+c to
+discard) for choosing which videos sync to a target, writing the selection to
+`{target}.m3u8` at the video root. The target must support video.
+
+```sh
+mrr video select ipod
 ```
 
 ## Contributing
