@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/sanitize"
@@ -84,7 +85,7 @@ func runVideoInspect(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Inspecting..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Inspecting..."))
 	fmt.Fprintln(out)
 
 	formatLabel := strings.ToUpper(strings.TrimPrefix(ext, "."))

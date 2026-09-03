@@ -24,7 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/checker"
@@ -117,7 +117,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 // runCheckLibrary runs the full check suite on a library root directory. The
 // library root is known so path-conformance checks are performed on every album.
 func runCheckLibrary(out io.Writer, root string) error {
-	fmt.Fprintln(out, renameHeaderStyle.Render("Checking library..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking library..."))
 	fmt.Fprintln(out)
 
 	result, err := checker.CheckLibrary(root)
@@ -137,7 +137,7 @@ func runCheckLibrary(out io.Writer, root string) error {
 // runCheckAlbum runs all checks on a single album directory. Path-conformance
 // is skipped because no library root is available from the command line.
 func runCheckAlbum(out io.Writer, albumPath string) error {
-	fmt.Fprintln(out, renameHeaderStyle.Render("Checking album..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking album..."))
 	fmt.Fprintln(out)
 
 	ar, err := checker.CheckAlbum(albumPath, "")
@@ -160,7 +160,7 @@ func runCheckAlbum(out io.Writer, albumPath string) error {
 // runCheckTrack runs track-level checks only on a single audio file.
 // Directory-level checks are skipped because album context is unavailable.
 func runCheckTrack(out io.Writer, filePath string) error {
-	fmt.Fprintln(out, renameHeaderStyle.Render("Checking track..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking track..."))
 	fmt.Fprintln(out)
 
 	ar, err := checker.CheckTrack(filePath)
@@ -195,7 +195,7 @@ func checkPrintFindings(out io.Writer, result *checker.Result, displayRoot strin
 		if err != nil || strings.HasPrefix(relPath, "..") {
 			relPath = ar.AlbumPath
 		}
-		fmt.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
+		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
 
 		for _, w := range ar.Warnings {
 			// For album-level warnings (the warning's path is the album
@@ -208,14 +208,14 @@ func checkPrintFindings(out io.Writer, result *checker.Result, displayRoot strin
 			} else {
 				pathLabel = filepath.Base(w.Path)
 			}
-			fmt.Fprintln(out, "    "+checkFindingStyle.Render("⚠  "+pathLabel+": "+w.Message))
+			lipgloss.Fprintln(out, "    "+checkFindingStyle.Render("⚠  "+pathLabel+": "+w.Message))
 		}
 
 		fmt.Fprintln(out)
 	}
 
 	if total == 0 {
-		fmt.Fprintln(out, "  "+checkOKStyle.Render("✓  No issues found."))
+		lipgloss.Fprintln(out, "  "+checkOKStyle.Render("✓  No issues found."))
 		fmt.Fprintln(out)
 	}
 
@@ -235,6 +235,6 @@ func checkPrintSummary(out io.Writer, unitCount int, unitLabel string, findings 
 		finding += "s"
 	}
 	summaryText := fmt.Sprintf("%d %s · %d %s", unitCount, unit, findings, finding)
-	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 }

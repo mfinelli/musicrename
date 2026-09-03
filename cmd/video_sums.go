@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -114,7 +115,7 @@ func runVideoSumsSingle(out io.Writer, dir string, force, isTTY bool) error {
 		return fmt.Errorf("%s already exists; use --force to regenerate", sumsPath)
 	}
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
 	fmt.Fprintln(out)
 
 	var count int
@@ -136,7 +137,7 @@ func runVideoSumsSingle(out io.Writer, dir string, force, isTTY bool) error {
 		fmt.Fprint(out, "\r\033[K")
 	}
 
-	fmt.Fprintln(out, sumsCheckStyle.Render(
+	lipgloss.Fprintln(out, sumsCheckStyle.Render(
 		fmt.Sprintf("✓  sums.md5 written — %d %s", count, pluralFiles(count)),
 	))
 	return nil
@@ -151,7 +152,7 @@ func runVideoSumsRoot(out io.Writer, dir string, force, isTTY bool) error {
 		return fmt.Errorf("scanning video root: %w", err)
 	}
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Generating checksums..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Generating checksums..."))
 	fmt.Fprintln(out)
 
 	if len(dirs) == 0 {
@@ -169,11 +170,11 @@ func runVideoSumsRoot(out io.Writer, dir string, force, isTTY bool) error {
 
 		// Print the video's path before processing so the user can see
 		// which one is active while hashing runs below it.
-		fmt.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
+		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
 
 		sumsPath := filepath.Join(videoDir, hasher.SumsFilename)
 		if _, err := os.Stat(sumsPath); err == nil && !force {
-			fmt.Fprintln(out, "    "+sumsSkipStyle.Render("— skipped"))
+			lipgloss.Fprintln(out, "    "+sumsSkipStyle.Render("— skipped"))
 			skipped++
 			continue
 		}
@@ -197,7 +198,7 @@ func runVideoSumsRoot(out io.Writer, dir string, force, isTTY bool) error {
 			fmt.Fprint(out, "\r\033[K")
 		}
 
-		fmt.Fprintln(out, "    "+sumsCheckStyle.Render(
+		lipgloss.Fprintln(out, "    "+sumsCheckStyle.Render(
 			fmt.Sprintf("✓  %d %s", count, pluralFiles(count)),
 		))
 		generated++
@@ -208,7 +209,7 @@ func runVideoSumsRoot(out io.Writer, dir string, force, isTTY bool) error {
 		"%d videos · %d generated · %d skipped",
 		len(dirs), generated, skipped,
 	)
-	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 	return nil
 }

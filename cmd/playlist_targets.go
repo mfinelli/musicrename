@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/completion"
@@ -86,7 +87,7 @@ func runPlaylistTargets(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Updated %s\n", relPlaylistPath(absRoot, path))
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	return nil
 }

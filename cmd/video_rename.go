@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -115,7 +116,7 @@ func runVideoRename(cmd *cobra.Command, args []string) error {
 // printVideoRunPlan writes a condensed overview to out before execution
 // begins: artists with move counts, but no per-video detail.
 func printVideoRunPlan(out io.Writer, plan *video.RenamePlan) {
-	fmt.Fprintln(out, renameHeaderStyle.Render("Renaming videos..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Renaming videos..."))
 	fmt.Fprintln(out)
 
 	if len(plan.Moves) == 0 {
@@ -124,9 +125,9 @@ func printVideoRunPlan(out io.Writer, plan *video.RenamePlan) {
 	}
 
 	for _, g := range videoGroupByArtist(plan.Moves) {
-		fmt.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
+		lipgloss.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
 		moves, noOps := videoMoveCounts(g.moves)
-		fmt.Fprintln(out, "  "+renameSourceStyle.Render(
+		lipgloss.Fprintln(out, "  "+renameSourceStyle.Render(
 			fmt.Sprintf("· %d move(s), %d no-op(s)", moves, noOps),
 		))
 	}
@@ -137,7 +138,7 @@ func printVideoRunPlan(out io.Writer, plan *video.RenamePlan) {
 // artist. Warnings are shown at the top; a summary line appears at the
 // bottom.
 func printVideoDryRun(out io.Writer, plan *video.RenamePlan) {
-	fmt.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be moved."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be moved."))
 	fmt.Fprintln(out)
 
 	printVideoWarnings(out, plan.Warnings)
@@ -148,7 +149,7 @@ func printVideoDryRun(out io.Writer, plan *video.RenamePlan) {
 	}
 
 	for _, g := range videoGroupByArtist(plan.Moves) {
-		fmt.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
+		lipgloss.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
 
 		for _, m := range g.moves {
 			arrow := renameArrowStyle.Render("→")
@@ -189,9 +190,9 @@ func printVideoWarnings(out io.Writer, warnings []string) {
 	if len(warnings) == 0 {
 		return
 	}
-	fmt.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(warnings))))
+	lipgloss.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(warnings))))
 	for _, w := range warnings {
-		fmt.Fprintln(out, "   "+renameWarningStyle.Render(w))
+		lipgloss.Fprintln(out, "   "+renameWarningStyle.Render(w))
 	}
 	fmt.Fprintln(out)
 }
@@ -204,8 +205,8 @@ func printVideoSummaryLine(out io.Writer, moves, noOps, warnings int) {
 		noOpLabel = "no-op"
 	}
 	summaryText := fmt.Sprintf("%d moves · %d %s · %d warnings", moves, noOps, noOpLabel, warnings)
-	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 }
 
 // videoMoveCounts returns the number of real moves and no-op moves.

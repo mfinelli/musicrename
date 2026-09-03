@@ -25,7 +25,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"go.senan.xyz/taglib"
 
@@ -123,7 +123,7 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	// Header.
-	fmt.Fprintln(out, renameHeaderStyle.Render("Inspecting..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Inspecting..."))
 	fmt.Fprintln(out)
 
 	// File line: cyan filename + faint format badge, indented.
@@ -193,7 +193,7 @@ func inspectPrintSanitized(out io.Writer, result sanitize.Result) {
 	if result.ManualOverride {
 		line += "  [manual override]"
 	}
-	fmt.Fprintln(out, indent+inspectFaintStyle.Render(line))
+	lipgloss.Fprintln(out, indent+inspectFaintStyle.Render(line))
 }
 
 // inspectDash returns s unchanged, or "—" if s is empty.

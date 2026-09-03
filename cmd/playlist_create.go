@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/completion"
@@ -79,7 +80,7 @@ func runPlaylistCreate(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Created %s\n", relPlaylistPath(absRoot, path))
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	return nil
 }

@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -152,7 +153,7 @@ func runPlaylistSort(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  "+r)
 	}
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	if removedDupes > 0 {
 		fmt.Fprintf(out, "Removed %d duplicate entries\n", removedDupes)

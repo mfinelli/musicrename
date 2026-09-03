@@ -22,7 +22,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/completion"
@@ -119,7 +120,7 @@ func runSyncNavidromeDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 
 	fmt.Fprintf(out, "Deleted %s.\n", args[0])

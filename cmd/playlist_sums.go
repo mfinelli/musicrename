@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -80,7 +81,7 @@ func runPlaylistSums(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s already exists; use --force to regenerate", sumsPath)
 	}
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
 	fmt.Fprintln(out)
 
 	var count int
@@ -102,7 +103,7 @@ func runPlaylistSums(cmd *cobra.Command, args []string) error {
 		fmt.Fprint(out, "\r\033[K")
 	}
 
-	fmt.Fprintln(out, sumsCheckStyle.Render(
+	lipgloss.Fprintln(out, sumsCheckStyle.Render(
 		fmt.Sprintf("✓  sums.md5 written — %d %s", count, pluralFiles(count)),
 	))
 	return nil

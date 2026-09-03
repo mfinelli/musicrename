@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/playlist"
@@ -70,16 +71,16 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	if dryRun {
-		fmt.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be renamed."))
+		lipgloss.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be renamed."))
 	} else {
-		fmt.Fprintln(out, renameHeaderStyle.Render("Renaming playlists..."))
+		lipgloss.Fprintln(out, renameHeaderStyle.Render("Renaming playlists..."))
 	}
 	fmt.Fprintln(out)
 
 	if len(skipped) > 0 {
-		fmt.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d skipped", len(skipped))))
+		lipgloss.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d skipped", len(skipped))))
 		for _, s := range skipped {
-			fmt.Fprintln(out, "   "+renameWarningStyle.Render(relPlaylistPath(absRoot, s.Path)+": "+s.Message))
+			lipgloss.Fprintln(out, "   "+renameWarningStyle.Render(relPlaylistPath(absRoot, s.Path)+": "+s.Message))
 		}
 		fmt.Fprintln(out)
 	}
@@ -106,7 +107,7 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("executing renames: %w", err)
 		}
 		for _, w := range execWarnings {
-			fmt.Fprintln(out, renameWarningStyle.Render("⚠  "+w))
+			lipgloss.Fprintln(out, renameWarningStyle.Render("⚠  "+w))
 		}
 		if len(execWarnings) > 0 {
 			fmt.Fprintln(out)
@@ -117,8 +118,8 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 		"%d renames · %d skipped · %d warnings",
 		len(ops), len(skipped), len(execWarnings),
 	)
-	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 
 	return nil
 }

@@ -24,8 +24,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/completion"
@@ -92,7 +92,7 @@ func runPlaylistEntriesReorder(cmd *cobra.Command, args []string) error {
 
 	m := newReorderModel(path, gp.Entries)
 	defer m.cancel() // safety net; the quit keys below already cancel proactively
-	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	final, err := tea.NewProgram(m).Run()
 	if err != nil {
 		return fmt.Errorf("running reorder editor: %w", err)
 	}
@@ -111,7 +111,7 @@ func runPlaylistEntriesReorder(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "Saved new order for %d entries\n", len(result.entries))
 	return nil
@@ -291,7 +291,7 @@ func (m *reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// to do here (this case exists to document that explicitly,
 		// since it would otherwise fall through the switch silently).
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "up", "k":
 			m.moveTo(m.cursor - 1)
@@ -305,7 +305,7 @@ func (m *reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.moveTo(0)
 		case "end":
 			m.moveTo(len(m.entries) - 1)
-		case " ":
+		case "space":
 			m.grabbed = !m.grabbed
 		case "enter":
 			m.confirmed = true
@@ -378,7 +378,7 @@ func (m *reorderModel) ensureVisible() {
 	}
 }
 
-func (m *reorderModel) View() string {
+func (m *reorderModel) View() tea.View {
 	var b strings.Builder
 
 	b.WriteString(renameHeaderStyle.Render(fmt.Sprintf("Reorder %s", filepath.Base(m.path))))
@@ -417,5 +417,7 @@ func (m *reorderModel) View() string {
 	}
 	b.WriteString(renameSourceStyle.Render(help))
 
-	return b.String()
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }

@@ -23,7 +23,8 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/devicesync"
@@ -109,7 +110,7 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 		return fmt.Errorf("target %q does not support video; --video-only doesn't apply", targetName)
 	}
 
-	fmt.Fprintln(out, renameHeaderStyle.Render(fmt.Sprintf("Planning sync to %s...", targetName)))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render(fmt.Sprintf("Planning sync to %s...", targetName)))
 
 	// audioPlan/videoPlan are computed independently (audio unless
 	// --video-only, video only when the target actually supports it and
@@ -199,7 +200,7 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 	}
 
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, renameHeaderStyle.Render("Syncing..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Syncing..."))
 
 	result, err := devicesync.Execute(context.Background(), libraryRoot, devicePath, targetName, plan.Diff, false)
 	if err != nil {
@@ -212,7 +213,7 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 		printExecuteDetail(out, result)
 		fmt.Fprintln(out)
 	}
-	fmt.Fprintln(out, sumsCheckStyle.Render(fmt.Sprintf(
+	lipgloss.Fprintln(out, sumsCheckStyle.Render(fmt.Sprintf(
 		"✓  %d created, %d updated, %d deleted",
 		len(result.Created), len(result.Updated), len(result.Deleted),
 	)))
@@ -246,11 +247,11 @@ func printPlanDetail(out io.Writer, diff *devicesync.DiffResult) {
 		return
 	}
 	if len(audio) > 0 {
-		fmt.Fprintln(out, renameHeaderStyle.Render("Audio:"))
+		lipgloss.Fprintln(out, renameHeaderStyle.Render("Audio:"))
 		printChangeList(out, audio)
 		fmt.Fprintln(out)
 	}
-	fmt.Fprintln(out, renameHeaderStyle.Render("Video:"))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Video:"))
 	printChangeList(out, video)
 }
 
@@ -258,11 +259,11 @@ func printChangeList(out io.Writer, changes []devicesync.PlannedChange) {
 	for _, change := range changes {
 		switch change.Action {
 		case devicesync.ActionAdd:
-			fmt.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+syncEntryLabel(change.Entry))+" (would add)")
+			lipgloss.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+syncEntryLabel(change.Entry))+" (would add)")
 		case devicesync.ActionRegenerate:
-			fmt.Fprintln(out, "  "+checkFindingStyle.Render("~ "+syncEntryLabel(change.Entry))+" (would regenerate)")
+			lipgloss.Fprintln(out, "  "+checkFindingStyle.Render("~ "+syncEntryLabel(change.Entry))+" (would regenerate)")
 		case devicesync.ActionDelete:
-			fmt.Fprintln(out, "  "+renameWarningStyle.Render("- "+syncEntryLabel(change.Entry))+" (would delete)")
+			lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("- "+syncEntryLabel(change.Entry))+" (would delete)")
 		}
 	}
 }
@@ -295,23 +296,23 @@ func printExecuteDetail(out io.Writer, result *devicesync.ExecuteResult) {
 		return
 	}
 	if len(audioCreated)+len(audioUpdated)+len(audioDeleted) > 0 {
-		fmt.Fprintln(out, renameHeaderStyle.Render("Audio:"))
+		lipgloss.Fprintln(out, renameHeaderStyle.Render("Audio:"))
 		printExecuteEntries(out, audioCreated, audioUpdated, audioDeleted)
 		fmt.Fprintln(out)
 	}
-	fmt.Fprintln(out, renameHeaderStyle.Render("Video:"))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Video:"))
 	printExecuteEntries(out, videoCreated, videoUpdated, videoDeleted)
 }
 
 func printExecuteEntries(out io.Writer, created, updated, deleted []devicesync.DesiredEntry) {
 	for _, entry := range created {
-		fmt.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+syncEntryLabel(entry))+" (created)")
+		lipgloss.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+syncEntryLabel(entry))+" (created)")
 	}
 	for _, entry := range updated {
-		fmt.Fprintln(out, "  "+checkFindingStyle.Render("~ "+syncEntryLabel(entry))+" (updated)")
+		lipgloss.Fprintln(out, "  "+checkFindingStyle.Render("~ "+syncEntryLabel(entry))+" (updated)")
 	}
 	for _, entry := range deleted {
-		fmt.Fprintln(out, "  "+renameWarningStyle.Render("- "+syncEntryLabel(entry))+" (deleted)")
+		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("- "+syncEntryLabel(entry))+" (deleted)")
 	}
 }
 
@@ -344,6 +345,6 @@ func printSyncWarnings(out io.Writer, warnings []string) {
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%d warning(s):\n", len(warnings))
 	for _, w := range warnings {
-		fmt.Fprintln(out, "  "+renameWarningStyle.Render("⚠ "+w))
+		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠ "+w))
 	}
 }

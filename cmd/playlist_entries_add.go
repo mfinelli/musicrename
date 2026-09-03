@@ -25,8 +25,9 @@ import (
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/completion"
@@ -112,7 +113,7 @@ func runPlaylistEntriesAdd(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  + "+a)
 	}
 	for _, w := range warnings {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+w))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+w))
 	}
 	fmt.Fprintf(out, "%d added, %d warning(s)\n", len(added), len(warnings))
 
@@ -153,7 +154,7 @@ func runPlaylistEntriesAddInteractive(cmd *cobra.Command, absRoot, path string) 
 		return fmt.Errorf("starting browser: %w", err)
 	}
 
-	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	final, err := tea.NewProgram(m).Run()
 	if err != nil {
 		return fmt.Errorf("running entries browser: %w", err)
 	}
@@ -175,7 +176,7 @@ func runPlaylistEntriesAddInteractive(cmd *cobra.Command, absRoot, path string) 
 		return err
 	}
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "Playlist now has %d entries\n", len(newEntries))
 
@@ -435,7 +436,7 @@ func (m *entriesAddModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// regardless of whatever huh's own internal key handling might
 	// otherwise do with it (intercepted here, before ever reaching
 	// m.form.Update, so this is never ambiguous).
-	if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
+	if km, ok := msg.(tea.KeyPressMsg); ok && km.String() == "ctrl+c" {
 		m.aborted = true
 		return m, tea.Quit
 	}
@@ -478,7 +479,7 @@ func (m *entriesAddModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = max(msg.Height-entriesAddChromeLines, 1)
 		m.ensureVisible()
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.filtering {
 			return m.updateFilterInput(msg)
 		}
@@ -502,7 +503,7 @@ func (m *entriesAddModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *entriesAddModel) updateFilterInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *entriesAddModel) updateFilterInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		m.filtering = false
@@ -520,8 +521,8 @@ func (m *entriesAddModel) updateFilterInput(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 			m.applyFilter()
 		}
 	default:
-		if len(msg.Runes) > 0 {
-			m.filterQuery += string(msg.Runes)
+		if len(msg.Text) > 0 {
+			m.filterQuery += msg.Text
 			m.applyFilter()
 		}
 	}
@@ -552,9 +553,9 @@ func (m *entriesAddModel) ensureVisible() {
 	}
 }
 
-func (m *entriesAddModel) View() string {
+func (m *entriesAddModel) View() tea.View {
 	if m.mode == entriesAddModeAlbum {
-		return m.form.View()
+		return tea.NewView(m.form.View())
 	}
 
 	var b strings.Builder
@@ -602,5 +603,7 @@ func (m *entriesAddModel) View() string {
 	help := "↑/↓ move · ←/h up · →/enter open · / filter · esc/q save & quit · ctrl+c discard"
 	b.WriteString(renameSourceStyle.Render(help))
 
-	return b.String()
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }

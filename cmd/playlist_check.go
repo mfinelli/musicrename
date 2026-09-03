@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/checker"
@@ -78,7 +79,7 @@ func runPlaylistCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintln(out, renameHeaderStyle.Render("Checking playlists..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking playlists..."))
 	fmt.Fprintln(out)
 
 	result, err := checker.CheckPlaylists(absRoot)
@@ -87,7 +88,7 @@ func runPlaylistCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(result.Warnings) == 0 {
-		fmt.Fprintln(out, "  "+checkOKStyle.Render("✓  No issues found."))
+		lipgloss.Fprintln(out, "  "+checkOKStyle.Render("✓  No issues found."))
 		fmt.Fprintln(out)
 	} else {
 		for _, w := range result.Warnings {
@@ -95,7 +96,7 @@ func runPlaylistCheck(cmd *cobra.Command, args []string) error {
 			if relErr != nil || strings.HasPrefix(relPath, "..") {
 				relPath = w.Path
 			}
-			fmt.Fprintln(out, "  "+checkFindingStyle.Render("⚠  "+relPath+": "+w.Message))
+			lipgloss.Fprintln(out, "  "+checkFindingStyle.Render("⚠  "+relPath+": "+w.Message))
 		}
 		fmt.Fprintln(out)
 	}
