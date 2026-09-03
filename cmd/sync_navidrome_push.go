@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/completion"
@@ -86,7 +87,7 @@ func runSyncNavidromePush(cmd *cobra.Command, args []string) error {
 	}
 
 	if !skipScan {
-		fmt.Fprintln(out, renameHeaderStyle.Render("Checking library is up to date..."))
+		lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking library is up to date..."))
 		if err := navidrome.Scan(client, navidrome.DefaultScanPollInterval, scanProgressPrinter(out)); err != nil {
 			return fmt.Errorf("scanning library: %w", err)
 		}
@@ -145,10 +146,10 @@ func printPushResult(out io.Writer, root string, result *navidromesync.PushResul
 	}
 
 	for _, p := range result.Created {
-		fmt.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+label(p))+" ("+createdVerb+")")
+		lipgloss.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+label(p))+" ("+createdVerb+")")
 	}
 	for _, p := range result.Updated {
-		fmt.Fprintln(out, "  "+checkFindingStyle.Render("~ "+label(p))+" ("+updatedVerb+")")
+		lipgloss.Fprintln(out, "  "+checkFindingStyle.Render("~ "+label(p))+" ("+updatedVerb+")")
 	}
 
 	fmt.Fprintln(out)
@@ -159,7 +160,7 @@ func printPushResult(out io.Writer, root string, result *navidromesync.PushResul
 		fmt.Fprintln(out)
 		fmt.Fprintf(out, "%d warning(s):\n", len(result.Warnings))
 		for _, w := range result.Warnings {
-			fmt.Fprintln(out, "  "+renameWarningStyle.Render("⚠ "+w))
+			lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠ "+w))
 		}
 	}
 }

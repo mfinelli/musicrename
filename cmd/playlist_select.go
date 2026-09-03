@@ -25,7 +25,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/hasher"
@@ -206,11 +207,11 @@ func runPlaylistSelect(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(final) == 0 {
-		fmt.Fprintln(out, sumsCheckStyle.Render(
+		lipgloss.Fprintln(out, sumsCheckStyle.Render(
 			fmt.Sprintf("✓  %s removed (no tracks selected)", manifestName),
 		))
 	} else {
-		fmt.Fprintln(out, sumsCheckStyle.Render(
+		lipgloss.Fprintln(out, sumsCheckStyle.Render(
 			fmt.Sprintf("✓  %s written — %d %s selected", manifestName, len(final), pluralTracks(len(final))),
 		))
 	}

@@ -22,7 +22,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -131,7 +132,7 @@ func runPlaylistEntriesRemove(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  - "+r)
 	}
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "%d removed\n", len(removed))
 	return nil

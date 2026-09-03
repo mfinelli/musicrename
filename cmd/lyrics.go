@@ -26,7 +26,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"go.senan.xyz/taglib"
 
@@ -132,12 +132,12 @@ func lyricsIsAlbumRoot(dir string) (bool, error) {
 
 // runLyricsTrack handles track mode: a single audio file.
 func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool) error {
-	fmt.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
 	tracks, warnings := buildTrackInfos([]string{path})
 	for _, w := range warnings {
-		fmt.Fprintln(out, "  "+renameWarningStyle.Render("⚠  "+w))
+		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠  "+w))
 	}
 
 	summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "  "))
@@ -165,12 +165,12 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool) 
 	}
 	sort.Strings(paths)
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
 	tracks, warnings := buildTrackInfos(paths)
 	for _, w := range warnings {
-		fmt.Fprintln(out, "  "+renameWarningStyle.Render("⚠  "+w))
+		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠  "+w))
 	}
 
 	summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "  "))
@@ -194,7 +194,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 		return albums[i].RootPath < albums[j].RootPath
 	})
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
 	if len(albums) == 0 {
@@ -209,7 +209,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 		if err != nil {
 			relPath = album.RootPath
 		}
-		fmt.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
+		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
 
 		paths := make([]string, 0, len(album.Tracks))
 		for _, t := range album.Tracks {
@@ -219,7 +219,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 
 		tracks, warnings := buildTrackInfos(paths)
 		for _, w := range warnings {
-			fmt.Fprintln(out, "    "+renameWarningStyle.Render("⚠  "+w))
+			lipgloss.Fprintln(out, "    "+renameWarningStyle.Render("⚠  "+w))
 		}
 
 		summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "    "))
@@ -267,8 +267,8 @@ func printLyricsSummaryLine(out io.Writer, s lyrics.Summary) {
 		"%d tracks · %d embedded · %d skipped · %d not found · %d failed",
 		total, s.Embedded, s.Skipped, s.NotFound, s.Failed,
 	)
-	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 }
 
 // buildTrackInfos opens each audio file with go-taglib to read both tags and

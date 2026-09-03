@@ -25,7 +25,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -122,7 +122,7 @@ func runSumsAlbum(out io.Writer, dir string, force, isTTY bool) error {
 		)
 	}
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
 	fmt.Fprintln(out)
 
 	var count int
@@ -144,7 +144,7 @@ func runSumsAlbum(out io.Writer, dir string, force, isTTY bool) error {
 		fmt.Fprint(out, "\r\033[K")
 	}
 
-	fmt.Fprintln(out, sumsCheckStyle.Render(
+	lipgloss.Fprintln(out, sumsCheckStyle.Render(
 		fmt.Sprintf("✓  sums.md5 written — %d %s", count, pluralFiles(count)),
 	))
 	return nil
@@ -163,7 +163,7 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool) error {
 		return albums[i].RootPath < albums[j].RootPath
 	})
 
-	fmt.Fprintln(out, renameHeaderStyle.Render("Generating checksums..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Generating checksums..."))
 	fmt.Fprintln(out)
 
 	if len(albums) == 0 {
@@ -181,11 +181,11 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool) error {
 
 		// Print the album path before processing so the user can see
 		// which album is active while hashing runs below it.
-		fmt.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
+		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
 
 		sumsPath := filepath.Join(album.RootPath, hasher.SumsFilename)
 		if _, err := os.Stat(sumsPath); err == nil && !force {
-			fmt.Fprintln(out, "    "+sumsSkipStyle.Render("— skipped"))
+			lipgloss.Fprintln(out, "    "+sumsSkipStyle.Render("— skipped"))
 			skipped++
 			continue
 		}
@@ -211,7 +211,7 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool) error {
 			fmt.Fprint(out, "\r\033[K")
 		}
 
-		fmt.Fprintln(out, "    "+sumsCheckStyle.Render(
+		lipgloss.Fprintln(out, "    "+sumsCheckStyle.Render(
 			fmt.Sprintf("✓  %d %s", count, pluralFiles(count)),
 		))
 		generated++
@@ -222,8 +222,8 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool) error {
 		"%d albums · %d generated · %d skipped",
 		len(albums), generated, skipped,
 	)
-	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 	return nil
 }
 

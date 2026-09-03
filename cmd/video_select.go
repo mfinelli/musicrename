@@ -23,8 +23,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/playlist"
@@ -36,11 +36,11 @@ var videoSelectCmd = &cobra.Command{
 	Use:   "select <target> [video-root]",
 	Short: "Interactively choose which videos sync to a device target",
 	Long: `Opens an interactive directory browser scoped to video-root, for choosing
-which videos are selected for target's video sync: arrow keys (or j/k) move 
-the cursor, left/h/backspace goes up a level, right/l/enter descends into a 
-bucket letter or, from there, opens a checkbox picker of that artist's videos. 
-Press / to filter the current directory's listing by substring. Nothing is 
-written until you leave the browser: esc/q at the top level saves the selection 
+which videos are selected for target's video sync: arrow keys (or j/k) move
+the cursor, left/h/backspace goes up a level, right/l/enter descends into a
+bucket letter or, from there, opens a checkbox picker of that artist's videos.
+Press / to filter the current directory's listing by substring. Nothing is
+written until you leave the browser: esc/q at the top level saves the selection
 to video-root/target.m3u8 while ctrl+c discards all changes.
 
 target must support video; this refuses outright for one that doesn't.
@@ -96,7 +96,7 @@ func runVideoSelect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("starting browser: %w", err)
 	}
 
-	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	final, err := tea.NewProgram(m).Run()
 	if err != nil {
 		return fmt.Errorf("running video selection browser: %w", err)
 	}
@@ -282,7 +282,7 @@ func (m *videoSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// regardless of whatever huh's own internal key handling might
 	// otherwise do with it (intercepted here, before ever reaching
 	// m.form.Update, so this is never ambiguous).
-	if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
+	if km, ok := msg.(tea.KeyPressMsg); ok && km.String() == "ctrl+c" {
 		m.aborted = true
 		return m, tea.Quit
 	}
@@ -325,7 +325,7 @@ func (m *videoSelectModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = max(msg.Height-videoSelectChromeLines, 1)
 		m.ensureVisible()
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.filtering {
 			return m.updateFilterInput(msg)
 		}
@@ -349,7 +349,7 @@ func (m *videoSelectModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *videoSelectModel) updateFilterInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *videoSelectModel) updateFilterInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		m.filtering = false
@@ -367,8 +367,8 @@ func (m *videoSelectModel) updateFilterInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 			m.applyFilter()
 		}
 	default:
-		if len(msg.Runes) > 0 {
-			m.filterQuery += string(msg.Runes)
+		if len(msg.Text) > 0 {
+			m.filterQuery += msg.Text
 			m.applyFilter()
 		}
 	}
@@ -399,9 +399,9 @@ func (m *videoSelectModel) ensureVisible() {
 	}
 }
 
-func (m *videoSelectModel) View() string {
+func (m *videoSelectModel) View() tea.View {
 	if m.mode == videoSelectModeArtist {
-		return m.form.View()
+		return tea.NewView(m.form.View())
 	}
 
 	var b strings.Builder
@@ -449,7 +449,9 @@ func (m *videoSelectModel) View() string {
 	help := "↑/↓ move · ←/h up · →/enter open · / filter · esc/q save & quit · ctrl+c discard"
 	b.WriteString(renameSourceStyle.Render(help))
 
-	return b.String()
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }
 
 // videoOptionsForArtist builds huh MultiSelect options for every video

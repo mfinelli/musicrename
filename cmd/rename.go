@@ -25,7 +25,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -154,7 +154,7 @@ func runRename(cmd *cobra.Command, args []string) error {
 // begins. It shows artists and albums with file counts but omits per-file
 // detail, giving the user a sense of scope without the full dry-run verbosity.
 func printRunPlan(out io.Writer, plan *planner.Plan) {
-	fmt.Fprintln(out, renameHeaderStyle.Render("Renaming library..."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Renaming library..."))
 	fmt.Fprintln(out)
 
 	if len(plan.Albums) == 0 {
@@ -164,7 +164,7 @@ func printRunPlan(out io.Writer, plan *planner.Plan) {
 
 	groups := renameGroupByArtist(plan.Albums)
 	for _, g := range groups {
-		fmt.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
+		lipgloss.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
 		for _, ap := range g.albums {
 			count := len(ap.Moves)
 			fileLabel := "files"
@@ -195,9 +195,9 @@ func printRunSummary(out io.Writer, plan *planner.Plan, execWarnings []string) {
 	allWarnings = append(allWarnings, execWarnings...)
 
 	if len(allWarnings) > 0 {
-		fmt.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
+		lipgloss.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
 		for _, w := range allWarnings {
-			fmt.Fprintln(out, "   "+renameWarningStyle.Render(w))
+			lipgloss.Fprintln(out, "   "+renameWarningStyle.Render(w))
 		}
 		fmt.Fprintln(out)
 	}
@@ -217,14 +217,14 @@ func printDryRun(out io.Writer, plan *planner.Plan) {
 	}
 
 	// Header.
-	fmt.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be moved."))
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be moved."))
 	fmt.Fprintln(out)
 
 	// Warnings block (shown before the plan so the user sees them first).
 	if len(allWarnings) > 0 {
-		fmt.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
+		lipgloss.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
 		for _, w := range allWarnings {
-			fmt.Fprintln(out, "   "+renameWarningStyle.Render(w))
+			lipgloss.Fprintln(out, "   "+renameWarningStyle.Render(w))
 		}
 		fmt.Fprintln(out)
 	}
@@ -238,14 +238,14 @@ func printDryRun(out io.Writer, plan *planner.Plan) {
 	groups := renameGroupByArtist(plan.Albums)
 	for _, g := range groups {
 		// "b / beyonce" bold artist header.
-		fmt.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
+		lipgloss.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
 
 		for _, ap := range g.albums {
 			// Album sub-header, indented two spaces.
-			fmt.Fprintln(out, "  "+renameAlbumStyle.Render(ap.AlbumName))
+			lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(ap.AlbumName))
 			// Source directory shown once per album so it doesn't repeat on
 			// every move line.
-			fmt.Fprintln(out, "  "+renameSourceStyle.Render("from "+ap.SourceDir))
+			lipgloss.Fprintln(out, "  "+renameSourceStyle.Render("from "+ap.SourceDir))
 
 			for _, op := range ap.Moves {
 				// Show only the base filename on the left (the source
@@ -299,8 +299,8 @@ func printSummaryLine(out io.Writer, albums, moves, noOps, warnings int) {
 		"%d albums · %d moves · %d %s · %d warnings",
 		albums, moves, noOps, noOpLabel, warnings,
 	)
-	fmt.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	fmt.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 }
 
 // artistGroup clusters all AlbumPlans for a single artist together with the

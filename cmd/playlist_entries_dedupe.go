@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/completion"
@@ -100,7 +101,7 @@ func runPlaylistEntriesDedupe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if warning != "" {
-		fmt.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "Removed %d duplicate entries; %d remaining\n", removed, len(deduped))
 	return nil

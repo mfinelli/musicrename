@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -85,7 +86,7 @@ func runSyncNavidromePull(cmd *cobra.Command, args []string) error {
 	}
 
 	if !skipScan {
-		fmt.Fprintln(out, renameHeaderStyle.Render("Checking library is up to date..."))
+		lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking library is up to date..."))
 		if err := navidrome.Scan(client, navidrome.DefaultScanPollInterval, scanProgressPrinter(out)); err != nil {
 			return fmt.Errorf("scanning library: %w", err)
 		}
@@ -175,17 +176,17 @@ func printPullResult(out io.Writer, root string, result *navidromesync.PullResul
 	}
 
 	for _, p := range result.Created {
-		fmt.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+label(p))+" ("+verb(true)+")")
+		lipgloss.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+label(p))+" ("+verb(true)+")")
 	}
 	for _, p := range result.Updated {
-		fmt.Fprintln(out, "  "+checkFindingStyle.Render("~ "+label(p))+" ("+verb(false)+")")
+		lipgloss.Fprintln(out, "  "+checkFindingStyle.Render("~ "+label(p))+" ("+verb(false)+")")
 	}
 	for _, p := range result.Deleted {
 		removedVerb := "removed"
 		if dryRun {
 			removedVerb = "would remove"
 		}
-		fmt.Fprintln(out, "  "+renameWarningStyle.Render("- "+label(p))+" ("+removedVerb+")")
+		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("- "+label(p))+" ("+removedVerb+")")
 	}
 
 	fmt.Fprintln(out)
@@ -196,7 +197,7 @@ func printPullResult(out io.Writer, root string, result *navidromesync.PullResul
 		fmt.Fprintln(out)
 		fmt.Fprintf(out, "%d warning(s):\n", len(result.Warnings))
 		for _, w := range result.Warnings {
-			fmt.Fprintln(out, "  "+renameWarningStyle.Render("⚠ "+w))
+			lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠ "+w))
 		}
 	}
 }
