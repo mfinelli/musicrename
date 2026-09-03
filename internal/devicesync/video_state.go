@@ -28,15 +28,21 @@ import (
 )
 
 // VideoDesiredState computes the full desired-state set for targetName's
-// video sync: every entry currently listed in videoRoot/{target}.m3u8,
-// resolved to a real file. Unlike [DesiredState], there's no per-album
-// manifest union, no global-playlist union, and no artwork entries; video
-// selection is a single flat manifest at the video root, and Rockbox's
-// video plugin has no use for a thumbnail/artwork file at all.
+// video sync: every entry currently listed in
+// libraryRootRoot/videos/{target}.m3u8, resolved to a real file. Unlike
+// [DesiredState], there's no per-album manifest union, no global-playlist
+// union, and no artwork entries; video selection is a single flat manifest
+// at the video root, and Rockbox's video plugin has no use for a
+// thumbnail/artwork file.
 //
-// Every returned DesiredEntry uses "videos" as its Root, consistent with
-// how the rest of this project already treats "videos" as a reserved,
-// distinct root name.
+// Takes libraryRootRoot, not the video root directly (matching
+// [DesiredState]'s parameter and [Plan]'s calling convention exactly
+// (and, downstream, `sync ipod`/`sync sdcard`'s CLI shape,
+// <device-path> [library-root]) so that every returned DesiredEntry's
+// fixed "videos" Root really does mean "join libraryRootRoot, \"videos\",
+// and Rel to reconstruct the real path", the same relationship every
+// other DesiredEntry in this package already has to whatever
+// libraryRootRoot the caller supplied.
 //
 // This does not re-validate that targetName was actually allowed to
 // select videos in the first place (`video select` already refuses a
@@ -47,11 +53,11 @@ import (
 // never had `video select` run for it, not something worth a special
 // early-exit case.
 //
-// An entry that doesn't resolve to an actual file under videoRoot is
-// skipped with a warning rather than included or failing the whole
-// computation, matching DesiredState's identical posture toward the same
-// situation.
-func VideoDesiredState(videoRoot, targetName string) (*DesiredStateResult, error) {
+// An entry that doesn't resolve to an actual file under libraryRootRoot/
+// videos is skipped with a warning rather than included or failing the
+// whole computation, matching DesiredState's identical posture toward the
+// same situation.
+func VideoDesiredState(libraryRootRoot, targetName string) (*DesiredStateResult, error) {
 	def, ok := target.DefinitionFor(targetName)
 	if !ok {
 		return nil, fmt.Errorf("unknown target %q", targetName)
@@ -60,6 +66,7 @@ func VideoDesiredState(videoRoot, targetName string) (*DesiredStateResult, error
 		return nil, fmt.Errorf("target %q does not support video", targetName)
 	}
 
+	videoRoot := filepath.Join(libraryRootRoot, "videos")
 	result := &DesiredStateResult{}
 
 	names, err := playlist.ReadManifest(videoRoot, targetName)

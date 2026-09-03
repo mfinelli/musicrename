@@ -27,6 +27,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/devicesync"
+	"github.com/mfinelli/musicrename/internal/target"
 )
 
 var syncIpodCmd = &cobra.Command{
@@ -39,6 +40,9 @@ FLAC, MP3, and M4A tracks are copied through unchanged; nothing is
 transcoded for this target. Album artwork is resized to fit within 400px
 and shipped as an external folder.jpg alongside the tracks (this target
 never embeds artwork).
+
+Also syncs selected video, transcoding each as necessary. --no-video skips
+video entirely; --video-only skips audio and syncs only video.
 
 Computes what needs to be added, regenerated, and deleted, checks the
 device has enough free space, then prompts for confirmation before making
@@ -56,6 +60,8 @@ func init() {
 	syncIpodCmd.Flags().Bool("dry-run", false, "Show the plan without changing anything")
 	syncIpodCmd.Flags().Bool("yes", false, "Skip the confirmation prompt")
 	syncIpodCmd.Flags().Bool("verbose", false, "Itemize every change instead of just the summary counts")
+	syncIpodCmd.Flags().Bool("no-video", false, "Skip video, sync audio only")
+	syncIpodCmd.Flags().Bool("video-only", false, "Skip audio, sync video only")
 	syncCmd.AddCommand(syncIpodCmd)
 }
 
@@ -87,13 +93,58 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	skipConfirm, _ := cmd.Flags().GetBool("yes")
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	noVideo, _ := cmd.Flags().GetBool("no-video")
+	videoOnly, _ := cmd.Flags().GetBool("video-only")
 	out := cmd.OutOrStdout()
+
+	if noVideo && videoOnly {
+		return fmt.Errorf("--no-video and --video-only are mutually exclusive")
+	}
+
+	def, ok := target.DefinitionFor(targetName)
+	if !ok {
+		return fmt.Errorf("unrecognized target %q", targetName)
+	}
+	if videoOnly && !def.SupportsVideo {
+		return fmt.Errorf("target %q does not support video; --video-only doesn't apply", targetName)
+	}
 
 	fmt.Fprintln(out, renameHeaderStyle.Render(fmt.Sprintf("Planning sync to %s...", targetName)))
 
-	plan, err := devicesync.Plan(libraryRoot, devicePath, targetName)
-	if err != nil {
-		return fmt.Errorf("planning sync: %w", err)
+	// audioPlan/videoPlan are computed independently (audio unless
+	// --video-only, video only when the target actually supports it and
+	// --no-video wasn't given) and then combined via MergePlans, which
+	// already handles a nil video plan by returning audio unchanged so
+	// this merge call covers every combination (both, audio-only via
+	// --no-video, audio-only because the target simply has no video
+	// support at all, or --video-only) without needing its own branch per
+	// case.
+	var audioPlan, videoPlan *devicesync.PlanResult
+	if !videoOnly {
+		audioPlan, err = devicesync.Plan(libraryRoot, devicePath, targetName)
+		if err != nil {
+			return fmt.Errorf("planning sync: %w", err)
+		}
+	}
+	if def.SupportsVideo && !noVideo {
+		videoPlan, err = devicesync.VideoPlan(libraryRoot, devicePath, targetName)
+		if err != nil {
+			return fmt.Errorf("planning video sync: %w", err)
+		}
+	}
+
+	var plan *devicesync.PlanResult
+	switch {
+	case audioPlan != nil:
+		plan = devicesync.MergePlans(audioPlan, videoPlan)
+	case videoPlan != nil:
+		plan = videoPlan
+	default:
+		// Unreachable given the validation above (videoOnly requires
+		// SupportsVideo, and !videoOnly always computes audioPlan) but
+		// guarded rather than risk a nil dereference below if that
+		// invariant is ever broken by a future edit.
+		return fmt.Errorf("internal error: nothing was planned")
 	}
 
 	counts := devicesync.CountChanges(plan.Diff)
@@ -182,9 +233,29 @@ func printPlanSummary(out io.Writer, c devicesync.ChangeCounts, capacity *device
 
 // printPlanDetail itemizes every add/regenerate/delete entry in diff, for
 // --verbose dry-run output. Skip entries are never itemized — there's
-// nothing to say about a file that isn't changing.
+// nothing to say about a file that isn't changing. When diff contains a
+// mix of audio and video entries, they're itemized under separate
+// "Audio:"/"Video:" headers rather than interleaved in one flat list. A
+// plain video sync (--video-only, or a target with no audio changes at all)
+// still renders as one flat list, without an empty "Audio:" header above
+// nothing.
 func printPlanDetail(out io.Writer, diff *devicesync.DiffResult) {
-	for _, change := range diff.Changes {
+	audio, video := partitionChangesByRoot(diff.Changes)
+	if len(video) == 0 {
+		printChangeList(out, audio)
+		return
+	}
+	if len(audio) > 0 {
+		fmt.Fprintln(out, renameHeaderStyle.Render("Audio:"))
+		printChangeList(out, audio)
+		fmt.Fprintln(out)
+	}
+	fmt.Fprintln(out, renameHeaderStyle.Render("Video:"))
+	printChangeList(out, video)
+}
+
+func printChangeList(out io.Writer, changes []devicesync.PlannedChange) {
+	for _, change := range changes {
 		switch change.Action {
 		case devicesync.ActionAdd:
 			fmt.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+syncEntryLabel(change.Entry))+" (would add)")
@@ -196,18 +267,66 @@ func printPlanDetail(out io.Writer, diff *devicesync.DiffResult) {
 	}
 }
 
+// partitionChangesByRoot splits changes into audio and video, purely by
+// each entry's own Root ("videos" is always video, reserved everywhere
+// else in this project for exactly that meaning and is never a real audio
+// library root name).
+func partitionChangesByRoot(changes []devicesync.PlannedChange) (audio, video []devicesync.PlannedChange) {
+	for _, c := range changes {
+		if c.Entry.Root == "videos" {
+			video = append(video, c)
+		} else {
+			audio = append(audio, c)
+		}
+	}
+	return audio, video
+}
+
 // printExecuteDetail itemizes what Execute actually did, for --verbose
-// real-run output.
+// real-run output it splits into "Audio:"/"Video:" sections the same way
+// printPlanDetail does, and for the same reason.
 func printExecuteDetail(out io.Writer, result *devicesync.ExecuteResult) {
-	for _, entry := range result.Created {
+	audioCreated, videoCreated := partitionEntriesByRoot(result.Created)
+	audioUpdated, videoUpdated := partitionEntriesByRoot(result.Updated)
+	audioDeleted, videoDeleted := partitionEntriesByRoot(result.Deleted)
+
+	if len(videoCreated)+len(videoUpdated)+len(videoDeleted) == 0 {
+		printExecuteEntries(out, result.Created, result.Updated, result.Deleted)
+		return
+	}
+	if len(audioCreated)+len(audioUpdated)+len(audioDeleted) > 0 {
+		fmt.Fprintln(out, renameHeaderStyle.Render("Audio:"))
+		printExecuteEntries(out, audioCreated, audioUpdated, audioDeleted)
+		fmt.Fprintln(out)
+	}
+	fmt.Fprintln(out, renameHeaderStyle.Render("Video:"))
+	printExecuteEntries(out, videoCreated, videoUpdated, videoDeleted)
+}
+
+func printExecuteEntries(out io.Writer, created, updated, deleted []devicesync.DesiredEntry) {
+	for _, entry := range created {
 		fmt.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+syncEntryLabel(entry))+" (created)")
 	}
-	for _, entry := range result.Updated {
+	for _, entry := range updated {
 		fmt.Fprintln(out, "  "+checkFindingStyle.Render("~ "+syncEntryLabel(entry))+" (updated)")
 	}
-	for _, entry := range result.Deleted {
+	for _, entry := range deleted {
 		fmt.Fprintln(out, "  "+renameWarningStyle.Render("- "+syncEntryLabel(entry))+" (deleted)")
 	}
+}
+
+// partitionEntriesByRoot is partitionChangesByRoot's equivalent for a
+// flat []DesiredEntry list (ExecuteResult's Created/Updated/Deleted
+// shape, rather than DiffResult's []PlannedChange).
+func partitionEntriesByRoot(entries []devicesync.DesiredEntry) (audio, video []devicesync.DesiredEntry) {
+	for _, e := range entries {
+		if e.Root == "videos" {
+			video = append(video, e)
+		} else {
+			audio = append(audio, e)
+		}
+	}
+	return audio, video
 }
 
 // syncEntryLabel renders a DesiredEntry as a single displayable path.

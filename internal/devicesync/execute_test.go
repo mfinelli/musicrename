@@ -546,6 +546,41 @@ func TestExecute(t *testing.T) {
 		assert.Len(t, sums, 1, "the final sums.md5 must reflect only the surviving file")
 		assert.Contains(t, sums, "02 new.flac")
 	})
+
+	t.Run("add: a video is transcoded via PrepareVideo, not copied through", func(t *testing.T) {
+		// Isolated, hand-built-diff test of executeAlbum's video branch
+		// specifically (separate from TestVideoPlan's higher-level,
+		// full-pipeline coverage, so a failure here points precisely at
+		// the branch selection itself rather than needing to be
+		// disentangled from VideoDesiredState/Diff too).
+		root := t.TempDir()
+		device := t.TempDir()
+		videoDir := filepath.Join(root, "videos", "b", "beyonce", "crazy in love")
+		require.NoError(t, os.MkdirAll(videoDir, 0755))
+		src := makeVideoFile(t, videoDir, "crazy in love.mp4", 640, 360)
+		srcHash, err := hasher.HashFile(src)
+		require.NoError(t, err)
+		require.NoError(t, hasher.WriteSums(videoDir, hasher.SumsFilename, map[string]string{
+			"crazy in love.mp4": srcHash,
+		}))
+
+		entry := DesiredEntry{Root: "videos", Rel: "b/beyonce/crazy in love/crazy in love.mp4"}
+		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionAdd}}}
+
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		require.NoError(t, err)
+		require.Len(t, result.Created, 1)
+		assert.Empty(t, result.Warnings)
+
+		deviceVideo := filepath.Join(device, "videos", "b", "beyonce", "crazy in love", "crazy in love.mpg")
+		assert.FileExists(t, deviceVideo)
+		assert.NoFileExists(t, filepath.Join(device, "videos", "b", "beyonce", "crazy in love", "crazy in love.mp4"),
+			"the source container must not have been copied through unchanged")
+
+		deviceSums, _, err := hasher.ReadSums(filepath.Dir(deviceVideo), hasher.SumsFilename)
+		require.NoError(t, err)
+		assert.NotEmpty(t, deviceSums["crazy in love.mpg"])
+	})
 }
 
 func TestCleanupEmptyParents(t *testing.T) {

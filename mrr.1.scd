@@ -388,6 +388,11 @@ FLAC, MP3, and M4A tracks are copied through unchanged; nothing is
 transcoded for this target. Album artwork is resized to fit within 400
 pixels and shipped as a separate file alongside the tracks.
 
+Also syncs selected videos (see *mrr video select*), transcoding each to
+MPEG-2 video / MP3 audio in an MPEG Program Stream (the only format
+Rockbox's MPEGplayer plugin decodes). *--no-video* skips video entirely;
+*--video-only* skips audio and syncs only video.
+
 Compares the library against whatever is already on the device, checks
 that there's enough free space for the changes, then asks for
 confirmation before adding, updating, or removing anything on the
@@ -402,6 +407,10 @@ If _path_ is omitted it defaults to the current directory.
 	Skip the confirmation prompt.
 *--verbose*
 	List every file added, updated, or removed instead of just totals.
+*--no-video*
+	Skip video entirely, sync audio only.
+*--video-only*
+	Skip audio, sync only video.
 
 ## mrr sync sdcard <_device-path_> [_path_]
 
@@ -428,6 +437,10 @@ If _path_ is omitted it defaults to the current directory.
 	Skip the confirmation prompt.
 *--verbose*
 	List every file added, updated, or removed instead of just totals.
+*--no-video*
+	No effect on this target (no video support).
+*--video-only*
+	Errors: this target has no video support.
 
 ## mrr sync navidrome pull [_playlist_]
 

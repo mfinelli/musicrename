@@ -39,10 +39,11 @@ type ExecuteResult struct {
 }
 
 // Execute applies diff's full plan: creates or regenerates each
-// add/regenerate entry via [PrepareTrack] (audio) or [artwork.ResizeFile]
-// (external artwork), removes each delete entry, and updates the affected
-// album's on-device sums.md5 and (for a derived file) {target}.src.md5 to
-// match. diff.Changes entries with ActionSkip are simply ignored.
+// add/regenerate entry via [PrepareTrack] (audio), [PrepareVideo] (video),
+// or [artwork.ResizeFile] (external artwork), removes each delete entry, and
+// updates the affected album's on-device sums.md5 and (for a derived file)
+// {target}.src.md5 to match. diff.Changes entries with ActionSkip are simply
+// ignored.
 //
 // Changes are grouped by album so that (1) an embedding target's album
 // artwork is resized at most once and reused for every track in that
@@ -217,9 +218,15 @@ func executeAlbum(
 		}
 
 		var writeErr error
-		if isArtworkName(sourceName) {
+		switch {
+		case isArtworkName(sourceName):
 			writeErr = artwork.ResizeFile(sourcePath, destPath, def.ArtMaxDimension)
-		} else {
+		case videoExts[strings.ToLower(filepath.Ext(sourceName))]:
+			// A video (unlike audio) always transcodes, matching
+			// deviceRelFor's own unconditional video handling above;
+			// there's no passthrough case here.
+			writeErr = PrepareVideo(ctx, sourcePath, destPath, def.Video)
+		default:
 			writeErr = PrepareTrack(ctx, sourcePath, destPath, def, artBytes)
 		}
 		if writeErr != nil {

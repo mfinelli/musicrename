@@ -18,6 +18,7 @@
 package devicesync
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -50,9 +51,10 @@ func TestVideoDesiredState(t *testing.T) {
 
 	t.Run("includes a selected, resolvable video with Root always \"videos\"", func(t *testing.T) {
 		root := t.TempDir()
+		videos := filepath.Join(root, "videos")
 		rel := filepath.Join("b", "beyonce", "crazy in love", "crazy in love.mp4")
-		touch(t, filepath.Join(root, rel))
-		require.NoError(t, playlist.WriteManifest(root, "ipod", []string{filepath.ToSlash(rel)}))
+		touch(t, filepath.Join(videos, rel))
+		require.NoError(t, playlist.WriteManifest(videos, "ipod", []string{filepath.ToSlash(rel)}))
 
 		result, err := VideoDesiredState(root, "ipod")
 		require.NoError(t, err)
@@ -62,9 +64,32 @@ func TestVideoDesiredState(t *testing.T) {
 		assert.Empty(t, result.Warnings)
 	})
 
+	t.Run("a resulting entry reconstructs to the real file via (libraryRootRoot, Root, Rel)", func(t *testing.T) {
+		// The whole point of taking libraryRootRoot instead of the video
+		// root directly: confirms Diff/CheckCapacity's path
+		// reconstruction actually lands back on the real file, not just
+		// that VideoDesiredState's internal video root happens to be
+		// right.
+		root := t.TempDir()
+		videos := filepath.Join(root, "videos")
+		rel := filepath.Join("b", "beyonce", "crazy in love", "crazy in love.mp4")
+		realPath := filepath.Join(videos, rel)
+		touch(t, realPath)
+		require.NoError(t, playlist.WriteManifest(videos, "ipod", []string{filepath.ToSlash(rel)}))
+
+		result, err := VideoDesiredState(root, "ipod")
+		require.NoError(t, err)
+		require.Len(t, result.Entries, 1)
+
+		reconstructed := filepath.Join(root, result.Entries[0].Root, result.Entries[0].Rel)
+		assert.Equal(t, realPath, reconstructed)
+	})
+
 	t.Run("a stale manifest entry is skipped with a warning, not included", func(t *testing.T) {
 		root := t.TempDir()
-		require.NoError(t, playlist.WriteManifest(root, "ipod", []string{"b/beyonce/gone/gone.mp4"}))
+		videos := filepath.Join(root, "videos")
+		require.NoError(t, os.MkdirAll(videos, 0755))
+		require.NoError(t, playlist.WriteManifest(videos, "ipod", []string{"b/beyonce/gone/gone.mp4"}))
 
 		result, err := VideoDesiredState(root, "ipod")
 		require.NoError(t, err)
@@ -75,9 +100,10 @@ func TestVideoDesiredState(t *testing.T) {
 
 	t.Run("a manifest for a different target is not included", func(t *testing.T) {
 		root := t.TempDir()
+		videos := filepath.Join(root, "videos")
 		rel := filepath.Join("b", "beyonce", "crazy in love", "crazy in love.mp4")
-		touch(t, filepath.Join(root, rel))
-		require.NoError(t, playlist.WriteManifest(root, "sdcard", []string{filepath.ToSlash(rel)}))
+		touch(t, filepath.Join(videos, rel))
+		require.NoError(t, playlist.WriteManifest(videos, "sdcard", []string{filepath.ToSlash(rel)}))
 
 		result, err := VideoDesiredState(root, "ipod")
 		require.NoError(t, err)
@@ -86,11 +112,12 @@ func TestVideoDesiredState(t *testing.T) {
 
 	t.Run("entries are sorted by Rel", func(t *testing.T) {
 		root := t.TempDir()
+		videos := filepath.Join(root, "videos")
 		relB := filepath.Join("b", "beyonce", "crazy in love", "crazy in love.mp4")
 		relA := filepath.Join("a", "artist", "aardvark", "aardvark.mp4")
-		touch(t, filepath.Join(root, relB))
-		touch(t, filepath.Join(root, relA))
-		require.NoError(t, playlist.WriteManifest(root, "ipod", []string{
+		touch(t, filepath.Join(videos, relB))
+		touch(t, filepath.Join(videos, relA))
+		require.NoError(t, playlist.WriteManifest(videos, "ipod", []string{
 			filepath.ToSlash(relB), filepath.ToSlash(relA),
 		}))
 

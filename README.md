@@ -169,14 +169,16 @@ christmas/m/mariah carey/[1994] merry christmas/01 all i want for christmas is y
 
 ```sh
 mrr playlist select ipod        # choose which tracks to include, per album
+mrr video select ipod           # choose which videos to include (ipod only)
 mrr sync ipod /media/you/IPOD   # copy them to the device
 ```
 
-Only tracks selected for a target are copied to it. Each sync compares the
-library against whatever's already on the device, adds anything missing, updates
-anything changed, and removes anything no longer selected (removals only ever
-affect the device copy, never the source library). Free space on the device is
-checked and confirmation is required before anything changes.
+Only tracks (and, for a video-capable target, videos) selected for a target are
+copied to it. Each sync compares the library against whatever's already on the
+device, adds anything missing, updates anything changed, and removes anything no
+longer selected (removals only ever affect the device copy, never the source
+library). Free space on the device is checked and confirmation is required
+before anything changes.
 
 `ipod` copies FLAC/MP3/M4A through unchanged and ships artwork as a separate
 file; `sdcard` transcodes anything that isn't already MP3 and embeds artwork
@@ -352,8 +354,12 @@ confirmation before adding, updating, or removing anything. `--dry-run` previews
 without changing anything; `--verbose` lists every file instead of just totals;
 `--yes` skips the confirmation prompt.
 
+`sync ipod` also syncs selected videos (see `video select`) alongside audio in
+the same run; `--no-video` skips video entirely, `--video-only` skips audio.
+
 ```sh
 mrr sync ipod /media/you/IPOD
+mrr sync ipod /media/you/IPOD --video-only
 mrr sync sdcard /media/you/SDCARD --dry-run
 ```
 
