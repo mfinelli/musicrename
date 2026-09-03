@@ -739,6 +739,19 @@ By default, errors if a derived audio file already exists.
 derived audio file for the video is an error, even with *--force* so you
 need resolve it manually first.
 
+## mrr video select _target_ [_video-root_]
+
+Opens an interactive directory browser scoped to _video-root_ for choosing
+which videos are selected to sync to _target_: arrow keys (or j/k) move the
+cursor, left/h/backspace goes up a level, right/l/enter descends into a
+bucket letter or, from there, opens a checkbox picker of that artist's
+videos. Press / to filter the current directory's listing by substring.
+Nothing is written until you leave the browser: esc/q at the top level saves
+the selection to _video-root_/_target_.m3u8, ctrl+c discards all changes.
+
+_target_ must support video. If _video-root_ is omitted it defaults to the
+current working directory.
+
 # SEE ALSO
 
 *ffmpeg*(1) *md5sum*(1) *rsgain*(1) *yt-dlp*(1)

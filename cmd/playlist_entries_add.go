@@ -374,52 +374,31 @@ func (m *entriesAddModel) openAlbum(dir string) tea.Cmd {
 	return m.form.Init()
 }
 
-// openArtistVideos reads artistDir's videos: each of artistDir's
-// subdirectories is one video's leaf directory) and builds a huh MultiSelect
-// of every one that has a derived audio file, labeled by title alone (every
-// option here is already known to be by this same artist). A video with no
-// derived audio yet, or the anomalous multiple-derived-audio-files state, is
-// silently omitted rather than surfaced here (video check already owns
-// flagging that specific problem).
+// openArtistVideos builds a huh MultiSelect, via videoOptionsForArtist, of
+// every video under artistDir that has a derived audio file, resolving each
+// one to its derived audio file's path (a video with no derived audio yet, or
+// the anomalous multiple-derived-audio-files state, is silently omitted rather
+// than surfaced here since video check already owns flagging that specific
+// problem).
 //
 // Never navigates m.currentDir at all (mirroring openAlbum, which also
 // builds directly on top of the current listing). Completing or
 // cancelling the form returns to the bucket-level artist listing, without
 // ever having "visually" entered artistDir.
 func (m *entriesAddModel) openArtistVideos(artistDir string) tea.Cmd {
-	titleDirs, err := playlist.ListSubdirectories(artistDir)
+	relPaths, options, err := videoOptionsForArtist(m.libraryRootRoot, artistDir, m.selection.IsSelected,
+		func(videoPath string) (string, bool) {
+			audioFiles, aerr := video.DerivedAudioFiles(videoPath)
+			if aerr != nil || len(audioFiles) != 1 {
+				return "", false // none yet, or the ambiguous multiple-files state
+			}
+			return audioFiles[0], true
+		},
+	)
 	if err != nil {
 		m.errMsg = err.Error()
 		return nil
 	}
-
-	var relPaths []string
-	var options []huh.Option[string]
-	for _, name := range titleDirs {
-		titleDir := filepath.Join(artistDir, name)
-
-		videoPath, err := video.SoleVideoFile(titleDir)
-		if err != nil {
-			continue // no video, or more than one: not this browser's problem to flag
-		}
-		audioFiles, err := video.DerivedAudioFiles(videoPath)
-		if err != nil || len(audioFiles) != 1 {
-			continue // none yet, or the ambiguous multiple-files state
-		}
-		nfo, err := video.ReadNFO(titleDir)
-		if err != nil || strings.TrimSpace(nfo.Title) == "" {
-			continue
-		}
-
-		rel, relErr := filepath.Rel(m.libraryRootRoot, audioFiles[0])
-		if relErr != nil {
-			m.errMsg = relErr.Error()
-			return nil
-		}
-		relPaths = append(relPaths, rel)
-		options = append(options, huh.NewOption(nfo.Title, rel).Selected(m.selection.IsSelected(rel)))
-	}
-
 	if len(options) == 0 {
 		m.errMsg = fmt.Sprintf("%s has no videos with extracted audio yet", artistDir)
 		return nil

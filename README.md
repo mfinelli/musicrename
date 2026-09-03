@@ -416,6 +416,7 @@ mrr video rename        # reconcile locations after any edits
 mrr video sums          # generate md5 checksums
 mrr video check         # audit for issues
 mrr video extract-audio <file>  # pull a standalone, tagged audio file out of a video
+mrr video select ipod           # choose which videos sync to a target
 ```
 
 ### Video Commands
@@ -495,6 +496,17 @@ to fully re-extract.
 
 ```sh
 mrr video extract-audio "crazy in love.mp4"
+```
+
+#### `video select`
+
+Opens an interactive browser (arrow keys/j/k to move, enter to open a bucket
+letter or an artist's video checklist, / to filter, esc/q to save, ctrl+c to
+discard) for choosing which videos sync to a target, writing the selection to
+`{target}.m3u8` at the video root. The target must support video.
+
+```sh
+mrr video select ipod
 ```
 
 ## Contributing
