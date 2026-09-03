@@ -198,7 +198,7 @@ func probeStreamTypes(t *testing.T, path string) []string {
 	}
 
 	var types []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if line != "" {
 			types = append(types, line)
 		}

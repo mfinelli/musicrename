@@ -70,7 +70,7 @@ func probeAspectRatio(ctx context.Context, r probeRunner, src string) (float64, 
 
 	var width, height int
 	var dar string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		key, val, ok := strings.Cut(line, "=")
 		if !ok {
 			continue

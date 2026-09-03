@@ -275,10 +275,7 @@ func waitForTag(ch chan tagLoadedMsg) tea.Cmd {
 func (m *reorderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.height = msg.Height - reorderChromeLines
-		if m.height < 1 {
-			m.height = 1
-		}
+		m.height = max(msg.Height-reorderChromeLines, 1)
 		m.ensureVisible()
 
 	case tagLoadedMsg:
@@ -387,10 +384,7 @@ func (m *reorderModel) View() string {
 	b.WriteString(renameHeaderStyle.Render(fmt.Sprintf("Reorder %s", filepath.Base(m.path))))
 	b.WriteString("\n\n")
 
-	end := m.scrollTop + m.height
-	if end > len(m.entries) {
-		end = len(m.entries)
-	}
+	end := min(m.scrollTop+m.height, len(m.entries))
 
 	for i := m.scrollTop; i < end; i++ {
 		e := m.entries[i]

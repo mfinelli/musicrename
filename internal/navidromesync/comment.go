@@ -86,7 +86,7 @@ func parseCommentDirectives(comment string) (human string, d commentDirectives) 
 	}
 
 	human = m[1]
-	for _, kv := range strings.Split(m[2], ";") {
+	for kv := range strings.SplitSeq(m[2], ";") {
 		kv = strings.TrimSpace(kv)
 		if kv == "" {
 			continue

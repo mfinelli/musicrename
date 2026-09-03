@@ -98,7 +98,7 @@ func parseTargetsFlag(cmd *cobra.Command, flag string) ([]string, error) {
 
 	raw, _ := cmd.Flags().GetString(flag)
 	targets := []string{}
-	for _, t := range strings.Split(raw, ",") {
+	for t := range strings.SplitSeq(raw, ",") {
 		t = strings.TrimSpace(t)
 		if t == "" {
 			continue

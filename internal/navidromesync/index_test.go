@@ -76,7 +76,7 @@ func TestBuildSongIndex(t *testing.T) {
 			n := min(remaining, songIndexPageSize)
 
 			var songs []string
-			for i := 0; i < n; i++ {
+			for i := range n {
 				id := offset + i
 				songs = append(songs, fmt.Sprintf(`{"id":"s%d","path":"track%d.flac"}`, id, id))
 			}

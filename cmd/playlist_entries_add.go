@@ -475,10 +475,7 @@ func (m *entriesAddModel) updateAlbum(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *entriesAddModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.height = msg.Height - entriesAddChromeLines
-		if m.height < 1 {
-			m.height = 1
-		}
+		m.height = max(msg.Height-entriesAddChromeLines, 1)
 		m.ensureVisible()
 
 	case tea.KeyMsg:
@@ -535,10 +532,7 @@ func (m *entriesAddModel) moveCursor(delta int) {
 	if len(m.dirEntries) == 0 {
 		return
 	}
-	next := m.cursor + delta
-	if next < 0 {
-		next = 0
-	}
+	next := max(m.cursor+delta, 0)
 	if next >= len(m.dirEntries) {
 		next = len(m.dirEntries) - 1
 	}
@@ -595,10 +589,7 @@ func (m *entriesAddModel) View() string {
 		b.WriteString("\n")
 	}
 
-	end := m.scrollTop + m.height
-	if end > len(m.dirEntries) {
-		end = len(m.dirEntries)
-	}
+	end := min(m.scrollTop+m.height, len(m.dirEntries))
 	for i := m.scrollTop; i < end; i++ {
 		marker := "  "
 		if i == m.cursor {

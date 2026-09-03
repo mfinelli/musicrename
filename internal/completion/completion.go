@@ -61,7 +61,7 @@ func CommaSeparated(candidates []string) func(cmd *cobra.Command, args []string,
 		if idx := strings.LastIndex(toComplete, ","); idx >= 0 {
 			prefix = toComplete[:idx+1]
 			partial = toComplete[idx+1:]
-			for _, s := range strings.Split(toComplete[:idx], ",") {
+			for s := range strings.SplitSeq(toComplete[:idx], ",") {
 				already[s] = true
 			}
 		}

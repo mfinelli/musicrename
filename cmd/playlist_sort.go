@@ -206,7 +206,7 @@ func resolvePlaylistSortMode(
 // order preserved) to record as the new #SORT: directive.
 func parseSortFields(raw string) ([]playlist.SortField, []string, error) {
 	var spec []string
-	for _, p := range strings.Split(raw, ",") {
+	for p := range strings.SplitSeq(raw, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			spec = append(spec, p)

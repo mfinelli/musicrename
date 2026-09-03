@@ -25,8 +25,6 @@ import (
 	"github.com/mfinelli/musicrename/internal/metadata"
 )
 
-func intp(n int) *int { return &n }
-
 func TestValidSortField(t *testing.T) {
 	t.Run("every ValidSortFields entry is valid", func(t *testing.T) {
 		for _, f := range ValidSortFields {
@@ -73,9 +71,9 @@ func TestSortEntries(t *testing.T) {
 
 	t.Run("multi-field: second field breaks ties in the first", func(t *testing.T) {
 		rows := []EntryRow{
-			rowFor("a.flac", &metadata.Track{Album: "Z", TrackNumber: intp(2)}),
-			rowFor("b.flac", &metadata.Track{Album: "A", TrackNumber: intp(5)}),
-			rowFor("c.flac", &metadata.Track{Album: "Z", TrackNumber: intp(1)}),
+			rowFor("a.flac", &metadata.Track{Album: "Z", TrackNumber: new(2)}),
+			rowFor("b.flac", &metadata.Track{Album: "A", TrackNumber: new(5)}),
+			rowFor("c.flac", &metadata.Track{Album: "Z", TrackNumber: new(1)}),
 		}
 		got := SortEntries(rows, []SortField{SortAlbum, SortTrack})
 		assert.Equal(t, []string{"b.flac", "c.flac", "a.flac"}, got)
@@ -93,8 +91,8 @@ func TestSortEntries(t *testing.T) {
 	t.Run("a nil TrackNumber sorts last, but explicit zero (hidden track) does not", func(t *testing.T) {
 		rows := []EntryRow{
 			rowFor("nil.flac", &metadata.Track{TrackNumber: nil}),
-			rowFor("zero.flac", &metadata.Track{TrackNumber: intp(0)}),
-			rowFor("one.flac", &metadata.Track{TrackNumber: intp(1)}),
+			rowFor("zero.flac", &metadata.Track{TrackNumber: new(0)}),
+			rowFor("one.flac", &metadata.Track{TrackNumber: new(1)}),
 		}
 		got := SortEntries(rows, []SortField{SortTrack})
 		assert.Equal(t, []string{"zero.flac", "one.flac", "nil.flac"}, got)
