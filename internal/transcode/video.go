@@ -26,6 +26,13 @@ import (
 	"github.com/mfinelli/musicrename/internal/target"
 )
 
+// VideoExt is the file extension used for a video transcoded via
+// [TranscodeVideo]. TranscodeVideo itself doesn't enforce this (ffmpeg's
+// -f mpeg flag controls the actual output format regardless of dst's
+// extension, so this is purely a naming convention) but every caller that
+// picks dst should use it, for one shared source of truth.
+const VideoExt = ".mpg"
+
 const (
 	// aspectRatioMin/aspectRatioMax bound the range of source aspect
 	// ratios ChooseVideoScale will attempt to fit into either preset.
