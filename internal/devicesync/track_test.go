@@ -22,9 +22,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,51 +31,8 @@ import (
 	"go.senan.xyz/taglib"
 
 	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
-
-// makeAudioFile generates a short silent audio file at dir/name (extension
-// determines the codec) carrying tags, via a real ffmpeg invocation.
-// Mirrors the equivalent helper already used by internal/metadata and
-// internal/checker's own tests; redefined here because _test.go helpers
-// cannot be imported across packages. Not skippable (requires a real
-// ffmpeg binary on PATH, same as those).
-func makeAudioFile(t *testing.T, dir, name string, tags map[string]string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	ext := strings.ToLower(filepath.Ext(name))
-
-	var codec string
-	switch ext {
-	case ".flac":
-		codec = "flac"
-	case ".mp3":
-		codec = "libmp3lame"
-	case ".m4a":
-		codec = "aac"
-	default:
-		t.Fatalf("makeAudioFile: unsupported extension %q", ext)
-	}
-
-	args := []string{
-		"-y",
-		"-f", "lavfi",
-		"-i", "anullsrc=r=44100:cl=stereo",
-		"-t", "1",
-		"-c:a", codec,
-	}
-	for k, v := range tags {
-		args = append(args, "-metadata", fmt.Sprintf("%s=%s", k, v))
-	}
-	args = append(args, path)
-
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeAudioFile: ffmpeg failed: %v\n%s", err, out)
-	}
-
-	return path
-}
 
 func fileMD5(t *testing.T, path string) string {
 	t.Helper()
@@ -90,7 +45,7 @@ func fileMD5(t *testing.T, path string) string {
 func TestPrepareTrack(t *testing.T) {
 	t.Run("passthrough is byte-for-byte identical to source, tags untouched", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeAudioFile(t, dir, "01 track.flac", map[string]string{
+		src := testutil.MakeAudioFile(t, dir, "01 track.flac", map[string]string{
 			"TITLE": "Track One", "ARTIST": "Test Artist",
 		})
 		dst := filepath.Join(dir, "out", "01 track.flac")
@@ -111,7 +66,7 @@ func TestPrepareTrack(t *testing.T) {
 
 	t.Run("passthrough with an embedding target still stays untouched by a tag rewrite", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeAudioFile(t, dir, "01 track.mp3", map[string]string{
+		src := testutil.MakeAudioFile(t, dir, "01 track.mp3", map[string]string{
 			"TITLE": "Track One", "ARTIST": "Test Artist",
 		})
 		dst := filepath.Join(dir, "out.mp3")
@@ -129,7 +84,7 @@ func TestPrepareTrack(t *testing.T) {
 
 	t.Run("transcode: unsupported format is transcoded and tags are migrated", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeAudioFile(t, dir, "01 track.flac", map[string]string{
+		src := testutil.MakeAudioFile(t, dir, "01 track.flac", map[string]string{
 			"TITLE": "Track One", "ARTIST": "Test Artist",
 		})
 		dst := filepath.Join(dir, "01 track.mp3")
@@ -156,7 +111,7 @@ func TestPrepareTrack(t *testing.T) {
 
 	t.Run("embeds artwork when the target embeds and art is given", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeAudioFile(t, dir, "01 track.mp3", map[string]string{"TITLE": "Track One"})
+		src := testutil.MakeAudioFile(t, dir, "01 track.mp3", map[string]string{"TITLE": "Track One"})
 		dst := filepath.Join(dir, "out.mp3")
 
 		def := target.Definition{AcceptedFormats: []string{".mp3"}, EmbedArt: true}
@@ -176,7 +131,7 @@ func TestPrepareTrack(t *testing.T) {
 
 	t.Run("does not embed artwork when the target does not embed, even if art is given", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeAudioFile(t, dir, "01 track.mp3", map[string]string{"TITLE": "Track One"})
+		src := testutil.MakeAudioFile(t, dir, "01 track.mp3", map[string]string{"TITLE": "Track One"})
 		dst := filepath.Join(dir, "out.mp3")
 
 		def := target.Definition{AcceptedFormats: []string{".mp3"}, EmbedArt: false}
@@ -186,7 +141,7 @@ func TestPrepareTrack(t *testing.T) {
 
 	t.Run("creates the destination directory if it does not exist", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeAudioFile(t, dir, "01 track.flac", nil)
+		src := testutil.MakeAudioFile(t, dir, "01 track.flac", nil)
 		dst := filepath.Join(dir, "a", "b", "c", "track.flac")
 
 		def := target.Definition{AcceptedFormats: []string{".flac"}}
@@ -196,7 +151,7 @@ func TestPrepareTrack(t *testing.T) {
 
 	t.Run("errors when the target's TranscodeFormat has no encode params", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeAudioFile(t, dir, "01 track.flac", nil)
+		src := testutil.MakeAudioFile(t, dir, "01 track.flac", nil)
 		dst := filepath.Join(dir, "out.ogg")
 
 		def := target.Definition{

@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mfinelli/musicrename/internal/hasher"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 // makeArtworkFile writes a small solid-color JPEG at path.
@@ -57,7 +58,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		album := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(album, 0755))
-		src := makeAudioFile(t, album, "01 track.flac", map[string]string{"TITLE": "Track"})
+		src := testutil.MakeAudioFile(t, album, "01 track.flac", map[string]string{"TITLE": "Track"})
 		hash, err := hasher.HashFile(src)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(album, hasher.SumsFilename, map[string]string{"01 track.flac": hash}))
@@ -89,7 +90,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		album := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(album, 0755))
-		src := makeAudioFile(t, album, "01 track.flac", map[string]string{"TITLE": "Track"})
+		src := testutil.MakeAudioFile(t, album, "01 track.flac", map[string]string{"TITLE": "Track"})
 		srcHash, err := hasher.HashFile(src)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(album, hasher.SumsFilename, map[string]string{"01 track.flac": srcHash}))
@@ -125,7 +126,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		album := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(album, 0755))
-		src := makeAudioFile(t, album, "01 track.flac", map[string]string{"TITLE": "New"})
+		src := testutil.MakeAudioFile(t, album, "01 track.flac", map[string]string{"TITLE": "New"})
 		newHash, err := hasher.HashFile(src)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(album, hasher.SumsFilename, map[string]string{"01 track.flac": newHash}))
@@ -190,7 +191,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		album := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(album, 0755))
-		src := makeAudioFile(t, album, "01 track.mp3", map[string]string{"TITLE": "Track"})
+		src := testutil.MakeAudioFile(t, album, "01 track.mp3", map[string]string{"TITLE": "Track"})
 		artPath := filepath.Join(album, "folder.jpg")
 		makeArtworkFile(t, artPath, 200)
 
@@ -229,7 +230,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		album := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(album, 0755))
-		src := makeAudioFile(t, album, "01 track.flac", nil)
+		src := testutil.MakeAudioFile(t, album, "01 track.flac", nil)
 		hash, err := hasher.HashFile(src)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(album, hasher.SumsFilename, map[string]string{"01 track.flac": hash}))
@@ -255,14 +256,14 @@ func TestExecute(t *testing.T) {
 
 		albumA := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(albumA, 0755))
-		srcA := makeAudioFile(t, albumA, "01 track.flac", nil)
+		srcA := testutil.MakeAudioFile(t, albumA, "01 track.flac", nil)
 		hashA, err := hasher.HashFile(srcA)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(albumA, hasher.SumsFilename, map[string]string{"01 track.flac": hashA}))
 
 		albumB := filepath.Join(root, "main", "b", "artist", "album")
 		require.NoError(t, os.MkdirAll(albumB, 0755))
-		srcB := makeAudioFile(t, albumB, "01 track.flac", nil)
+		srcB := testutil.MakeAudioFile(t, albumB, "01 track.flac", nil)
 		hashB, err := hasher.HashFile(srcB)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(albumB, hasher.SumsFilename, map[string]string{"01 track.flac": hashB}))
@@ -294,7 +295,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		album := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(album, 0755))
-		src := makeAudioFile(t, album, "02 track.flac", nil)
+		src := testutil.MakeAudioFile(t, album, "02 track.flac", nil)
 		hash, err := hasher.HashFile(src)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(album, hasher.SumsFilename, map[string]string{
@@ -513,7 +514,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		sourceAlbum := filepath.Join(root, "main", "a", "artist", "album")
 		require.NoError(t, os.MkdirAll(sourceAlbum, 0755))
-		newSrc := makeAudioFile(t, sourceAlbum, "02 new.flac", nil)
+		newSrc := testutil.MakeAudioFile(t, sourceAlbum, "02 new.flac", nil)
 		newHash, err := hasher.HashFile(newSrc)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(sourceAlbum, hasher.SumsFilename, map[string]string{
@@ -557,7 +558,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		videoDir := filepath.Join(root, "videos", "b", "beyonce", "crazy in love")
 		require.NoError(t, os.MkdirAll(videoDir, 0755))
-		src := makeVideoFile(t, videoDir, "crazy in love.mp4", 640, 360)
+		src := testutil.MakeVideoFile(t, videoDir, "crazy in love.mp4", 640, 360, "libx264", "aac")
 		srcHash, err := hasher.HashFile(src)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(videoDir, hasher.SumsFilename, map[string]string{

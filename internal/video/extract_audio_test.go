@@ -20,7 +20,6 @@ package video
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -29,30 +28,8 @@ import (
 	"go.senan.xyz/taglib"
 
 	"github.com/mfinelli/musicrename/internal/hasher"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
-
-// makeVideoFile generates a short synthetic video file via ffmpeg's lavfi
-// test sources, mirroring internal/transcode's own helper of the same
-// purpose.
-func makeVideoFile(t *testing.T, dir, name, videoCodec, audioCodec string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	args := []string{
-		"-y",
-		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-		"-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=5",
-	}
-	args = append(args, "-map", "1:v", "-map", "0:a")
-	args = append(args, "-c:v", videoCodec, "-c:a", audioCodec, "-shortest", "-t", "2", path)
-
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeVideoFile: ffmpeg failed: %v\n%s", err, out)
-	}
-
-	return path
-}
 
 // writeNFOFixture writes a minimal musicvideo.nfo alongside videoPath.
 func writeNFOFixture(t *testing.T, videoPath string, nfo NFO) {
@@ -66,7 +43,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("fresh extraction: remuxes, tags, and computes ReplayGain", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 
 		dst, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
@@ -83,7 +60,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("fresh extraction writes audio.src.md5 recording the video's hash", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 
 		_, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
@@ -100,7 +77,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("fresh extraction updates an existing sums.md5", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 		require.NoError(t, hasher.Hash(dir, nil))
 
@@ -115,7 +92,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("fresh extraction leaves sums.md5 absent if it never existed", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 
 		_, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
@@ -128,7 +105,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("fresh extraction errors if a derived audio file already exists", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 		_, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
 		require.NoError(t, err)
@@ -139,14 +116,14 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("errors when nfo is missing title or artist", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		_, err := ExtractAudio(ctx, videoPath, NFO{Artist: "Beyoncé"}, ExtractAudioOptions{})
 		assert.Error(t, err)
 	})
 
 	t.Run("errors when retag and force are both set", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		_, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{Retag: true, Force: true})
 		assert.Error(t, err)
 	})
@@ -155,7 +132,7 @@ func TestExtractAudio(t *testing.T) {
 		dir := t.TempDir()
 		// pcm_s16le is a real, valid audio codec ffprobe will happily
 		// report (just not one transcode.ExtensionForCodec knows).
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "pcm_s16le")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "pcm_s16le")
 		writeNFOFixture(t, videoPath, nfo)
 
 		_, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
@@ -164,7 +141,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("retag: rewrites tags without touching audio.src.md5 or ReplayGain", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 
 		dst, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
@@ -193,7 +170,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("retag errors when no derived audio exists yet", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 
 		_, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{Retag: true})
@@ -202,7 +179,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("force: re-extracts in place when the codec is unchanged", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 
 		dst, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
@@ -219,7 +196,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("force: cleans up a stale-extension file when the source codec changed", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 
 		oldDst, err := ExtractAudio(ctx, videoPath, nfo, ExtractAudioOptions{})
@@ -229,7 +206,7 @@ func TestExtractAudio(t *testing.T) {
 
 		// Replace the source video with one whose audio codec differs which
 		// simulates a re-fetch that landed a different source stream.
-		newVideoPath := makeVideoFile(t, dir, "video.webm", "libvpx", "libopus")
+		newVideoPath := testutil.MakeVideoFileWithTone(t, dir, "video.webm", "libvpx", "libopus")
 		require.NoError(t, os.Remove(videoPath))
 		require.NoError(t, os.Rename(newVideoPath, videoPath))
 
@@ -251,7 +228,7 @@ func TestExtractAudio(t *testing.T) {
 
 	t.Run("more than one existing derived audio file is always a hard error", func(t *testing.T) {
 		dir := t.TempDir()
-		videoPath := makeVideoFile(t, dir, "video.mp4", "libx264", "aac")
+		videoPath := testutil.MakeVideoFileWithTone(t, dir, "video.mp4", "libx264", "aac")
 		writeNFOFixture(t, videoPath, nfo)
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "video.m4a"), []byte("d"), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "video.opus"), []byte("d"), 0o644))

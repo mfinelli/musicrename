@@ -23,9 +23,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,40 +30,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.senan.xyz/taglib"
 	"golang.org/x/time/rate"
+
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
-
-// makeAudioFile generates a one-second silent audio file at dir/name. The
-// format is inferred from the file extension (.flac, .mp3, .m4a). ffmpeg must
-// be installed and on PATH. Duplicated from internal/metadata because
-// cross-package import of _test.go helpers is not possible in Go.
-func makeAudioFile(t *testing.T, dir, name string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	ext := strings.ToLower(filepath.Ext(name))
-
-	var codec string
-	switch ext {
-	case ".flac":
-		codec = "flac"
-	case ".mp3":
-		codec = "libmp3lame"
-	case ".m4a":
-		codec = "aac"
-	default:
-		t.Fatalf("makeAudioFile: unsupported extension %q", ext)
-	}
-
-	args := []string{
-		"-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-		"-t", "1", "-c:a", codec, path,
-	}
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeAudioFile: ffmpeg failed: %v\n%s", err, out)
-	}
-	return path
-}
 
 // readLyricsTags opens path and returns the values of LYRICS and UNSYNCEDLYRICS.
 func readLyricsTags(t *testing.T, path string) (lyricsTag, unsyncedTag string) {
@@ -108,7 +74,7 @@ func testFetchClient(base string) *lrclibClient {
 
 func TestHasLyrics(t *testing.T) {
 	t.Run("FLAC with LYRICS tag returns true", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			taglib.Lyrics: {"[00:01.00]Hello"},
 		}, 0))
@@ -118,7 +84,7 @@ func TestHasLyrics(t *testing.T) {
 	})
 
 	t.Run("FLAC with UNSYNCEDLYRICS tag returns true", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			"UNSYNCEDLYRICS": {"Hello world"},
 		}, 0))
@@ -128,14 +94,14 @@ func TestHasLyrics(t *testing.T) {
 	})
 
 	t.Run("FLAC with no lyrics returns false", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		got, err := hasLyrics(path)
 		require.NoError(t, err)
 		assert.False(t, got)
 	})
 
 	t.Run("MP3 with LYRICS tag returns true", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.mp3")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			taglib.Lyrics: {"Hello world"},
 		}, 0))
@@ -145,14 +111,14 @@ func TestHasLyrics(t *testing.T) {
 	})
 
 	t.Run("MP3 with no lyrics returns false", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.mp3")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
 		got, err := hasLyrics(path)
 		require.NoError(t, err)
 		assert.False(t, got)
 	})
 
 	t.Run("M4A with LYRICS tag returns true", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.m4a")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.m4a", nil)
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			taglib.Lyrics: {"Hello world"},
 		}, 0))
@@ -174,7 +140,7 @@ func TestEmbedLyrics(t *testing.T) {
 	plain := "Hello\nWorld"
 
 	t.Run("FLAC embeds synced into LYRICS and plain into UNSYNCEDLYRICS", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		embedded, err := embedLyrics(path, synced, plain)
 		require.NoError(t, err)
 		assert.True(t, embedded)
@@ -186,7 +152,7 @@ func TestEmbedLyrics(t *testing.T) {
 	})
 
 	t.Run("FLAC with synced only embeds LYRICS, leaves UNSYNCEDLYRICS empty", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		embedded, err := embedLyrics(path, synced, "")
 		require.NoError(t, err)
 		assert.True(t, embedded)
@@ -197,7 +163,7 @@ func TestEmbedLyrics(t *testing.T) {
 	})
 
 	t.Run("FLAC with plain only embeds UNSYNCEDLYRICS, leaves LYRICS empty", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		embedded, err := embedLyrics(path, "", plain)
 		require.NoError(t, err)
 		assert.True(t, embedded)
@@ -208,7 +174,7 @@ func TestEmbedLyrics(t *testing.T) {
 	})
 
 	t.Run("MP3 embeds plain into LYRICS", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.mp3")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
 		embedded, err := embedLyrics(path, synced, plain)
 		require.NoError(t, err)
 		assert.True(t, embedded)
@@ -218,7 +184,7 @@ func TestEmbedLyrics(t *testing.T) {
 	})
 
 	t.Run("MP3 with synced only returns false without writing", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.mp3")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
 		embedded, err := embedLyrics(path, synced, "")
 		require.NoError(t, err)
 		assert.False(t, embedded)
@@ -228,7 +194,7 @@ func TestEmbedLyrics(t *testing.T) {
 	})
 
 	t.Run("M4A embeds plain into LYRICS", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.m4a")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.m4a", nil)
 		embedded, err := embedLyrics(path, "", plain)
 		require.NoError(t, err)
 		assert.True(t, embedded)
@@ -238,7 +204,7 @@ func TestEmbedLyrics(t *testing.T) {
 	})
 
 	t.Run("both synced and plain empty returns false without writing", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		embedded, err := embedLyrics(path, "", "")
 		require.NoError(t, err)
 		assert.False(t, embedded)
@@ -273,7 +239,7 @@ func TestFetch(t *testing.T) {
 		srv := makeLrclibServer(t, apiResp)
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{
 			Path: path, Title: "Test Track", Artist: "Test Artist",
 			Album: "Test Album", Duration: time.Second,
@@ -296,7 +262,7 @@ func TestFetch(t *testing.T) {
 		srv := makeLrclibServer(t, apiResp)
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			taglib.Lyrics: {"existing lyrics"},
 		}, 0))
@@ -316,7 +282,7 @@ func TestFetch(t *testing.T) {
 		srv := makeLrclibServer(t, apiResp)
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			taglib.Lyrics: {"old lyrics"},
 		}, 0))
@@ -341,7 +307,7 @@ func TestFetch(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "Unknown", Artist: "Nobody", Album: "Nothing", Duration: time.Second}}
 
 		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
@@ -355,7 +321,7 @@ func TestFetch(t *testing.T) {
 		})
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.mp3")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
 		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
@@ -369,7 +335,7 @@ func TestFetch(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
 		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
@@ -397,8 +363,8 @@ func TestFetch(t *testing.T) {
 		defer srv.Close()
 
 		dir := t.TempDir()
-		path1 := makeAudioFile(t, dir, "01 track.flac")
-		path2 := makeAudioFile(t, dir, "02 track.flac")
+		path1 := testutil.MakeAudioFile(t, dir, "01 track.flac", nil)
+		path2 := testutil.MakeAudioFile(t, dir, "02 track.flac", nil)
 
 		tracks := []TrackInfo{
 			{Path: path1, Title: "Found", Artist: "A", Album: "B", Duration: time.Second},
@@ -415,7 +381,7 @@ func TestFetch(t *testing.T) {
 		srv := makeLrclibServer(t, apiResp)
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
 		var cbPath string
@@ -433,7 +399,7 @@ func TestFetch(t *testing.T) {
 		srv := makeLrclibServer(t, apiResp)
 		defer srv.Close()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
 		_, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
@@ -456,7 +422,7 @@ func TestFetch(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		path := makeAudioFile(t, t.TempDir(), "track.flac")
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
 		summary, err := fetch(ctx, testFetchClient(srv.URL), tracks, false, nil)

@@ -27,6 +27,7 @@ import (
 	"go.senan.xyz/taglib"
 
 	"github.com/mfinelli/musicrename/internal/hasher"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 func TestDerivedAudioTagDriftMessage(t *testing.T) {
@@ -34,7 +35,7 @@ func TestDerivedAudioTagDriftMessage(t *testing.T) {
 
 	t.Run("matching title and artist: no drift", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 		require.NoError(t, WriteDerivedAudioTags(path, nfo))
 
 		msg, err := derivedAudioTagDriftMessage(path, nfo)
@@ -45,7 +46,7 @@ func TestDerivedAudioTagDriftMessage(t *testing.T) {
 	t.Run("matching title, artist, album, and year: no drift", func(t *testing.T) {
 		dir := t.TempDir()
 		full := NFO{Artist: "Beyoncé", Title: "Crazy in Love", Album: "Dangerously in Love", Year: "2003"}
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 		require.NoError(t, WriteDerivedAudioTags(path, full))
 
 		msg, err := derivedAudioTagDriftMessage(path, full)
@@ -55,7 +56,7 @@ func TestDerivedAudioTagDriftMessage(t *testing.T) {
 
 	t.Run("a foreign tag (ReplayGain) never counts as drift", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 		require.NoError(t, WriteDerivedAudioTags(path, nfo))
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			"REPLAYGAIN_TRACK_GAIN": {"3.75 dB"},
@@ -68,7 +69,7 @@ func TestDerivedAudioTagDriftMessage(t *testing.T) {
 
 	t.Run("a different title is drift", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 		require.NoError(t, WriteDerivedAudioTags(path, nfo))
 
 		msg, err := derivedAudioTagDriftMessage(path, NFO{Artist: "Beyoncé", Title: "Halo"})
@@ -78,7 +79,7 @@ func TestDerivedAudioTagDriftMessage(t *testing.T) {
 
 	t.Run("a different artist is drift", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 		require.NoError(t, WriteDerivedAudioTags(path, nfo))
 
 		msg, err := derivedAudioTagDriftMessage(path, NFO{Artist: "Someone Else", Title: "Crazy in Love"})
@@ -88,7 +89,7 @@ func TestDerivedAudioTagDriftMessage(t *testing.T) {
 
 	t.Run("nfo gaining an album the file doesn't have yet is drift", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 		require.NoError(t, WriteDerivedAudioTags(path, nfo)) // no album written
 
 		msg, err := derivedAudioTagDriftMessage(path, NFO{Artist: "Beyoncé", Title: "Crazy in Love", Album: "Dangerously in Love"})
@@ -98,7 +99,7 @@ func TestDerivedAudioTagDriftMessage(t *testing.T) {
 
 	t.Run("a stale album the nfo no longer has is drift", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 		require.NoError(t, WriteDerivedAudioTags(path, NFO{
 			Artist: "Beyoncé", Title: "Crazy in Love", Album: "Dangerously in Love",
 		}))

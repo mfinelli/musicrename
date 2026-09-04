@@ -18,61 +18,15 @@
 package metadata
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
-
-// makeAudioFile generates a one-second silent audio file at dir/name and sets
-// the provided metadata tags on it. The format is inferred from the file
-// extension (.flac, .mp3, .m4a). ffmpeg must be installed and on PATH.
-//
-// For FLAC, use uppercase Vorbis comment key names (TITLE, ARTIST, ALBUMARTIST,
-// DATE, TRACKNUMBER, DISCNUMBER). For MP3 and M4A, ffmpeg's lowercase generic
-// keys (title, artist, album, album_artist, track, date) are more reliable.
-func makeAudioFile(t *testing.T, dir, name string, tags map[string]string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	ext := strings.ToLower(filepath.Ext(name))
-
-	var codec string
-	switch ext {
-	case ".flac":
-		codec = "flac"
-	case ".mp3":
-		codec = "libmp3lame"
-	case ".m4a":
-		codec = "aac"
-	default:
-		t.Fatalf("makeAudioFile: unsupported extension %q", ext)
-	}
-
-	args := []string{
-		"-y",
-		"-f", "lavfi",
-		"-i", "anullsrc=r=44100:cl=stereo",
-		"-t", "1",
-		"-c:a", codec,
-	}
-	for k, v := range tags {
-		args = append(args, "-metadata", fmt.Sprintf("%s=%s", k, v))
-	}
-	args = append(args, path)
-
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeAudioFile: ffmpeg failed: %v\n%s", err, out)
-	}
-
-	return path
-}
 
 func TestNewReader(t *testing.T) {
 	// NewReader has no configurable state; this test confirms the constructor
@@ -88,7 +42,7 @@ func TestReadTrack(t *testing.T) {
 	r := NewReader()
 
 	t.Run("reads all standard tags from FLAC", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":       "Track One",
 			"ARTIST":      "Test Artist",
 			"ALBUMARTIST": "Album Artist",
@@ -110,7 +64,7 @@ func TestReadTrack(t *testing.T) {
 	})
 
 	t.Run("full ISO-8601 date is trimmed to year", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":  "Dated Track",
 			"ARTIST": "Test Artist",
 			"DATE":   "2003-01-14",
@@ -121,7 +75,7 @@ func TestReadTrack(t *testing.T) {
 	})
 
 	t.Run("year-month date is trimmed to year", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":  "Dated Track",
 			"ARTIST": "Test Artist",
 			"DATE":   "2003-01",
@@ -133,7 +87,7 @@ func TestReadTrack(t *testing.T) {
 
 	t.Run("absent optional tags leave zero values", func(t *testing.T) {
 		// Only TITLE and ARTIST set; everything else should remain at zero.
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":  "Minimal Track",
 			"ARTIST": "Solo Artist",
 		})
@@ -150,7 +104,7 @@ func TestReadTrack(t *testing.T) {
 
 	t.Run("reads basic tags from MP3", func(t *testing.T) {
 		// MP3 uses ffmpeg's lowercase generic keys which map to ID3v2 frames.
-		path := makeAudioFile(t, t.TempDir(), "track.mp3", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", map[string]string{
 			"title":  "MP3 Track",
 			"artist": "MP3 Artist",
 			"album":  "MP3 Album",
@@ -164,7 +118,7 @@ func TestReadTrack(t *testing.T) {
 
 	t.Run("reads basic tags from M4A", func(t *testing.T) {
 		// M4A uses ffmpeg's lowercase generic keys which map to MP4 atoms.
-		path := makeAudioFile(t, t.TempDir(), "track.m4a", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.m4a", map[string]string{
 			"title":  "M4A Track",
 			"artist": "M4A Artist",
 			"album":  "M4A Album",
@@ -177,7 +131,7 @@ func TestReadTrack(t *testing.T) {
 	})
 
 	t.Run("track number in track/total form is parsed correctly", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.mp3", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", map[string]string{
 			"title":  "MP3 Track",
 			"artist": "MP3 Artist",
 			"track":  "5/12",
@@ -189,7 +143,7 @@ func TestReadTrack(t *testing.T) {
 	})
 
 	t.Run("disc number in disc/total form is parsed correctly", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.mp3", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", map[string]string{
 			"title":  "MP3 Track",
 			"artist": "MP3 Artist",
 			"track":  "1",
@@ -201,7 +155,7 @@ func TestReadTrack(t *testing.T) {
 	})
 
 	t.Run("reads ALBUMARTISTSORT tag from FLAC", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":           "Track",
 			"ARTIST":          "The Beatles",
 			"ALBUMARTIST":     "The Beatles",
@@ -213,7 +167,7 @@ func TestReadTrack(t *testing.T) {
 	})
 
 	t.Run("absent ALBUMARTISTSORT leaves empty string", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":       "Track",
 			"ARTIST":      "Artist",
 			"ALBUMARTIST": "Artist",
@@ -307,12 +261,12 @@ func TestResolveAlbumArtist(t *testing.T) {
 func TestProcessLibrary(t *testing.T) {
 	t.Run("populates tags for all tracks in an album", func(t *testing.T) {
 		root := t.TempDir()
-		makeAudioFile(t, root, "01 track one.flac", map[string]string{
+		testutil.MakeAudioFile(t, root, "01 track one.flac", map[string]string{
 			"TITLE": "Track One", "ARTIST": "Test Artist",
 			"ALBUMARTIST": "Album Artist", "ALBUM": "Test Album",
 			"DATE": "2003", "TRACKNUMBER": "1",
 		})
-		makeAudioFile(t, root, "02 track two.flac", map[string]string{
+		testutil.MakeAudioFile(t, root, "02 track two.flac", map[string]string{
 			"TITLE": "Track Two", "ARTIST": "Test Artist",
 			"ALBUMARTIST": "Album Artist", "ALBUM": "Test Album",
 			"DATE": "2003", "TRACKNUMBER": "2",
@@ -335,7 +289,7 @@ func TestProcessLibrary(t *testing.T) {
 
 	t.Run("falls back to track Artist when AlbumArtist is absent", func(t *testing.T) {
 		root := t.TempDir()
-		makeAudioFile(t, root, "01 track.flac", map[string]string{
+		testutil.MakeAudioFile(t, root, "01 track.flac", map[string]string{
 			"TITLE": "Solo Track", "ARTIST": "The Artist",
 			"ALBUM": "Solo Album", "TRACKNUMBER": "1",
 		})
@@ -349,7 +303,7 @@ func TestProcessLibrary(t *testing.T) {
 
 	t.Run("unreadable track warning is captured in album.Warnings", func(t *testing.T) {
 		root := t.TempDir()
-		makeAudioFile(t, root, "01 good.flac", map[string]string{
+		testutil.MakeAudioFile(t, root, "01 good.flac", map[string]string{
 			"TITLE": "Good Track", "ARTIST": "Good Artist",
 		})
 		// A zero-byte file with a .flac extension is discovered by the scanner
@@ -386,10 +340,10 @@ func TestProcessLibrary(t *testing.T) {
 		require.NoError(t, os.MkdirAll(albumA, 0o755))
 		require.NoError(t, os.MkdirAll(albumB, 0o755))
 
-		makeAudioFile(t, albumA, "01 track.flac", map[string]string{
+		testutil.MakeAudioFile(t, albumA, "01 track.flac", map[string]string{
 			"TITLE": "A Track", "ARTIST": "Artist A",
 		})
-		makeAudioFile(t, albumB, "01 track.flac", map[string]string{
+		testutil.MakeAudioFile(t, albumB, "01 track.flac", map[string]string{
 			"TITLE": "B Track", "ARTIST": "Artist B",
 		})
 

@@ -20,13 +20,14 @@ package transcode
 import (
 	"context"
 	"errors"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 // fakeProbeRunner records the args it was invoked with and returns
@@ -144,41 +145,6 @@ func TestProbeAudioCodec(t *testing.T) {
 	})
 }
 
-// makeVideoFile generates a short synthetic video file via ffmpeg's lavfi
-// test sources, mirroring the synthetic-fixture pattern already established
-// for audio-only fixtures elsewhere in this project (e.g. internal/metadata's
-// makeAudioFile) for exercising ProbeAudioCodec/RemuxAudio against real
-// ffmpeg/ffprobe rather than only a fake runner. videoCodec/audioCodec must
-// be real ffmpeg encoder names compatible with name's container (e.g. "aac"
-// for .mp4, "libopus" for .webm). This generates specific combinations that
-// actually occur via yt-dlp, not an exhaustive codec/container matrix. An
-// empty audioCodec produces a video-only file with no audio stream at all,
-// for exercising the "no audio stream" error path.
-func makeVideoFile(t *testing.T, dir, name, videoCodec, audioCodec string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	args := []string{
-		"-y",
-		"-f", "lavfi", "-i", "testsrc=duration=1:size=320x240:rate=5",
-	}
-	if audioCodec != "" {
-		args = append(args, "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo")
-	}
-	args = append(args, "-c:v", videoCodec)
-	if audioCodec != "" {
-		args = append(args, "-c:a", audioCodec, "-shortest")
-	}
-	args = append(args, "-t", "1", path)
-
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeVideoFile: ffmpeg failed: %v\n%s", err, out)
-	}
-
-	return path
-}
-
 // probeStreamTypes returns the codec_type ("audio", "video", ...) of every
 // stream in path via a direct real ffprobe call. A small test-only
 // verification helper (confirming -vn actually dropped the video stream,
@@ -187,18 +153,10 @@ func makeVideoFile(t *testing.T, dir, name, videoCodec, audioCodec string) strin
 func probeStreamTypes(t *testing.T, path string) []string {
 	t.Helper()
 
-	out, err := exec.Command(
-		"ffprobe", "-v", "error",
-		"-show_entries", "stream=codec_type",
-		"-of", "default=noprint_wrappers=1:nokey=1",
-		path,
-	).Output()
-	if err != nil {
-		t.Fatalf("probeStreamTypes: ffprobe failed: %v", err)
-	}
+	out := testutil.ProbeText(t, path, "stream=codec_type", "nokey=1")
 
 	var types []string
-	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		if line != "" {
 			types = append(types, line)
 		}
@@ -213,7 +171,7 @@ func probeStreamTypes(t *testing.T, path string) []string {
 func TestProbeAudioCodecReal(t *testing.T) {
 	t.Run("reports aac for an mp4 with an AAC audio stream", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeVideoFile(t, dir, "src.mp4", "libx264", "aac")
+		path := testutil.MakeVideoFile(t, dir, "src.mp4", 320, 240, "libx264", "aac")
 
 		codec, err := ProbeAudioCodec(context.Background(), path)
 		require.NoError(t, err)
@@ -222,7 +180,7 @@ func TestProbeAudioCodecReal(t *testing.T) {
 
 	t.Run("reports opus for a webm with an Opus audio stream", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeVideoFile(t, dir, "src.webm", "libvpx", "libopus")
+		path := testutil.MakeVideoFile(t, dir, "src.webm", 320, 240, "libvpx", "libopus")
 
 		codec, err := ProbeAudioCodec(context.Background(), path)
 		require.NoError(t, err)
@@ -231,7 +189,7 @@ func TestProbeAudioCodecReal(t *testing.T) {
 
 	t.Run("errors on a video with no audio stream at all", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeVideoFile(t, dir, "silent.mp4", "libx264", "")
+		path := testutil.MakeVideoFile(t, dir, "silent.mp4", 320, 240, "libx264", "")
 
 		_, err := ProbeAudioCodec(context.Background(), path)
 		assert.Error(t, err)
@@ -246,7 +204,7 @@ func TestProbeAudioCodecReal(t *testing.T) {
 func TestRemuxAudioReal(t *testing.T) {
 	t.Run("extracts an AAC stream into a playable, audio-only .m4a", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeVideoFile(t, dir, "src.mp4", "libx264", "aac")
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 320, 240, "libx264", "aac")
 		dst := filepath.Join(dir, "src.m4a")
 
 		require.NoError(t, RemuxAudio(context.Background(), src, dst))
@@ -262,7 +220,7 @@ func TestRemuxAudioReal(t *testing.T) {
 
 	t.Run("extracts an Opus stream into a playable, audio-only .opus", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeVideoFile(t, dir, "src.webm", "libvpx", "libopus")
+		src := testutil.MakeVideoFile(t, dir, "src.webm", 320, 240, "libvpx", "libopus")
 		dst := filepath.Join(dir, "src.opus")
 
 		require.NoError(t, RemuxAudio(context.Background(), src, dst))

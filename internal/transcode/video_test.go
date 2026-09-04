@@ -20,8 +20,6 @@ package transcode
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -29,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 func testVideoSettings() target.VideoTranscodeSettings {
@@ -201,43 +200,16 @@ func TestTranscodeVideo(t *testing.T) {
 	})
 }
 
-// makeTestVideo generates a short synthetic video at the given pixel
-// dimensions via ffmpeg's lavfi testsrc, for exercising TranscodeVideo
-// against real ffmpeg/ffprobe rather than only a fake runner.
-func makeTestVideo(t *testing.T, dir, name string, width, height int) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	out, err := exec.Command(
-		"ffmpeg", "-y",
-		"-f", "lavfi", "-i", fmt.Sprintf("testsrc=duration=1:size=%dx%d:rate=5", width, height),
-		"-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-		"-c:v", "libx264", "-c:a", "aac", "-shortest", "-t", "1",
-		path,
-	).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeTestVideo: ffmpeg failed: %v\n%s", err, out)
-	}
-	return path
-}
-
 func TestTranscodeVideoReal(t *testing.T) {
 	t.Run("produces a real MPEG-2/MPEG-PS file from a widescreen source", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeTestVideo(t, dir, "src.mp4", 640, 360)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 640, 360, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())
 		require.NoError(t, err)
 
-		out, err := exec.Command(
-			"ffprobe", "-v", "error",
-			"-show_entries", "stream=codec_name,codec_type,width,height",
-			"-of", "default=noprint_wrappers=1",
-			dst,
-		).Output()
-		require.NoError(t, err)
-		outStr := string(out)
+		outStr := testutil.ProbeText(t, dst, "stream=codec_name,codec_type,width,height")
 		assert.Contains(t, outStr, "codec_name=mpeg2video")
 		assert.Contains(t, outStr, "codec_name=mp3")
 		assert.Contains(t, outStr, "width=320")
@@ -246,27 +218,20 @@ func TestTranscodeVideoReal(t *testing.T) {
 
 	t.Run("produces a real MPEG-2/MPEG-PS file from a fullscreen source", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeTestVideo(t, dir, "src.mp4", 320, 240)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 320, 240, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())
 		require.NoError(t, err)
 
-		out, err := exec.Command(
-			"ffprobe", "-v", "error",
-			"-show_entries", "stream=width,height",
-			"-of", "default=noprint_wrappers=1",
-			dst,
-		).Output()
-		require.NoError(t, err)
-		outStr := string(out)
+		outStr := testutil.ProbeText(t, dst, "stream=width,height")
 		assert.Contains(t, outStr, "width=320")
 		assert.Contains(t, outStr, "height=240")
 	})
 
 	t.Run("refuses a portrait source without ever calling ffmpeg on it", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeTestVideo(t, dir, "src.mp4", 360, 640)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 360, 640, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())
