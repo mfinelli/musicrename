@@ -1,6 +1,6 @@
 module github.com/mfinelli/musicrename
 
-go 1.27.0
+go 1.27.1
 
 replace go.senan.xyz/taglib => github.com/deluan/go-taglib v0.0.0-20260619222856-1975cb12f59d
 
