@@ -4,6 +4,13 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## Unreleased
+
+- Add shell completion for file extensions, target names, and playlist arguments
+  across most commands (previously only a handful had any).
+- Upgrade `bubbletea`, `huh`, and `lipgloss` to their v2 releases
+  (`charm.land/*/v2`).
+
 ## v4.2.0 — 2026-09-03
 
 Add `video extract-audio`, which remuxes a video's audio stream into a
