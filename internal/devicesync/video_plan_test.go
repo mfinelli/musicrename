@@ -43,7 +43,7 @@ func setupVideoFixture(t *testing.T, root, targetName string, width, height int)
 	videoDir = filepath.Dir(filepath.Join(videos, rel))
 	require.NoError(t, os.MkdirAll(videoDir, 0755))
 
-	src := makeVideoFile(t, videoDir, "crazy in love.mp4", width, height)
+	src := testutil.MakeVideoFile(t, videoDir, "crazy in love.mp4", width, height, "libx264", "aac")
 	srcHash, err := hasher.HashFile(src)
 	require.NoError(t, err)
 	require.NoError(t, hasher.WriteSums(videoDir, hasher.SumsFilename, map[string]string{
@@ -127,7 +127,7 @@ func TestVideoPlan(t *testing.T) {
 		// Replace the source with different content and refresh its
 		// sums.md5, simulating a re-fetch (without touching the
 		// manifest at all).
-		newSrc := makeVideoFile(t, videoDir, "replacement.mp4", 320, 240)
+		newSrc := testutil.MakeVideoFile(t, videoDir, "replacement.mp4", 320, 240, "libx264", "aac")
 		require.NoError(t, os.Remove(filepath.Join(videoDir, "crazy in love.mp4")))
 		require.NoError(t, os.Rename(newSrc, filepath.Join(videoDir, "crazy in love.mp4")))
 		newHash, err := hasher.HashFile(filepath.Join(videoDir, "crazy in love.mp4"))

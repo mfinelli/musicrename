@@ -558,7 +558,7 @@ func TestExecute(t *testing.T) {
 		device := t.TempDir()
 		videoDir := filepath.Join(root, "videos", "b", "beyonce", "crazy in love")
 		require.NoError(t, os.MkdirAll(videoDir, 0755))
-		src := makeVideoFile(t, videoDir, "crazy in love.mp4", 640, 360)
+		src := testutil.MakeVideoFile(t, videoDir, "crazy in love.mp4", 640, 360, "libx264", "aac")
 		srcHash, err := hasher.HashFile(src)
 		require.NoError(t, err)
 		require.NoError(t, hasher.WriteSums(videoDir, hasher.SumsFilename, map[string]string{

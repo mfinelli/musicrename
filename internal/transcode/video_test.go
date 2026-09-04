@@ -20,8 +20,6 @@ package transcode
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -202,30 +200,10 @@ func TestTranscodeVideo(t *testing.T) {
 	})
 }
 
-// makeTestVideo generates a short synthetic video at the given pixel
-// dimensions via ffmpeg's lavfi testsrc, for exercising TranscodeVideo
-// against real ffmpeg/ffprobe rather than only a fake runner.
-func makeTestVideo(t *testing.T, dir, name string, width, height int) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	out, err := exec.Command(
-		"ffmpeg", "-y",
-		"-f", "lavfi", "-i", fmt.Sprintf("testsrc=duration=1:size=%dx%d:rate=5", width, height),
-		"-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-		"-c:v", "libx264", "-c:a", "aac", "-shortest", "-t", "1",
-		path,
-	).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeTestVideo: ffmpeg failed: %v\n%s", err, out)
-	}
-	return path
-}
-
 func TestTranscodeVideoReal(t *testing.T) {
 	t.Run("produces a real MPEG-2/MPEG-PS file from a widescreen source", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeTestVideo(t, dir, "src.mp4", 640, 360)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 640, 360, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())
@@ -240,7 +218,7 @@ func TestTranscodeVideoReal(t *testing.T) {
 
 	t.Run("produces a real MPEG-2/MPEG-PS file from a fullscreen source", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeTestVideo(t, dir, "src.mp4", 320, 240)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 320, 240, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())
@@ -253,7 +231,7 @@ func TestTranscodeVideoReal(t *testing.T) {
 
 	t.Run("refuses a portrait source without ever calling ffmpeg on it", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeTestVideo(t, dir, "src.mp4", 360, 640)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 360, 640, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())

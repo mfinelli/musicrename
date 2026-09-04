@@ -19,8 +19,6 @@ package devicesync
 
 import (
 	"context"
-	"fmt"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -30,25 +28,6 @@ import (
 	"github.com/mfinelli/musicrename/internal/target"
 	"github.com/mfinelli/musicrename/internal/testutil"
 )
-
-// makeVideoFile generates a short synthetic video file via ffmpeg's lavfi
-// test sources, mirroring internal/transcode's helper.
-func makeVideoFile(t *testing.T, dir, name string, width, height int) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	out, err := exec.Command(
-		"ffmpeg", "-y",
-		"-f", "lavfi", "-i", fmt.Sprintf("testsrc=duration=1:size=%dx%d:rate=5", width, height),
-		"-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-		"-c:v", "libx264", "-c:a", "aac", "-shortest", "-t", "1",
-		path,
-	).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeVideoFile: ffmpeg failed: %v\n%s", err, out)
-	}
-	return path
-}
 
 func testVideoSettings() target.VideoTranscodeSettings {
 	return target.VideoTranscodeSettings{
@@ -62,7 +41,7 @@ func testVideoSettings() target.VideoTranscodeSettings {
 func TestPrepareVideo(t *testing.T) {
 	t.Run("produces a real MPEG-2/MPEG-PS file, creating dst's parent directory", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeVideoFile(t, dir, "src.mp4", 640, 360)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 640, 360, "libx264", "aac")
 		dst := filepath.Join(dir, "nested", "further", "dst.mpg")
 
 		err := PrepareVideo(context.Background(), src, dst, testVideoSettings())
@@ -76,7 +55,7 @@ func TestPrepareVideo(t *testing.T) {
 
 	t.Run("overwrites an existing dst", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeVideoFile(t, dir, "src.mp4", 320, 240)
+		src := testutil.MakeVideoFile(t, dir, "src.mp4", 320, 240, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 		require.NoError(t, PrepareVideo(context.Background(), src, dst, testVideoSettings()))
 
@@ -87,7 +66,7 @@ func TestPrepareVideo(t *testing.T) {
 
 	t.Run("propagates a transcode failure (e.g. a refused aspect ratio)", func(t *testing.T) {
 		dir := t.TempDir()
-		src := makeVideoFile(t, dir, "portrait.mp4", 360, 640)
+		src := testutil.MakeVideoFile(t, dir, "portrait.mp4", 360, 640, "libx264", "aac")
 		dst := filepath.Join(dir, "dst.mpg")
 
 		err := PrepareVideo(context.Background(), src, dst, testVideoSettings())
