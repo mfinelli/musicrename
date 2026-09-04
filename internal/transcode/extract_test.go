@@ -27,6 +27,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 // fakeProbeRunner records the args it was invoked with and returns
@@ -187,18 +189,10 @@ func makeVideoFile(t *testing.T, dir, name, videoCodec, audioCodec string) strin
 func probeStreamTypes(t *testing.T, path string) []string {
 	t.Helper()
 
-	out, err := exec.Command(
-		"ffprobe", "-v", "error",
-		"-show_entries", "stream=codec_type",
-		"-of", "default=noprint_wrappers=1:nokey=1",
-		path,
-	).Output()
-	if err != nil {
-		t.Fatalf("probeStreamTypes: ffprobe failed: %v", err)
-	}
+	out := testutil.ProbeText(t, path, "stream=codec_type", "nokey=1")
 
 	var types []string
-	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		if line != "" {
 			types = append(types, line)
 		}

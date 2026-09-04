@@ -20,7 +20,6 @@ package devicesync
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/playlist"
 	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 // setupVideoFixture places a real video fixture at libraryRootRoot/videos/
@@ -85,15 +85,9 @@ func TestVideoPlan(t *testing.T) {
 		devicePath := filepath.Join(device, "videos", "b", "beyonce", "crazy in love", "crazy in love.mpg")
 		assert.FileExists(t, devicePath)
 
-		out, err := exec.Command(
-			"ffprobe", "-v", "error",
-			"-show_entries", "stream=codec_name",
-			"-of", "default=noprint_wrappers=1:nokey=1",
-			devicePath,
-		).Output()
-		require.NoError(t, err)
-		assert.Contains(t, string(out), "mpeg2video")
-		assert.Contains(t, string(out), "mp3")
+		out := testutil.ProbeText(t, devicePath, "stream=codec_name", "nokey=1")
+		assert.Contains(t, out, "mpeg2video")
+		assert.Contains(t, out, "mp3")
 
 		// Second plan, nothing changed on the source side at all: must
 		// be a clean Skip, not Add/Regenerate which is the entire point

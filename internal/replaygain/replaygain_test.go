@@ -20,7 +20,6 @@ package replaygain
 import (
 	"context"
 	"errors"
-	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,17 +77,7 @@ func TestCompute(t *testing.T) {
 // across containers.
 func probeFormatTags(t *testing.T, path string) string {
 	t.Helper()
-
-	out, err := exec.Command(
-		"ffprobe", "-v", "error",
-		"-show_entries", "format_tags:stream_tags",
-		"-of", "default=noprint_wrappers=1",
-		path,
-	).Output()
-	if err != nil {
-		t.Fatalf("probeFormatTags: ffprobe failed: %v", err)
-	}
-	return string(out)
+	return testutil.ProbeText(t, path, "format_tags:stream_tags")
 }
 
 // TestComputeReal exercises Compute against a real rsgain binary rather

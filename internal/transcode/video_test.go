@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 func testVideoSettings() target.VideoTranscodeSettings {
@@ -230,14 +231,7 @@ func TestTranscodeVideoReal(t *testing.T) {
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())
 		require.NoError(t, err)
 
-		out, err := exec.Command(
-			"ffprobe", "-v", "error",
-			"-show_entries", "stream=codec_name,codec_type,width,height",
-			"-of", "default=noprint_wrappers=1",
-			dst,
-		).Output()
-		require.NoError(t, err)
-		outStr := string(out)
+		outStr := testutil.ProbeText(t, dst, "stream=codec_name,codec_type,width,height")
 		assert.Contains(t, outStr, "codec_name=mpeg2video")
 		assert.Contains(t, outStr, "codec_name=mp3")
 		assert.Contains(t, outStr, "width=320")
@@ -252,14 +246,7 @@ func TestTranscodeVideoReal(t *testing.T) {
 		err := TranscodeVideo(context.Background(), src, dst, testVideoSettings())
 		require.NoError(t, err)
 
-		out, err := exec.Command(
-			"ffprobe", "-v", "error",
-			"-show_entries", "stream=width,height",
-			"-of", "default=noprint_wrappers=1",
-			dst,
-		).Output()
-		require.NoError(t, err)
-		outStr := string(out)
+		outStr := testutil.ProbeText(t, dst, "stream=width,height")
 		assert.Contains(t, outStr, "width=320")
 		assert.Contains(t, outStr, "height=240")
 	})

@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mfinelli/musicrename/internal/target"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 // makeVideoFile generates a short synthetic video file via ffmpeg's lavfi
@@ -68,14 +69,7 @@ func TestPrepareVideo(t *testing.T) {
 		require.NoError(t, err)
 		assert.FileExists(t, dst)
 
-		out, err := exec.Command(
-			"ffprobe", "-v", "error",
-			"-show_entries", "stream=codec_name,codec_type",
-			"-of", "default=noprint_wrappers=1",
-			dst,
-		).Output()
-		require.NoError(t, err)
-		outStr := string(out)
+		outStr := testutil.ProbeText(t, dst, "stream=codec_name,codec_type")
 		assert.Contains(t, outStr, "codec_name=mpeg2video")
 		assert.Contains(t, outStr, "codec_name=mp3")
 	})
