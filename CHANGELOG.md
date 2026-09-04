@@ -10,6 +10,12 @@ my own reference.
   across most commands (previously only a handful had any).
 - Upgrade `bubbletea`, `huh`, and `lipgloss` to their v2 releases
   (`charm.land/*/v2`).
+- Commands that do real batch work (`rename`, `sums`, `check`, `lyrics`,
+  `sync ipod`/`sdcard`/`navidrome pull`/`push`, etc.) now report how long they
+  took as part of their summary line.
+- `sync ipod`/`sync sdcard` show per-file progress while syncing: a `[i/N]`
+  counter for every file being added or regenerated, plus, for passthrough
+  copies specifically, bytes copied, percentage, and transfer rate.
 
 ## v4.2.0 — 2026-09-03
 
