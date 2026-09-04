@@ -21,11 +21,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/devicesync"
@@ -208,7 +210,11 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 	fmt.Fprintln(out)
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Syncing..."))
 
-	result, err := devicesync.Execute(context.Background(), libraryRoot, devicePath, targetName, plan.Diff, false)
+	sp := newSyncProgressPrinter(out)
+	result, err := devicesync.Execute(
+		context.Background(), libraryRoot, devicePath, targetName, plan.Diff, false, sp.update,
+	)
+	sp.seal()
 	if err != nil {
 		return fmt.Errorf("syncing: %w", err)
 	}
@@ -227,6 +233,70 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 	printSyncWarnings(out, warnings)
 
 	return nil
+}
+
+// syncProgressPrinter renders devicesync.Execute's progress callback: a
+// persistent "[i/N] Verb name" header line per Add/Regenerate entry
+// (printed unconditionally, interactive terminal or not), plus, only on
+// an interactive terminal, a live \r-updating line beneath it — bytes
+// copied, percentage, rate, and an ETA — for entries that are a plain
+// byte copy rather than a transcode or artwork resize (those have
+// nothing further to report from here; a transcode's ffmpeg
+// invocation already streams its progress straight to the terminal on
+// its own).
+type syncProgressPrinter struct {
+	out     io.Writer
+	isTTY   bool
+	copying bool // true once the current file has received a Copying tick
+	start   time.Time
+}
+
+func newSyncProgressPrinter(out io.Writer) *syncProgressPrinter {
+	return &syncProgressPrinter{out: out, isTTY: isatty.IsTerminal(os.Stdout.Fd())}
+}
+
+func (p *syncProgressPrinter) update(sp devicesync.SyncProgress) {
+	switch sp.Phase {
+	case devicesync.SyncProgressStarted:
+		p.seal()
+		fmt.Fprintf(p.out, "[%d/%d] %s %s\n", sp.Index, sp.Total, sp.Verb, sp.Name)
+	case devicesync.SyncProgressCopying:
+		if !p.isTTY {
+			return
+		}
+		if !p.copying {
+			p.copying = true
+			p.start = time.Now()
+		}
+		pct := 100.0
+		if sp.TotalBytes > 0 {
+			pct = float64(sp.BytesCopied) / float64(sp.TotalBytes) * 100
+		}
+		line := fmt.Sprintf("  %s / %s (%.0f%%)",
+			devicesync.FormatBytes(sp.BytesCopied), devicesync.FormatBytes(sp.TotalBytes), pct)
+		if elapsed := time.Since(p.start).Seconds(); elapsed > 0 {
+			rate := float64(sp.BytesCopied) / elapsed
+			line += fmt.Sprintf(" at %s/s", devicesync.FormatBytes(int64(rate)))
+			if rate > 0 && sp.BytesCopied < sp.TotalBytes {
+				remaining := time.Duration(float64(sp.TotalBytes-sp.BytesCopied) / rate * float64(time.Second))
+				line += fmt.Sprintf(", ~%s remaining", remaining.Round(time.Second))
+			}
+		}
+		fmt.Fprintf(p.out, "\r\033[K%s", line)
+	}
+}
+
+// seal ends whatever live \r-updating line is currently open, if any,
+// with a plain newline so whatever prints next starts on its own line. A
+// no-op if nothing is open (the previous entry, if any, was a transcode
+// or artwork resize, already newline-terminated by its own header, or
+// this is the very first entry) or on a non-TTY (nothing is ever left
+// open there in the first place).
+func (p *syncProgressPrinter) seal() {
+	if p.copying {
+		fmt.Fprintln(p.out)
+		p.copying = false
+	}
 }
 
 // printPlanSummary renders the counts-and-bytes overview shown before any

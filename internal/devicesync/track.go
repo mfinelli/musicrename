@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.senan.xyz/taglib"
 
@@ -38,7 +39,11 @@ import (
 // PrepareTrack produces a target-ready copy of the audio file at src,
 // written to dst: a plain byte-for-byte copy if src's extension is already
 // accepted by def ([target.Definition.Accepts]), or a transcode
-// ([transcode.Audio]) into def's TranscodeFormat otherwise.
+// ([transcode.Audio]) into def's TranscodeFormat otherwise. tick, if
+// non-nil, is called periodically with byte-copy progress (but only on
+// the passthrough path; there's nothing to report through tick on a
+// transcode because ffmpeg's output covers that on its own, so tick is
+// simply unused there).
 // dst's parent directory is created if it doesn't already exist; dst is
 // overwritten if it does.
 //
@@ -59,14 +64,14 @@ import (
 // (a `{target}.src.md5` sidecar, not a direct hash comparison) already
 // accounts for that, unlike the passthrough case. art is ignored entirely for
 // a target that doesn't embed artwork.
-func PrepareTrack(ctx context.Context, src, dst string, def target.Definition, art []byte) error {
+func PrepareTrack(ctx context.Context, src, dst string, def target.Definition, art []byte, tick func(copied, total int64)) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return fmt.Errorf("creating %s: %w", filepath.Dir(dst), err)
 	}
 
 	ext := strings.ToLower(filepath.Ext(src))
 	if def.Accepts(ext) {
-		if err := copyFile(src, dst); err != nil {
+		if err := copyFile(src, dst, tick); err != nil {
 			return fmt.Errorf("copying %s: %w", src, err)
 		}
 	} else {
@@ -100,8 +105,10 @@ func PrepareTrack(ctx context.Context, src, dst string, def target.Definition, a
 
 // copyFile copies src to dst byte-for-byte, for PrepareTrack's passthrough
 // case (src's format is already accepted by the target, so no transcode is
-// needed).
-func copyFile(src, dst string) error {
+// needed). tick, if non-nil, is called periodically (throttled to
+// copyProgressInterval, always including one final call once every byte
+// is written) with bytes copied so far and the total.
+func copyFile(src, dst string, tick func(copied, total int64)) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -114,11 +121,48 @@ func copyFile(src, dst string) error {
 	}
 	defer out.Close()
 
-	if _, err := io.Copy(out, in); err != nil {
+	var w io.Writer = out
+	if tick != nil {
+		info, statErr := in.Stat()
+		if statErr != nil {
+			return statErr
+		}
+		w = &copyProgressWriter{w: out, total: info.Size(), tick: tick}
+	}
+
+	if _, err := io.Copy(w, in); err != nil {
 		return err
 	}
 	// Explicit Close (in addition to the deferred one above) so a
 	// write-flush failure is actually caught and returned, rather than
 	// silently discarded the way the deferred call's error would be.
 	return out.Close()
+}
+
+// copyProgressInterval throttles copyProgressWriter's tick calls so a
+// large file copied through many small io.Copy buffer writes doesn't
+// flood the caller (a 32MB file at Go's default 32kB copy buffer is
+// otherwise ~1000 Write calls).
+const copyProgressInterval = 100 * time.Millisecond
+
+// copyProgressWriter wraps an io.Writer, invoking tick with the running
+// byte count after each underlying Write but throttled to at most once per
+// copyProgressInterval, except the final call (copied == total), which
+// always fires regardless of timing so the caller reliably sees 100%.
+type copyProgressWriter struct {
+	w        io.Writer
+	total    int64
+	copied   int64
+	tick     func(copied, total int64)
+	lastTick time.Time
+}
+
+func (c *copyProgressWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.copied += int64(n)
+	if c.copied == c.total || time.Since(c.lastTick) >= copyProgressInterval {
+		c.tick(c.copied, c.total)
+		c.lastTick = time.Now()
+	}
+	return n, err
 }
