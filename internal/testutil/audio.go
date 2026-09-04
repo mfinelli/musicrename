@@ -89,7 +89,7 @@ func MakeAudioFile(t *testing.T, dir, name string, tags map[string]string) strin
 // measure. The codec is inferred from name's extension: "libopus" for
 // .opus, "aac" otherwise.
 //
-// Requires a real ffmpeg binary on PATH; not skippable.
+// Requires a real ffmpeg binary on PATH.
 func MakeToneFile(t *testing.T, dir, name string) string {
 	t.Helper()
 
