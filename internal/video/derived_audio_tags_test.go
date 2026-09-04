@@ -18,40 +18,19 @@
 package video
 
 import (
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.senan.xyz/taglib"
+
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
-
-// makeAudioFile generates a short real audio file via ffmpeg, mirroring the
-// synthetic-fixture pattern already established elsewhere in this project.
-// WriteDerivedAudioTags itself doesn't shell out to anything (it's a direct
-// taglib call), but it needs a real file taglib can open to test against.
-func makeAudioFile(t *testing.T, dir, name string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	out, err := exec.Command(
-		"ffmpeg", "-y",
-		"-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-		"-t", "1", "-c:a", "aac",
-		path,
-	).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeAudioFile: ffmpeg failed: %v\n%s", err, out)
-	}
-
-	return path
-}
 
 func TestWriteDerivedAudioTags(t *testing.T) {
 	t.Run("writes title and artist", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		nfo := NFO{Title: "Crazy in Love", Artist: "Beyoncé"}
 		require.NoError(t, WriteDerivedAudioTags(path, nfo))
@@ -64,7 +43,7 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 
 	t.Run("writes album and year when present", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		nfo := NFO{Title: "Crazy in Love", Artist: "Beyoncé", Album: "Dangerously in Love", Year: "2003"}
 		require.NoError(t, WriteDerivedAudioTags(path, nfo))
@@ -77,7 +56,7 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 
 	t.Run("omits album and year when absent from nfo", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		nfo := NFO{Title: "Crazy in Love", Artist: "Beyoncé"}
 		require.NoError(t, WriteDerivedAudioTags(path, nfo))
@@ -93,7 +72,7 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 		// confirms a stale tag from an earlier extraction (before a
 		// `video edit` dropped Album) doesn't linger after a --retag.
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		require.NoError(t, WriteDerivedAudioTags(path, NFO{
 			Title: "Crazy in Love", Artist: "Beyoncé", Album: "Dangerously in Love",
@@ -112,7 +91,7 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 
 	t.Run("preserves tags it doesn't own, e.g. REPLAYGAIN written separately", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			"REPLAYGAIN_TRACK_GAIN": {"3.75 dB"},
@@ -130,7 +109,7 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 		// once: it clears its own stale ALBUM (nfo dropped it) while
 		// leaving an unrelated foreign tag alone.
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		require.NoError(t, taglib.WriteTags(path, map[string][]string{
 			"REPLAYGAIN_TRACK_GAIN": {"3.75 dB"},
@@ -149,7 +128,7 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 
 	t.Run("errors when title is missing", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		err := WriteDerivedAudioTags(path, NFO{Artist: "Beyoncé"})
 		assert.Error(t, err)
@@ -157,7 +136,7 @@ func TestWriteDerivedAudioTags(t *testing.T) {
 
 	t.Run("errors when artist is missing", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeAudioFile(t, dir, "track.m4a", nil)
 
 		err := WriteDerivedAudioTags(path, NFO{Title: "Crazy in Love"})
 		assert.Error(t, err)

@@ -21,12 +21,12 @@ import (
 	"context"
 	"errors"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 // fakeRunner records the args it was invoked with (for assertions) rather
@@ -71,33 +71,6 @@ func TestCompute(t *testing.T) {
 	})
 }
 
-// makeAudioFile generates a short real audio file (an actual tone, not
-// silence since rsgain's loudness measurement needs real signal) via ffmpeg,
-// mirroring the synthetic-fixture pattern already established elsewhere in
-// this project.
-func makeAudioFile(t *testing.T, dir, name string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, name)
-	ext := strings.ToLower(filepath.Ext(name))
-	codec := "aac"
-	if ext == ".opus" {
-		codec = "libopus"
-	}
-
-	out, err := exec.Command(
-		"ffmpeg", "-y",
-		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-		"-c:a", codec,
-		path,
-	).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeAudioFile: ffmpeg failed: %v\n%s", err, out)
-	}
-
-	return path
-}
-
 // probeFormatTags reads path's tags via a direct real ffprobe call,
 // checking both format-level and stream-level tags: REPLAYGAIN_* lands at
 // the format level for MP4/M4A but at the *stream* level for Ogg/Opus, a
@@ -125,7 +98,7 @@ func probeFormatTags(t *testing.T, path string) string {
 func TestComputeReal(t *testing.T) {
 	t.Run("writes REPLAYGAIN tags to an m4a file", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.m4a")
+		path := testutil.MakeToneFile(t, dir, "track.m4a")
 
 		before := probeFormatTags(t, path)
 		assert.NotContains(t, before, "REPLAYGAIN_TRACK_GAIN")
@@ -139,7 +112,7 @@ func TestComputeReal(t *testing.T) {
 
 	t.Run("writes REPLAYGAIN tags to an opus file", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.opus")
+		path := testutil.MakeToneFile(t, dir, "track.opus")
 
 		require.NoError(t, Compute(context.Background(), path))
 

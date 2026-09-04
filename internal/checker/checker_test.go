@@ -18,9 +18,7 @@
 package checker
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,6 +29,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
+	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
 // makeCheckerAlbum constructs a metadata.Album with ResolvedArtist already
@@ -49,48 +48,6 @@ func makeCheckerAlbum(
 		a.Assets = assets
 	}
 	return a
-}
-
-// makeAudioFile generates a one-second silent audio file at dir/name and sets
-// the provided metadata tags on it. The format is inferred from the file
-// extension (.flac, .mp3, .m4a). ffmpeg must be on PATH.
-//
-// Mirrors the helper in the metadata package; redefined here because _test.go
-// helpers cannot be imported across packages.
-func makeAudioFile(t *testing.T, dir, name string, tags map[string]string) string {
-	t.Helper()
-	path := filepath.Join(dir, name)
-	ext := strings.ToLower(filepath.Ext(name))
-
-	var codec string
-	switch ext {
-	case ".flac":
-		codec = "flac"
-	case ".mp3":
-		codec = "libmp3lame"
-	case ".m4a":
-		codec = "aac"
-	default:
-		t.Fatalf("makeAudioFile: unsupported extension %q", ext)
-	}
-
-	args := []string{
-		"-y",
-		"-f", "lavfi",
-		"-i", "anullsrc=r=44100:cl=stereo",
-		"-t", "1",
-		"-c:a", codec,
-	}
-	for k, v := range tags {
-		args = append(args, "-metadata", fmt.Sprintf("%s=%s", k, v))
-	}
-	args = append(args, path)
-
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("makeAudioFile: ffmpeg failed: %v\n%s", err, out)
-	}
-	return path
 }
 
 // minimalPNG is a 1×1 white-pixel PNG used to embed artwork in test audio
@@ -352,7 +309,7 @@ func TestCheckAlbumTags_EmptyAlbum(t *testing.T) {
 
 func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 	t.Run("missing REPLAYGAIN_TRACK_GAIN produces warning", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":  "Track",
 			"ARTIST": "Artist",
 			// Intentionally no ReplayGain tags.
@@ -364,7 +321,7 @@ func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 	})
 
 	t.Run("missing REPLAYGAIN_ALBUM_GAIN produces warning", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":                 "Track",
 			"ARTIST":                "Artist",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
@@ -378,7 +335,7 @@ func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 	})
 
 	t.Run("both ReplayGain tags present produces no ReplayGain warnings", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":                 "Track",
 			"ARTIST":                "Artist",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
@@ -394,7 +351,7 @@ func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 
 func TestCheckTrackAudio_EmbeddedArtwork(t *testing.T) {
 	t.Run("embedded artwork produces warning", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":  "Track",
 			"ARTIST": "Artist",
 		})
@@ -407,7 +364,7 @@ func TestCheckTrackAudio_EmbeddedArtwork(t *testing.T) {
 	})
 
 	t.Run("no embedded artwork produces no warning", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":  "Track",
 			"ARTIST": "Artist",
 		})
@@ -701,7 +658,7 @@ func TestCheckLibrary(t *testing.T) {
 		albumDir := filepath.Join(lib, "a", "artist", "[2000] album")
 		require.NoError(t, os.MkdirAll(albumDir, 0o755))
 
-		makeAudioFile(t, albumDir, "01 track.flac", map[string]string{
+		testutil.MakeAudioFile(t, albumDir, "01 track.flac", map[string]string{
 			"TITLE":                 "Track",
 			"ARTIST":                "Artist",
 			"ALBUMARTIST":           "Artist",
@@ -735,7 +692,7 @@ func TestCheckLibrary(t *testing.T) {
 		} {
 			dir := filepath.Join(lib, sub)
 			require.NoError(t, os.MkdirAll(dir, 0o755))
-			makeAudioFile(t, dir, "01 track.flac", map[string]string{
+			testutil.MakeAudioFile(t, dir, "01 track.flac", map[string]string{
 				"TITLE": "Track", "ARTIST": "Artist",
 			})
 		}
@@ -755,7 +712,7 @@ func TestCheckAlbum(t *testing.T) {
 
 	t.Run("directory with audio returns an AlbumResult", func(t *testing.T) {
 		dir := t.TempDir()
-		makeAudioFile(t, dir, "01 track.flac", map[string]string{
+		testutil.MakeAudioFile(t, dir, "01 track.flac", map[string]string{
 			"TITLE": "Track", "ARTIST": "Artist", "TRACKNUMBER": "1", "DATE": "2000",
 		})
 		ar, err := CheckAlbum(dir, "")
@@ -765,7 +722,7 @@ func TestCheckAlbum(t *testing.T) {
 
 	t.Run("empty libraryRoot checks filenames but skips album directory check", func(t *testing.T) {
 		dir := t.TempDir()
-		makeAudioFile(t, dir, "BAD FILENAME.flac", map[string]string{
+		testutil.MakeAudioFile(t, dir, "BAD FILENAME.flac", map[string]string{
 			"TITLE": "Track", "ARTIST": "Artist", "TRACKNUMBER": "1", "DATE": "2000",
 			"ALBUMARTIST": "Artist", "ALBUM": "Album",
 			"REPLAYGAIN_TRACK_GAIN": "+0.5 dB", "REPLAYGAIN_ALBUM_GAIN": "+1.0 dB",
@@ -782,7 +739,7 @@ func TestCheckAlbum(t *testing.T) {
 
 func TestCheckTrack(t *testing.T) {
 	t.Run("well-tagged track produces no warnings", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "01 track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "01 track.flac", map[string]string{
 			"TITLE":                 "Track",
 			"ARTIST":                "Artist",
 			"ALBUMARTIST":           "Artist",
@@ -798,7 +755,7 @@ func TestCheckTrack(t *testing.T) {
 	})
 
 	t.Run("missing tags produce per-track warnings", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			// No TITLE, no TRACKNUMBER, no DATE, no ARTIST/ALBUMARTIST.
 		})
 		ar, err := CheckTrack(path)
@@ -816,7 +773,7 @@ func TestCheckTrack(t *testing.T) {
 
 	t.Run("AlbumPath is set to the file's parent directory", func(t *testing.T) {
 		dir := t.TempDir()
-		path := makeAudioFile(t, dir, "track.flac", map[string]string{"TITLE": "T", "ARTIST": "A"})
+		path := testutil.MakeAudioFile(t, dir, "track.flac", map[string]string{"TITLE": "T", "ARTIST": "A"})
 		ar, err := CheckTrack(path)
 		require.NoError(t, err)
 		assert.Equal(t, dir, ar.AlbumPath)
@@ -824,7 +781,7 @@ func TestCheckTrack(t *testing.T) {
 
 	t.Run("mismatched filename produces warning", func(t *testing.T) {
 		// "01 Hells Bells.flac" should be "01 hells bells.flac" after sanitization.
-		path := makeAudioFile(t, t.TempDir(), "01 Hells Bells.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "01 Hells Bells.flac", map[string]string{
 			"TITLE":                 "Hells Bells",
 			"ARTIST":                "AC/DC",
 			"ALBUMARTIST":           "AC/DC",
@@ -842,7 +799,7 @@ func TestCheckTrack(t *testing.T) {
 	})
 
 	t.Run("correct filename produces no filename warning", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "01 track.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "01 track.flac", map[string]string{
 			"TITLE":                 "Track",
 			"ARTIST":                "Artist",
 			"ALBUMARTIST":           "Artist",
@@ -858,7 +815,7 @@ func TestCheckTrack(t *testing.T) {
 	})
 
 	t.Run("missing artist skips filename check without panicking", func(t *testing.T) {
-		path := makeAudioFile(t, t.TempDir(), "BAD NAME.flac", map[string]string{
+		path := testutil.MakeAudioFile(t, t.TempDir(), "BAD NAME.flac", map[string]string{
 			"TITLE": "Track",
 			// No ARTIST or ALBUMARTIST (can't plan, should skip silently).
 		})
