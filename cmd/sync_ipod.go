@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"time"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -199,6 +200,11 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 		}
 	}
 
+	// Timing starts here, after the confirmation prompt (if any), so the
+	// reported duration reflects the tool's own work, not however long
+	// the user took to answer "proceed?".
+	start := time.Now()
+
 	fmt.Fprintln(out)
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Syncing..."))
 
@@ -214,8 +220,9 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 		fmt.Fprintln(out)
 	}
 	lipgloss.Fprintln(out, sumsCheckStyle.Render(fmt.Sprintf(
-		"✓  %d created, %d updated, %d deleted",
+		"✓  %d created, %d updated, %d deleted · %s",
 		len(result.Created), len(result.Updated), len(result.Deleted),
+		time.Since(start).Round(10*time.Millisecond),
 	)))
 	printSyncWarnings(out, warnings)
 

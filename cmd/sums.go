@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
@@ -71,6 +72,8 @@ func init() {
 }
 
 func runSums(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	dir := "."
 	if len(args) > 0 {
 		dir = args[0]
@@ -91,9 +94,9 @@ func runSums(cmd *cobra.Command, args []string) error {
 	}
 
 	if isAlbum {
-		return runSumsAlbum(out, absDir, force, isTTY)
+		return runSumsAlbum(out, absDir, force, isTTY, start)
 	}
-	return runSumsLibrary(out, absDir, force, isTTY)
+	return runSumsLibrary(out, absDir, force, isTTY, start)
 }
 
 // sumsIsAlbumRoot reports whether dir directly contains at least one audio
@@ -113,7 +116,7 @@ func sumsIsAlbumRoot(dir string) (bool, error) {
 
 // runSumsAlbum generates sums.md5 for a single album directory. It refuses to
 // proceed if sums.md5 already exists unless force is true.
-func runSumsAlbum(out io.Writer, dir string, force, isTTY bool) error {
+func runSumsAlbum(out io.Writer, dir string, force, isTTY bool, start time.Time) error {
 	sumsPath := filepath.Join(dir, hasher.SumsFilename)
 	if _, err := os.Stat(sumsPath); err == nil && !force {
 		return fmt.Errorf(
@@ -145,14 +148,15 @@ func runSumsAlbum(out io.Writer, dir string, force, isTTY bool) error {
 	}
 
 	lipgloss.Fprintln(out, sumsCheckStyle.Render(
-		fmt.Sprintf("✓  sums.md5 written — %d %s", count, pluralFiles(count)),
+		fmt.Sprintf("✓  sums.md5 written — %d %s · %s", count, pluralFiles(count),
+			time.Since(start).Round(10*time.Millisecond)),
 	))
 	return nil
 }
 
 // runSumsLibrary generates sums.md5 for every album found under dir. Albums
 // that already have a sums.md5 are skipped unless force is true.
-func runSumsLibrary(out io.Writer, dir string, force, isTTY bool) error {
+func runSumsLibrary(out io.Writer, dir string, force, isTTY bool, start time.Time) error {
 	albums, err := metadata.ScanLibrary(dir)
 	if err != nil {
 		return fmt.Errorf("scanning library: %w", err)
@@ -219,8 +223,8 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool) error {
 
 	fmt.Fprintln(out)
 	summaryText := fmt.Sprintf(
-		"%d albums · %d generated · %d skipped",
-		len(albums), generated, skipped,
+		"%d albums · %d generated · %d skipped · %s",
+		len(albums), generated, skipped, time.Since(start).Round(10*time.Millisecond),
 	)
 	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
 	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))

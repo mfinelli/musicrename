@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -77,6 +78,8 @@ func init() {
 }
 
 func runLyrics(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	target := "."
 	if len(args) > 0 {
 		target = args[0]
@@ -102,7 +105,7 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
 				abs, metadata.DottedExtList(metadata.AudioExtensions))
 		}
-		return runLyricsTrack(ctx, out, abs, force)
+		return runLyricsTrack(ctx, out, abs, force, start)
 	}
 
 	isAlbum, err := lyricsIsAlbumRoot(abs)
@@ -111,9 +114,9 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 	}
 
 	if isAlbum {
-		return runLyricsAlbum(ctx, out, abs, force)
+		return runLyricsAlbum(ctx, out, abs, force, start)
 	}
-	return runLyricsLibrary(ctx, out, abs, force)
+	return runLyricsLibrary(ctx, out, abs, force, start)
 }
 
 // lyricsIsAlbumRoot reports whether dir directly contains at least one audio file.
@@ -131,7 +134,7 @@ func lyricsIsAlbumRoot(dir string) (bool, error) {
 }
 
 // runLyricsTrack handles track mode: a single audio file.
-func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool) error {
+func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool, start time.Time) error {
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
@@ -146,12 +149,12 @@ func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool)
 	}
 
 	fmt.Fprintln(out)
-	printLyricsSummaryLine(out, summary)
+	printLyricsSummaryLine(out, summary, time.Since(start))
 	return nil
 }
 
 // runLyricsAlbum handles album mode: a directory containing audio files directly.
-func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool) error {
+func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool, start time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", dir, err)
@@ -179,12 +182,12 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool) 
 	}
 
 	fmt.Fprintln(out)
-	printLyricsSummaryLine(out, summary)
+	printLyricsSummaryLine(out, summary, time.Since(start))
 	return nil
 }
 
 // runLyricsLibrary handles library mode: a directory containing album subdirectories.
-func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool) error {
+func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool, start time.Time) error {
 	albums, err := metadata.ScanLibrary(dir)
 	if err != nil {
 		return fmt.Errorf("scanning library: %w", err)
@@ -235,7 +238,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 		fmt.Fprintln(out)
 	}
 
-	printLyricsSummaryLine(out, total)
+	printLyricsSummaryLine(out, total, time.Since(start))
 	return nil
 }
 
@@ -261,11 +264,11 @@ func lyricsProgressCallback(out io.Writer, indent string) func(string, lyrics.Ly
 
 // printLyricsSummaryLine renders the rule and summary line at the bottom of
 // every lyrics run, consistent with the rename and sums commands.
-func printLyricsSummaryLine(out io.Writer, s lyrics.Summary) {
+func printLyricsSummaryLine(out io.Writer, s lyrics.Summary, elapsed time.Duration) {
 	total := s.Embedded + s.Skipped + s.NotFound + s.Failed
 	summaryText := fmt.Sprintf(
-		"%d tracks · %d embedded · %d skipped · %d not found · %d failed",
-		total, s.Embedded, s.Skipped, s.NotFound, s.Failed,
+		"%d tracks · %d embedded · %d skipped · %d not found · %d failed · %s",
+		total, s.Embedded, s.Skipped, s.NotFound, s.Failed, elapsed.Round(10*time.Millisecond),
 	)
 	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
 	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))

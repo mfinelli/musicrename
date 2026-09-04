@@ -68,6 +68,8 @@ func init() {
 }
 
 func runSyncNavidromePull(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	skipScan, _ := cmd.Flags().GetBool("skip-scan")
 	out := cmd.OutOrStdout()
@@ -125,7 +127,7 @@ func runSyncNavidromePull(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	printPullResult(out, root, result, dryRun)
+	printPullResult(out, root, result, dryRun, time.Since(start))
 	return nil
 }
 
@@ -154,7 +156,7 @@ func clearProgressLine(out io.Writer) {
 // printPullResult renders a navidromesync.PullResult: a summary line plus
 // itemized created/updated/deleted paths (relative to root when possible,
 // for readability), followed by any warnings.
-func printPullResult(out io.Writer, root string, result *navidromesync.PullResult, dryRun bool) {
+func printPullResult(out io.Writer, root string, result *navidromesync.PullResult, dryRun bool, elapsed time.Duration) {
 	label := func(path string) string {
 		if rel, err := filepath.Rel(root, path); err == nil {
 			return rel
@@ -190,8 +192,9 @@ func printPullResult(out io.Writer, root string, result *navidromesync.PullResul
 	}
 
 	fmt.Fprintln(out)
-	fmt.Fprintf(out, "%d created, %d updated, %d unchanged, %d deleted\n",
-		len(result.Created), len(result.Updated), len(result.Unchanged), len(result.Deleted))
+	fmt.Fprintf(out, "%d created, %d updated, %d unchanged, %d deleted · %s\n",
+		len(result.Created), len(result.Updated), len(result.Unchanged), len(result.Deleted),
+		elapsed.Round(10*time.Millisecond))
 
 	if len(result.Warnings) > 0 {
 		fmt.Fprintln(out)

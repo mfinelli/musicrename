@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -68,6 +69,8 @@ func init() {
 }
 
 func runVideoCheck(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	path := "."
 	if len(args) > 0 {
 		path = args[0]
@@ -88,14 +91,14 @@ func runVideoCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	if isVideoDir {
-		return runVideoCheckSingle(out, absPath)
+		return runVideoCheckSingle(out, absPath, start)
 	}
-	return runVideoCheckRoot(out, absPath)
+	return runVideoCheckRoot(out, absPath, start)
 }
 
 // runVideoCheckSingle checks a single video directory. Path-conformance is
 // skipped because no video-root is available from the command line.
-func runVideoCheckSingle(out io.Writer, dir string) error {
+func runVideoCheckSingle(out io.Writer, dir string, start time.Time) error {
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking video..."))
 	fmt.Fprintln(out)
 
@@ -108,7 +111,7 @@ func runVideoCheckSingle(out io.Writer, dir string) error {
 	// the findings header (e.g. "title") rather than "." or a full path,
 	// mirroring check.go's runCheckAlbum.
 	total := videoCheckPrintFindings(out, result, filepath.Dir(dir))
-	checkPrintSummary(out, 1, "video", total)
+	checkPrintSummary(out, 1, "video", total, time.Since(start))
 
 	if result.HasWarnings() {
 		os.Exit(1)
@@ -118,7 +121,7 @@ func runVideoCheckSingle(out io.Writer, dir string) error {
 
 // runVideoCheckRoot runs the full check suite on every video directory
 // found under root, including path-conformance.
-func runVideoCheckRoot(out io.Writer, root string) error {
+func runVideoCheckRoot(out io.Writer, root string, start time.Time) error {
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking video library..."))
 	fmt.Fprintln(out)
 
@@ -128,7 +131,7 @@ func runVideoCheckRoot(out io.Writer, root string) error {
 	}
 
 	total := videoCheckPrintFindings(out, result, root)
-	checkPrintSummary(out, result.Checked, "video", total)
+	checkPrintSummary(out, result.Checked, "video", total, time.Since(start))
 
 	if result.HasWarnings() {
 		os.Exit(1)

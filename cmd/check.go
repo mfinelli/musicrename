@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -71,6 +72,8 @@ func init() {
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	path := "."
 	if len(args) > 0 {
 		path = args[0]
@@ -97,7 +100,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 				filepath.Base(absPath), metadata.DottedExtList(metadata.AudioExtensions),
 			)
 		}
-		return runCheckTrack(out, absPath)
+		return runCheckTrack(out, absPath, start)
 	}
 
 	// Directory mode: check whether the directory directly contains audio to
@@ -109,14 +112,14 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	if isAlbum {
-		return runCheckAlbum(out, absPath)
+		return runCheckAlbum(out, absPath, start)
 	}
-	return runCheckLibrary(out, absPath)
+	return runCheckLibrary(out, absPath, start)
 }
 
 // runCheckLibrary runs the full check suite on a library root directory. The
 // library root is known so path-conformance checks are performed on every album.
-func runCheckLibrary(out io.Writer, root string) error {
+func runCheckLibrary(out io.Writer, root string, start time.Time) error {
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking library..."))
 	fmt.Fprintln(out)
 
@@ -126,7 +129,7 @@ func runCheckLibrary(out io.Writer, root string) error {
 	}
 
 	total := checkPrintFindings(out, result, root)
-	checkPrintSummary(out, len(result.Albums), "album", total)
+	checkPrintSummary(out, len(result.Albums), "album", total, time.Since(start))
 
 	if result.HasWarnings() {
 		os.Exit(1)
@@ -136,7 +139,7 @@ func runCheckLibrary(out io.Writer, root string) error {
 
 // runCheckAlbum runs all checks on a single album directory. Path-conformance
 // is skipped because no library root is available from the command line.
-func runCheckAlbum(out io.Writer, albumPath string) error {
+func runCheckAlbum(out io.Writer, albumPath string, start time.Time) error {
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking album..."))
 	fmt.Fprintln(out)
 
@@ -149,7 +152,7 @@ func runCheckAlbum(out io.Writer, albumPath string) error {
 	// Use the album's parent as the display root so the header shows the
 	// album's base name (e.g. "[2000] album") rather than a "." or full path.
 	total := checkPrintFindings(out, result, filepath.Dir(albumPath))
-	checkPrintSummary(out, 1, "album", total)
+	checkPrintSummary(out, 1, "album", total, time.Since(start))
 
 	if result.HasWarnings() {
 		os.Exit(1)
@@ -159,7 +162,7 @@ func runCheckAlbum(out io.Writer, albumPath string) error {
 
 // runCheckTrack runs track-level checks only on a single audio file.
 // Directory-level checks are skipped because album context is unavailable.
-func runCheckTrack(out io.Writer, filePath string) error {
+func runCheckTrack(out io.Writer, filePath string, start time.Time) error {
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking track..."))
 	fmt.Fprintln(out)
 
@@ -170,7 +173,7 @@ func runCheckTrack(out io.Writer, filePath string) error {
 	result := &checker.Result{Albums: []checker.AlbumResult{*ar}}
 
 	total := checkPrintFindings(out, result, filepath.Dir(filePath))
-	checkPrintSummary(out, 1, "track", total)
+	checkPrintSummary(out, 1, "track", total, time.Since(start))
 
 	if result.HasWarnings() {
 		os.Exit(1)
@@ -225,7 +228,7 @@ func checkPrintFindings(out io.Writer, result *checker.Result, displayRoot strin
 // checkPrintSummary writes the horizontal rule and the summary line at the
 // bottom of check output. unitLabel should be "album", "track", etc. and is
 // automatically pluralised.
-func checkPrintSummary(out io.Writer, unitCount int, unitLabel string, findings int) {
+func checkPrintSummary(out io.Writer, unitCount int, unitLabel string, findings int, elapsed time.Duration) {
 	unit := unitLabel
 	if unitCount != 1 {
 		unit += "s"
@@ -234,7 +237,8 @@ func checkPrintSummary(out io.Writer, unitCount int, unitLabel string, findings 
 	if findings != 1 {
 		finding += "s"
 	}
-	summaryText := fmt.Sprintf("%d %s · %d %s", unitCount, unit, findings, finding)
+	summaryText := fmt.Sprintf("%d %s · %d %s · %s",
+		unitCount, unit, findings, finding, elapsed.Round(10*time.Millisecond))
 	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
 	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 }

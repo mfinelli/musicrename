@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
@@ -63,6 +64,8 @@ func init() {
 }
 
 func runVideoRename(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	root := "."
 	if len(args) > 0 {
 		root = args[0]
@@ -82,7 +85,7 @@ func runVideoRename(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	if dryRun {
-		printVideoDryRun(out, plan)
+		printVideoDryRun(out, plan, time.Since(start))
 		return nil
 	}
 
@@ -109,7 +112,7 @@ func runVideoRename(cmd *cobra.Command, args []string) error {
 		fmt.Fprint(out, "\r\033[K")
 	}
 
-	printVideoRunSummary(out, plan, result.Warnings)
+	printVideoRunSummary(out, plan, result.Warnings, time.Since(start))
 	return nil
 }
 
@@ -137,7 +140,7 @@ func printVideoRunPlan(out io.Writer, plan *video.RenamePlan) {
 // printVideoDryRun writes the complete dry-run plan to out, grouped by
 // artist. Warnings are shown at the top; a summary line appears at the
 // bottom.
-func printVideoDryRun(out io.Writer, plan *video.RenamePlan) {
+func printVideoDryRun(out io.Writer, plan *video.RenamePlan, elapsed time.Duration) {
 	lipgloss.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be moved."))
 	fmt.Fprintln(out)
 
@@ -173,17 +176,17 @@ func printVideoDryRun(out io.Writer, plan *video.RenamePlan) {
 	}
 
 	moves, noOps := videoMoveCounts(plan.Moves)
-	printVideoSummaryLine(out, moves, noOps, len(plan.Warnings))
+	printVideoSummaryLine(out, moves, noOps, len(plan.Warnings), elapsed)
 }
 
 // printVideoRunSummary writes all warnings (scan-phase and execute-phase
 // combined) followed by the summary line to out.
-func printVideoRunSummary(out io.Writer, plan *video.RenamePlan, execWarnings []string) {
+func printVideoRunSummary(out io.Writer, plan *video.RenamePlan, execWarnings []string, elapsed time.Duration) {
 	allWarnings := append(append([]string{}, plan.Warnings...), execWarnings...)
 	printVideoWarnings(out, allWarnings)
 
 	moves, noOps := videoMoveCounts(plan.Moves)
-	printVideoSummaryLine(out, moves, noOps, len(allWarnings))
+	printVideoSummaryLine(out, moves, noOps, len(allWarnings), elapsed)
 }
 
 func printVideoWarnings(out io.Writer, warnings []string) {
@@ -199,12 +202,13 @@ func printVideoWarnings(out io.Writer, warnings []string) {
 
 // printVideoSummaryLine renders the rule and the summary line that appears
 // at the bottom of both dry-run and live-run output.
-func printVideoSummaryLine(out io.Writer, moves, noOps, warnings int) {
+func printVideoSummaryLine(out io.Writer, moves, noOps, warnings int, elapsed time.Duration) {
 	noOpLabel := "no-ops"
 	if noOps == 1 {
 		noOpLabel = "no-op"
 	}
-	summaryText := fmt.Sprintf("%d moves · %d %s · %d warnings", moves, noOps, noOpLabel, warnings)
+	summaryText := fmt.Sprintf("%d moves · %d %s · %d warnings · %s",
+		moves, noOps, noOpLabel, warnings, elapsed.Round(10*time.Millisecond))
 	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
 	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
 }

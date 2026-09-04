@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -69,6 +70,8 @@ func init() {
 }
 
 func runSyncNavidromePush(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	skipScan, _ := cmd.Flags().GetBool("skip-scan")
 	out := cmd.OutOrStdout()
@@ -126,13 +129,13 @@ func runSyncNavidromePush(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	printPushResult(out, root, result, dryRun)
+	printPushResult(out, root, result, dryRun, time.Since(start))
 	return nil
 }
 
 // printPushResult renders a navidromesync.PushResult, following the same
 // conventions as printPullResult.
-func printPushResult(out io.Writer, root string, result *navidromesync.PushResult, dryRun bool) {
+func printPushResult(out io.Writer, root string, result *navidromesync.PushResult, dryRun bool, elapsed time.Duration) {
 	label := func(path string) string {
 		if rel, err := filepath.Rel(root, path); err == nil {
 			return rel
@@ -153,8 +156,9 @@ func printPushResult(out io.Writer, root string, result *navidromesync.PushResul
 	}
 
 	fmt.Fprintln(out)
-	fmt.Fprintf(out, "%d created, %d updated, %d unchanged\n",
-		len(result.Created), len(result.Updated), len(result.Unchanged))
+	fmt.Fprintf(out, "%d created, %d updated, %d unchanged · %s\n",
+		len(result.Created), len(result.Updated), len(result.Unchanged),
+		elapsed.Round(10*time.Millisecond))
 
 	if len(result.Warnings) > 0 {
 		fmt.Fprintln(out)

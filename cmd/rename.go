@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
@@ -81,6 +82,8 @@ func init() {
 }
 
 func runRename(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	root := "."
 	if len(args) > 0 {
 		root = args[0]
@@ -110,7 +113,7 @@ func runRename(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	if dryRun {
-		printDryRun(out, plan)
+		printDryRun(out, plan, time.Since(start))
 		return nil
 	}
 
@@ -146,7 +149,7 @@ func runRename(cmd *cobra.Command, args []string) error {
 	execWarnings = append(execWarnings, renamesync.Sync(plan, skipMD5, skipPlaylists)...)
 
 	// Phase 2: surface all warnings (planner + executor) and the summary line.
-	printRunSummary(out, plan, execWarnings)
+	printRunSummary(out, plan, execWarnings, time.Since(start))
 	return nil
 }
 
@@ -184,7 +187,7 @@ func printRunPlan(out io.Writer, plan *planner.Plan) {
 // printRunSummary writes all warnings (planner-phase and executor-phase
 // combined) followed by the summary line to out. It is called after Execute
 // returns and uses the same summary format as printDryRun for consistency.
-func printRunSummary(out io.Writer, plan *planner.Plan, execWarnings []string) {
+func printRunSummary(out io.Writer, plan *planner.Plan, execWarnings []string, elapsed time.Duration) {
 	// Combine planner warnings (missing tags, unknown files) with any
 	// executor warnings (race conditions) so the user sees everything in
 	// one block.
@@ -203,13 +206,13 @@ func printRunSummary(out io.Writer, plan *planner.Plan, execWarnings []string) {
 	}
 
 	moves, noOps := renameCounts(plan)
-	printSummaryLine(out, len(plan.Albums), moves, noOps, len(allWarnings))
+	printSummaryLine(out, len(plan.Albums), moves, noOps, len(allWarnings), elapsed)
 }
 
 // printDryRun writes the complete dry-run plan to out, grouped by artist then
 // by album within each artist. Warnings are shown at the top; a summary line
 // appears at the bottom.
-func printDryRun(out io.Writer, plan *planner.Plan) {
+func printDryRun(out io.Writer, plan *planner.Plan, elapsed time.Duration) {
 	// Collect all warnings across all albums.
 	var allWarnings []string
 	for _, ap := range plan.Albums {
@@ -271,7 +274,7 @@ func printDryRun(out io.Writer, plan *planner.Plan) {
 	}
 
 	moves, noOps := renameCounts(plan)
-	printSummaryLine(out, len(plan.Albums), moves, noOps, len(allWarnings))
+	printSummaryLine(out, len(plan.Albums), moves, noOps, len(allWarnings), elapsed)
 }
 
 // renameCounts returns the number of real moves and no-op moves in the plan.
@@ -290,14 +293,14 @@ func renameCounts(plan *planner.Plan) (moves, noOps int) {
 
 // printSummaryLine renders the rule and the summary line that appears at the
 // bottom of both dry-run and live-run output.
-func printSummaryLine(out io.Writer, albums, moves, noOps, warnings int) {
+func printSummaryLine(out io.Writer, albums, moves, noOps, warnings int, elapsed time.Duration) {
 	noOpLabel := "no-ops"
 	if noOps == 1 {
 		noOpLabel = "no-op"
 	}
 	summaryText := fmt.Sprintf(
-		"%d albums · %d moves · %d %s · %d warnings",
-		albums, moves, noOps, noOpLabel, warnings,
+		"%d albums · %d moves · %d %s · %d warnings · %s",
+		albums, moves, noOps, noOpLabel, warnings, elapsed.Round(10*time.Millisecond),
 	)
 	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
 	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))

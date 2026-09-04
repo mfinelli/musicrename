@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -53,6 +54,8 @@ func init() {
 }
 
 func runPlaylistRename(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	root := "."
 	if len(args) > 0 {
 		root = args[0]
@@ -115,8 +118,8 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 	}
 
 	summaryText := fmt.Sprintf(
-		"%d renames · %d skipped · %d warnings",
-		len(ops), len(skipped), len(execWarnings),
+		"%d renames · %d skipped · %d warnings · %s",
+		len(ops), len(skipped), len(execWarnings), time.Since(start).Round(10*time.Millisecond),
 	)
 	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
 	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))

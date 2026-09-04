@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -69,6 +70,8 @@ func init() {
 }
 
 func runPlaylistCheck(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+
 	root := "."
 	if len(args) > 0 {
 		root = args[0]
@@ -101,7 +104,7 @@ func runPlaylistCheck(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out)
 	}
 
-	checkPrintSummary(out, 1, "playlist tree", len(result.Warnings))
+	checkPrintSummary(out, 1, "playlist tree", len(result.Warnings), time.Since(start))
 
 	if result.HasWarnings() {
 		os.Exit(1)
