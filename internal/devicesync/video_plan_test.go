@@ -78,7 +78,7 @@ func TestVideoPlan(t *testing.T) {
 		require.Equal(t, 0, counts1.Skip)
 		require.True(t, plan1.Capacity.Sufficient())
 
-		result, err := Execute(context.Background(), root, device, "ipod", plan1.Diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", plan1.Diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Created, 1)
 
@@ -121,7 +121,7 @@ func TestVideoPlan(t *testing.T) {
 
 		plan1, err := VideoPlan(root, device, "ipod")
 		require.NoError(t, err)
-		_, err = Execute(context.Background(), root, device, "ipod", plan1.Diff, false)
+		_, err = Execute(context.Background(), root, device, "ipod", plan1.Diff, false, nil)
 		require.NoError(t, err)
 
 		// Replace the source with different content and refresh its
@@ -151,7 +151,7 @@ func TestVideoPlan(t *testing.T) {
 
 		plan1, err := VideoPlan(root, device, "ipod")
 		require.NoError(t, err)
-		_, err = Execute(context.Background(), root, device, "ipod", plan1.Diff, false)
+		_, err = Execute(context.Background(), root, device, "ipod", plan1.Diff, false, nil)
 		require.NoError(t, err)
 
 		// Deselect it entirely.
@@ -162,7 +162,7 @@ func TestVideoPlan(t *testing.T) {
 		counts2 := CountChanges(plan2.Diff)
 		assert.Equal(t, 1, counts2.Delete)
 
-		result, err := Execute(context.Background(), root, device, "ipod", plan2.Diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", plan2.Diff, false, nil)
 		require.NoError(t, err)
 		assert.Len(t, result.Deleted, 1)
 

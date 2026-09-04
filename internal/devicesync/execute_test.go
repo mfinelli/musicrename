@@ -49,7 +49,7 @@ func makeArtworkFile(t *testing.T, path string, size int) {
 
 func TestExecute(t *testing.T) {
 	t.Run("errors on an unrecognized target", func(t *testing.T) {
-		_, err := Execute(context.Background(), t.TempDir(), t.TempDir(), "chromecast", &DiffResult{}, false)
+		_, err := Execute(context.Background(), t.TempDir(), t.TempDir(), "chromecast", &DiffResult{}, false, nil)
 		assert.Error(t, err)
 	})
 
@@ -66,7 +66,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionAdd}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Created, 1)
 		assert.Empty(t, result.Warnings)
@@ -98,7 +98,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionAdd}}}
 
-		result, err := Execute(context.Background(), root, device, "sdcard", diff, false)
+		result, err := Execute(context.Background(), root, device, "sdcard", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Created, 1)
 		assert.Empty(t, result.Warnings)
@@ -141,7 +141,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionRegenerate}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Updated, 1)
 		assert.Empty(t, result.Created)
@@ -168,7 +168,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/folder.jpg"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionAdd}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Created, 1)
 		assert.Empty(t, result.Warnings)
@@ -207,7 +207,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.mp3"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionAdd}}}
 
-		result, err := Execute(context.Background(), root, device, "sdcard", diff, false)
+		result, err := Execute(context.Background(), root, device, "sdcard", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Created, 1)
 		assert.Empty(t, result.Warnings)
@@ -238,7 +238,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionAdd}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, true)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, true, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Created, 1)
 
@@ -275,7 +275,7 @@ func TestExecute(t *testing.T) {
 			{Entry: entryB, Action: ActionAdd},
 		}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		assert.Len(t, result.Created, 2)
 
@@ -310,7 +310,7 @@ func TestExecute(t *testing.T) {
 			{Entry: goodEntry, Action: ActionAdd},
 		}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Warnings, 1)
 		require.Len(t, result.Created, 1)
@@ -327,7 +327,7 @@ func TestExecute(t *testing.T) {
 			{Entry: DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}, Action: ActionSkip},
 		}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result.Created)
 		assert.Empty(t, result.Updated)
@@ -350,7 +350,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Deleted, 1)
 		assert.Equal(t, entry, result.Deleted[0])
@@ -379,7 +379,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Deleted, 1)
 
@@ -401,7 +401,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
 
-		_, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		_, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 
 		_, err = os.Stat(filepath.Join(device, "main", "a", "artist"))
@@ -431,7 +431,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist-gone/album/01 gone.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
 
-		_, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		_, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 
 		_, err = os.Stat(filepath.Join(device, "main", "a", "artist-gone"))
@@ -459,7 +459,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 gone.mp3"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
 
-		result, err := Execute(context.Background(), root, device, "sdcard", diff, false)
+		result, err := Execute(context.Background(), root, device, "sdcard", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Deleted, 1)
 
@@ -483,7 +483,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 track.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, true)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, true, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Deleted, 1)
 
@@ -503,7 +503,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "main", Rel: "a/artist/album/01 already-gone.flac"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionDelete}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result.Warnings)
 		require.Len(t, result.Deleted, 1)
@@ -533,7 +533,7 @@ func TestExecute(t *testing.T) {
 			{Entry: DesiredEntry{Root: "main", Rel: "a/artist/album/02 new.flac"}, Action: ActionAdd},
 		}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Deleted, 1)
 		require.Len(t, result.Created, 1)
@@ -568,7 +568,7 @@ func TestExecute(t *testing.T) {
 		entry := DesiredEntry{Root: "videos", Rel: "b/beyonce/crazy in love/crazy in love.mp4"}
 		diff := &DiffResult{Changes: []PlannedChange{{Entry: entry, Action: ActionAdd}}}
 
-		result, err := Execute(context.Background(), root, device, "ipod", diff, false)
+		result, err := Execute(context.Background(), root, device, "ipod", diff, false, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Created, 1)
 		assert.Empty(t, result.Warnings)

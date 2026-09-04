@@ -51,7 +51,7 @@ func TestPrepareTrack(t *testing.T) {
 		dst := filepath.Join(dir, "out", "01 track.flac")
 
 		def := target.Definition{AcceptedFormats: []string{".flac", ".mp3", ".m4a"}}
-		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil))
+		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil, nil))
 
 		assert.FileExists(t, dst)
 		assert.Equal(t, fileMD5(t, src), fileMD5(t, dst),
@@ -74,7 +74,7 @@ func TestPrepareTrack(t *testing.T) {
 		// sdcard-shaped: accepts mp3 passthrough, but embeds art. Original
 		// tags must still survive via the copy itself, not a rewrite.
 		def := target.Definition{AcceptedFormats: []string{".mp3"}, EmbedArt: true}
-		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil))
+		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil, nil))
 
 		tags, err := taglib.ReadTags(dst)
 		require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestPrepareTrack(t *testing.T) {
 			AcceptedFormats: []string{".mp3"},
 			TranscodeFormat: target.FormatMP3,
 		}
-		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil))
+		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil, nil))
 
 		assert.FileExists(t, dst)
 
@@ -117,7 +117,7 @@ func TestPrepareTrack(t *testing.T) {
 		def := target.Definition{AcceptedFormats: []string{".mp3"}, EmbedArt: true}
 		fakeJPEG := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0} // minimal-looking JPEG header
 
-		err := PrepareTrack(context.Background(), src, dst, def, fakeJPEG)
+		err := PrepareTrack(context.Background(), src, dst, def, fakeJPEG, nil)
 		// taglib may or may not validate the image bytes strictly; either
 		// a clean write or a decode-related error is acceptable here, but
 		// a completely unrelated failure (e.g. the earlier copy step
@@ -135,7 +135,7 @@ func TestPrepareTrack(t *testing.T) {
 		dst := filepath.Join(dir, "out.mp3")
 
 		def := target.Definition{AcceptedFormats: []string{".mp3"}, EmbedArt: false}
-		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, []byte("not even valid image data")))
+		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, []byte("not even valid image data"), nil))
 		assert.FileExists(t, dst)
 	})
 
@@ -145,7 +145,7 @@ func TestPrepareTrack(t *testing.T) {
 		dst := filepath.Join(dir, "a", "b", "c", "track.flac")
 
 		def := target.Definition{AcceptedFormats: []string{".flac"}}
-		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil))
+		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil, nil))
 		assert.FileExists(t, dst)
 	})
 
@@ -158,7 +158,7 @@ func TestPrepareTrack(t *testing.T) {
 			AcceptedFormats: []string{".mp3"},
 			TranscodeFormat: target.AudioFormat("vorbis"), // not defined in internal/target
 		}
-		err := PrepareTrack(context.Background(), src, dst, def, nil)
+		err := PrepareTrack(context.Background(), src, dst, def, nil, nil)
 		assert.Error(t, err)
 	})
 
@@ -166,7 +166,7 @@ func TestPrepareTrack(t *testing.T) {
 		dir := t.TempDir()
 		def := target.Definition{AcceptedFormats: []string{".flac"}}
 		err := PrepareTrack(
-			context.Background(), filepath.Join(dir, "missing.flac"), filepath.Join(dir, "out.flac"), def, nil,
+			context.Background(), filepath.Join(dir, "missing.flac"), filepath.Join(dir, "out.flac"), def, nil, nil,
 		)
 		assert.Error(t, err)
 	})

@@ -64,6 +64,7 @@ type ExecuteResult struct {
 // and no album's checksum files or directories are touched at all).
 func Execute(
 	ctx context.Context, libraryRootRoot, devicePath, targetName string, diff *DiffResult, dryRun bool,
+	progress func(SyncProgress),
 ) (*ExecuteResult, error) {
 	def, ok := target.DefinitionFor(targetName)
 	if !ok {
@@ -71,6 +72,16 @@ func Execute(
 	}
 
 	result := &ExecuteResult{}
+
+	// total counts only Add/Regenerate entries (the ones progress
+	// actually reports on) matching Index's scope in executeAlbum.
+	total := 0
+	for _, change := range diff.Changes {
+		if change.Action == ActionAdd || change.Action == ActionRegenerate {
+			total++
+		}
+	}
+	index := 0
 
 	type albumWork struct {
 		key     AlbumKey
@@ -99,6 +110,7 @@ func Execute(
 	for _, aw := range albums {
 		if err := executeAlbum(
 			ctx, libraryRootRoot, devicePath, targetName, def, aw.key, aw.changes, dryRun, result,
+			progress, &index, total,
 		); err != nil {
 			return nil, err
 		}
@@ -109,10 +121,14 @@ func Execute(
 
 // executeAlbum handles every non-skip change within a single album,
 // batching that album's sums.md5/{target}.src.md5 read-modify-write into
-// one pass regardless of how many of its files are changing.
+// one pass regardless of how many of its files are changing. index is a
+// counter shared across every album in the same Execute call (Add/
+// Regenerate entries only; Delete doesn't advance it), incremented here
+// as each entry is about to be processed and reported via progress.
 func executeAlbum(
 	ctx context.Context, libraryRootRoot, devicePath, targetName string, def target.Definition,
 	key AlbumKey, changes []PlannedChange, dryRun bool, result *ExecuteResult,
+	progress func(SyncProgress), index *int, total int,
 ) error {
 	sourceAlbumDir := filepath.Join(libraryRootRoot, key.Root, key.Dir)
 	deviceAlbumDir := filepath.Join(devicePath, key.Root, key.Dir)
@@ -218,17 +234,46 @@ func executeAlbum(
 			continue
 		}
 
+		*index++
+		idx := *index // captured per-entry for the progress closures below
+
 		var writeErr error
 		switch {
 		case isArtworkName(sourceName):
+			if progress != nil {
+				progress(SyncProgress{Phase: SyncProgressStarted, Index: idx, Total: total, Name: entry.Rel, Verb: "Resizing artwork"})
+			}
 			writeErr = artwork.ResizeFile(sourcePath, destPath, def.ArtMaxDimension)
 		case video.IsVideoExt(strings.ToLower(filepath.Ext(sourceName))):
 			// A video (unlike audio) always transcodes, matching
 			// deviceRelFor's own unconditional video handling above;
 			// there's no passthrough case here.
+			if progress != nil {
+				progress(SyncProgress{Phase: SyncProgressStarted, Index: idx, Total: total, Name: entry.Rel, Verb: "Transcoding"})
+			}
 			writeErr = PrepareVideo(ctx, sourcePath, destPath, def.Video)
 		default:
-			writeErr = PrepareTrack(ctx, sourcePath, destPath, def, artBytes)
+			// Mirrors PrepareTrack's def.Accepts(ext) check, purely
+			// to choose this event's display verb ahead of time; the
+			// actual passthrough-vs-transcode decision is still made
+			// exactly once, inside PrepareTrack itself.
+			verb := "Transcoding"
+			var tick func(copied, total int64)
+			if def.Accepts(strings.ToLower(filepath.Ext(sourceName))) {
+				verb = "Copying"
+				if progress != nil {
+					tick = func(copied, tot int64) {
+						progress(SyncProgress{
+							Phase: SyncProgressCopying, Index: idx, Total: total, Name: entry.Rel,
+							BytesCopied: copied, TotalBytes: tot,
+						})
+					}
+				}
+			}
+			if progress != nil {
+				progress(SyncProgress{Phase: SyncProgressStarted, Index: idx, Total: total, Name: entry.Rel, Verb: verb})
+			}
+			writeErr = PrepareTrack(ctx, sourcePath, destPath, def, artBytes, tick)
 		}
 		if writeErr != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %v", entry.Rel, writeErr))
