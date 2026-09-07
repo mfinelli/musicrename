@@ -4,7 +4,7 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
-## Unreleased
+## v4.2.1 — 2026-09-07
 
 - Add shell completion for file extensions, target names, and playlist arguments
   across most commands (previously only a handful had any).
