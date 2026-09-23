@@ -297,8 +297,6 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 				fmt.Sprintf("missing TITLE tag for %s (using filename stem)", track.Path))
 		}
 
-		truncTitle := sanitize.PathComponent(title, sanitize.TrackOverride, sanitize.FilenameLimit)
-
 		// Always lowercase the extension for filesystem consistency.
 		ext := strings.ToLower(filepath.Ext(track.Path))
 
@@ -313,12 +311,16 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		}
 		trackNumStr := fmt.Sprintf("%0*d", padding, trackNum)
 
-		var fileName string
+		prefix := trackNumStr + " "
 		if hasMultiDisc {
-			fileName = fmt.Sprintf("%d-%s %s%s", track.DiscNumber, trackNumStr, truncTitle, ext)
-		} else {
-			fileName = fmt.Sprintf("%s %s%s", trackNumStr, truncTitle, ext)
+			prefix = fmt.Sprintf("%d-%s ", track.DiscNumber, trackNumStr)
 		}
+
+		// The title gets whatever the prefix and extension leave of the
+		// sums.md5 path budget, so every sums.md5 line for a track stays
+		// within 80 characters.
+		truncTitle := sanitize.PathComponent(title, sanitize.TrackOverride, sanitize.TrackTitleLimit(prefix, ext))
+		fileName := prefix + truncTitle + ext
 
 		newPath := filepath.Join(fullAlbumDir, fileName)
 		op, err := p.createMoveOp(track.Path, newPath, globalDests)

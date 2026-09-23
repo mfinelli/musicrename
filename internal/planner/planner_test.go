@@ -459,6 +459,84 @@ func TestPlanLibrary_TrackNumbering(t *testing.T) {
 	})
 }
 
+func TestPlanLibrary_TrackTitleLength(t *testing.T) {
+	longTitle := strings.Repeat("a", 60)
+
+	t.Run("single-disc flac filename fills the sums.md5 path budget", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/t1.flac", Title: longTitle, Album: "A", Year: "2000", TrackNumber: new(1)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/t1.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "01 "+strings.Repeat("a", 38)+".flac", filepath.Base(op.NewPath))
+	})
+
+	t.Run("single-disc mp3 title gets one more character than flac", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/t1.mp3", Title: longTitle, Album: "A", Year: "2000", TrackNumber: new(1)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/t1.mp3")
+		require.NotNil(t, op)
+		assert.Equal(t, "01 "+strings.Repeat("a", 39)+".mp3", filepath.Base(op.NewPath))
+	})
+
+	t.Run("multi-disc prefix reduces the title limit", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/d1.flac", Title: longTitle, Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 1},
+			{Path: "/src/d2.flac", Title: "Short", Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 2},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/d1.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "1-01 "+strings.Repeat("a", 36)+".flac", filepath.Base(op.NewPath))
+	})
+
+	t.Run("ten or more discs reduce the title limit further", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/d1.flac", Title: "Short", Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 1},
+			{Path: "/src/d10.flac", Title: longTitle, Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 10},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/d10.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "10-01 "+strings.Repeat("a", 35)+".flac", filepath.Base(op.NewPath))
+	})
+
+	t.Run("word-boundary cut leaves no space before the extension", func(t *testing.T) {
+		lib := t.TempDir()
+		// Multi-disc flac: title limit 36 lands right after "strawberry ".
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/d1.flac", Title: "United State of Pop 2021 (Strawberry Ice Cream)", Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 1},
+			{Path: "/src/d2.flac", Title: "Short", Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 2},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/d1.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "1-01 united state of pop 2021 strawberry.flac", filepath.Base(op.NewPath))
+	})
+}
+
 func TestPlanLibrary_TitleFallback(t *testing.T) {
 	t.Run("empty title falls back to sanitized filename stem", func(t *testing.T) {
 		lib := t.TempDir()

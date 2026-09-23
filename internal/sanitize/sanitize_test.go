@@ -18,6 +18,7 @@
 package sanitize
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -357,6 +358,7 @@ func TestPathComponent(t *testing.T) {
 		assert.Equal(t, 60, ArtistLimit)
 		assert.Equal(t, 60, AlbumLimit)
 		assert.Equal(t, 40, FilenameLimit)
+		assert.Equal(t, 46, SumsPathLimit)
 	})
 
 	t.Run("pipeline", func(t *testing.T) {
@@ -445,6 +447,37 @@ func TestPathComponentResult(t *testing.T) {
 				input)
 		}
 	})
+}
+
+func TestTrackTitleLimit(t *testing.T) {
+	tests := []struct {
+		name     string
+		prefix   string
+		ext      string
+		expected int
+	}{
+		{name: "single-disc flac", prefix: "01 ", ext: ".flac", expected: 38},
+		{name: "single-disc mp3", prefix: "01 ", ext: ".mp3", expected: 39},
+		{name: "single-disc m4a", prefix: "01 ", ext: ".m4a", expected: 39},
+		{name: "single-disc three-digit track flac", prefix: "001 ", ext: ".flac", expected: 37},
+		{name: "multi-disc flac", prefix: "1-01 ", ext: ".flac", expected: 36},
+		{name: "multi-disc mp3", prefix: "1-01 ", ext: ".mp3", expected: 37},
+		{name: "ten or more discs flac", prefix: "10-01 ", ext: ".flac", expected: 35},
+		{name: "multi-disc three-digit track flac", prefix: "1-001 ", ext: ".flac", expected: 35},
+		{name: "prefix and extension exhaust the budget", prefix: strings.Repeat("9", 50), ext: ".flac", expected: 0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			limit := TrackTitleLimit(test.prefix, test.ext)
+			assert.Equal(t, test.expected, limit)
+			if limit > 0 {
+				// The whole filename fits the budget exactly.
+				full := test.prefix + strings.Repeat("a", limit) + test.ext
+				assert.Equal(t, SumsPathLimit, len([]rune(full)))
+			}
+		})
+	}
 }
 
 func TestPathComponentIn(t *testing.T) {

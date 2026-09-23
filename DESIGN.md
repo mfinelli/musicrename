@@ -117,7 +117,8 @@ Length limits are:
 
 - artist names: 60 characters
 - album names: 60 characters
-- filenames: 40 characters for the basename
+- track titles: whatever remains of the 46-character track filename budget
+- other filenames: 40 characters for the basename
 
 Filename limits are reduced when necessary for files in `artwork/`, `scans/`, or
 `extras/` so that checksum paths remain within the intended path-length bound.
@@ -146,6 +147,16 @@ Multi-disc albums use:
 
 Track numbers are two digits by default. If an album contains a track numbered
 above 99, all tracks in that album use three-digit padding.
+
+A complete track filename, including its number prefix and extension, is at most
+46 characters. A track's filename is also its path in the album's `sums.md5`,
+where each line is a 32-character hash, two separator characters, and the path;
+the budget keeps every such line to at most 80 characters.
+
+The sanitized title receives whatever the prefix and extension leave. For
+example, a single-disc FLAC track title may be 38 characters, a multi-disc FLAC
+track title 36, and a track on disc 10 or later 35. No assumption about disc or
+track counts is needed.
 
 ---
 

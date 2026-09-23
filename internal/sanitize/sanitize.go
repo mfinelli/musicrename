@@ -199,9 +199,26 @@ const (
 	AlbumLimit = 60
 	// FilenameLimit is the maximum length of a filename stem, excluding
 	// the extension. Files in a subdirectory of an album (see
-	// PathComponentIn) get a correspondingly smaller limit.
+	// PathComponentIn) get a correspondingly smaller limit. Audio track
+	// titles are limited by TrackTitleLimit instead.
 	FilenameLimit = 40
+
+	// SumsPathLimit is the maximum length of a track's filename, which is
+	// also its path in the album's sums.md5. A sums.md5 line is a
+	// 32-character hash, two separator characters ("  " or " *"), and the
+	// path; keeping lines to at most 80 characters (excluding the newline)
+	// leaves 80 - 32 - 2 = 46 for the path.
+	SumsPathLimit = 46
 )
+
+// TrackTitleLimit returns the maximum sanitized title length for a track
+// filename built as prefix + title + ext (e.g. "1-01 " + title + ".flac"), so
+// that the complete filename fits within SumsPathLimit. The title gets
+// whatever the track-number prefix and extension leave, so no assumptions
+// about disc or track counts are needed. Never returns less than zero.
+func TrackTitleLimit(prefix, ext string) int {
+	return max(SumsPathLimit-utf8.RuneCountInString(prefix)-utf8.RuneCountInString(ext), 0)
+}
 
 // PathComponent turns raw metadata into a string suitable for use as a single
 // directory or filename component: it runs input through the sanitization
