@@ -114,11 +114,12 @@ func runInspect(cmd *cobra.Command, args []string) error {
 		year = strings.SplitN(rawDate, "-", 2)[0]
 	}
 
-	// Sanitize the text fields that feed into directory and file names.
-	cleanTitle := sanitize.CleanStringResult(title, sanitize.TrackOverride)
-	cleanArtist := sanitize.CleanStringResult(artist, sanitize.ArtistOverride)
-	cleanAlbumArtist := sanitize.CleanStringResult(albumArtist, sanitize.ArtistOverride)
-	cleanAlbum := sanitize.CleanStringResult(album, sanitize.AlbumOverride)
+	// Sanitize the text fields that feed into directory and file names
+	// so that what's shown is exactly what rename would use.
+	cleanTitle := sanitize.PathComponentResult(title, sanitize.TrackOverride, sanitize.FilenameLimit)
+	cleanArtist := sanitize.PathComponentResult(artist, sanitize.ArtistOverride, sanitize.ArtistLimit)
+	cleanAlbumArtist := sanitize.PathComponentResult(albumArtist, sanitize.ArtistOverride, sanitize.ArtistLimit)
+	cleanAlbum := sanitize.PathComponentResult(album, sanitize.AlbumOverride, sanitize.AlbumLimit)
 
 	out := cmd.OutOrStdout()
 

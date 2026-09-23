@@ -77,11 +77,12 @@ func runVideoInspect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading metadata for %q: %w", filepath.Base(path), err)
 	}
 
-	// Sanitize the fields that feed into directory/file names. Album and
-	// Year are stored verbatim (informational/Jellyfin-only), so they have
-	// no sanitized form to show.
-	cleanTitle := sanitize.CleanStringResult(nfo.Title, sanitize.TrackOverride)
-	cleanArtist := sanitize.CleanStringResult(nfo.Artist, sanitize.ArtistOverride)
+	// Sanitize the fields that feed into directory/file names so that
+	// what's shown is exactly what video rename would use. Album and Year
+	// are stored verbatim (informational/Jellyfin-only), so they have no
+	// sanitized form to show.
+	cleanTitle := sanitize.PathComponentResult(nfo.Title, sanitize.TrackOverride, sanitize.FilenameLimit)
+	cleanArtist := sanitize.PathComponentResult(nfo.Artist, sanitize.ArtistOverride, sanitize.ArtistLimit)
 
 	out := cmd.OutOrStdout()
 

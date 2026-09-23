@@ -423,6 +423,30 @@ func TestPathComponent(t *testing.T) {
 	})
 }
 
+func TestPathComponentResult(t *testing.T) {
+	t.Run("pipeline result is truncated and not marked as an override", func(t *testing.T) {
+		res := PathComponentResult("United State of Pop 2021 (Strawberry Ice Cream)", TrackOverride, FilenameLimit)
+		assert.Equal(t, "united state of pop 2021 strawberry ice", res.Value)
+		assert.False(t, res.ManualOverride)
+	})
+
+	t.Run("override result is marked and trimmed", func(t *testing.T) {
+		withOverride(t, "Stray", ArtistOverride, " stray ")
+		res := PathComponentResult("Stray", ArtistOverride, ArtistLimit)
+		assert.Equal(t, "stray", res.Value)
+		assert.True(t, res.ManualOverride)
+	})
+
+	t.Run("value matches PathComponent", func(t *testing.T) {
+		for _, input := range []string{"AC/DC", "Crazy in Love", "!!!", "United State of Pop 2021 (Strawberry Ice Cream)"} {
+			assert.Equal(t,
+				PathComponent(input, ArtistOverride, 10),
+				PathComponentResult(input, ArtistOverride, 10).Value,
+				input)
+		}
+	})
+}
+
 func TestPathComponentIn(t *testing.T) {
 	t.Run("limit is reduced by the subdirectory name and separator", func(t *testing.T) {
 		// extras = 6 chars; effective limit = 40 - 6 - 1 = 33, which

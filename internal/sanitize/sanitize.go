@@ -217,7 +217,16 @@ const (
 // An empty result is possible (e.g. input "!!!") and must be handled by the
 // caller.
 func PathComponent(input string, kind OverrideType, limit int) string {
-	return strings.TrimSpace(Truncate(strings.TrimSpace(CleanString(input, kind)), limit))
+	return PathComponentResult(input, kind, limit).Value
+}
+
+// PathComponentResult runs the same steps as PathComponent and returns a
+// Result that additionally reports whether a manual override was applied,
+// for callers that display how a path component was derived (e.g. inspect).
+func PathComponentResult(input string, kind OverrideType, limit int) Result {
+	clean := CleanStringResult(input, kind)
+	clean.Value = strings.TrimSpace(Truncate(strings.TrimSpace(clean.Value), limit))
+	return clean
 }
 
 // PathComponentIn is PathComponent for a file stored in a subdirectory of an
