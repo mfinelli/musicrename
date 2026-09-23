@@ -171,8 +171,7 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		return nil, fmt.Errorf("cannot resolve artist for album at %s", album.RootPath)
 	}
 
-	sanArtist := sanitize.CleanStringResult(album.ResolvedArtist, sanitize.ArtistOverride)
-	truncArtist := sanitize.Truncate(sanArtist.Value, 60)
+	truncArtist := sanitize.PathComponent(album.ResolvedArtist, sanitize.ArtistOverride, sanitize.ArtistLimit)
 
 	// GetFirstLetterPath already includes the artist name (e.g. "b/beyonce"),
 	// so it is used directly as the path component without appending truncArtist again.
@@ -187,8 +186,7 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		// expected to be a single lowercase letter or "0".
 		artistFolderPath = filepath.Join(bucket, truncArtist)
 	} else if album.ResolvedArtistSort != "" {
-		sanSort := sanitize.CleanStringResult(album.ResolvedArtistSort, sanitize.ArtistOverride)
-		truncSort := sanitize.Truncate(sanSort.Value, 60)
+		truncSort := sanitize.PathComponent(album.ResolvedArtistSort, sanitize.ArtistOverride, sanitize.ArtistLimit)
 		sortPath, err := sanitize.GetFirstLetterPath(truncSort)
 		if err != nil {
 			return nil, fmt.Errorf("artist sort path error: %w", err)
@@ -211,8 +209,7 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		rawYear = album.Tracks[0].Year
 	}
 
-	sanAlbum := sanitize.CleanStringResult(rawAlbum, sanitize.AlbumOverride)
-	truncAlbum := sanitize.Truncate(sanAlbum.Value, 60)
+	truncAlbum := sanitize.PathComponent(rawAlbum, sanitize.AlbumOverride, sanitize.AlbumLimit)
 
 	// Folder format: "[Year] Album Name" or "Album Name" when year is absent.
 	albumFolderName := truncAlbum
@@ -300,8 +297,7 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 				fmt.Sprintf("missing TITLE tag for %s (using filename stem)", track.Path))
 		}
 
-		sanTitle := sanitize.CleanStringResult(title, sanitize.TrackOverride)
-		truncTitle := sanitize.Truncate(sanTitle.Value, 40)
+		truncTitle := sanitize.PathComponent(title, sanitize.TrackOverride, sanitize.FilenameLimit)
 
 		// Always lowercase the extension for filesystem consistency.
 		ext := strings.ToLower(filepath.Ext(track.Path))
@@ -367,23 +363,19 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 				newPath = filepath.Join(fullAlbumDir, "folder"+normExt)
 
 			case metadata.CatArtwork:
-				sanStem := sanitize.CleanStringResult(rawStem, sanitize.TrackOverride)
-				truncStem := sanitize.TruncateWithOffset(sanStem.Value, "artwork", 40)
+				truncStem := sanitize.PathComponentIn(rawStem, sanitize.TrackOverride, "artwork", sanitize.FilenameLimit)
 				newPath = filepath.Join(fullAlbumDir, "artwork", truncStem+ext)
 
 			case metadata.CatScan:
-				sanStem := sanitize.CleanStringResult(rawStem, sanitize.TrackOverride)
-				truncStem := sanitize.TruncateWithOffset(sanStem.Value, "scans", 40)
+				truncStem := sanitize.PathComponentIn(rawStem, sanitize.TrackOverride, "scans", sanitize.FilenameLimit)
 				newPath = filepath.Join(fullAlbumDir, "scans", truncStem+ext)
 
 			case metadata.CatExtras:
-				sanStem := sanitize.CleanStringResult(rawStem, sanitize.TrackOverride)
-				truncStem := sanitize.TruncateWithOffset(sanStem.Value, "extras", 40)
+				truncStem := sanitize.PathComponentIn(rawStem, sanitize.TrackOverride, "extras", sanitize.FilenameLimit)
 				newPath = filepath.Join(fullAlbumDir, "extras", truncStem+ext)
 
 			case metadata.CatRootText:
-				sanStem := sanitize.CleanStringResult(rawStem, sanitize.TrackOverride)
-				truncStem := sanitize.Truncate(sanStem.Value, 40)
+				truncStem := sanitize.PathComponent(rawStem, sanitize.TrackOverride, sanitize.FilenameLimit)
 				newPath = filepath.Join(fullAlbumDir, truncStem+ext)
 
 			case metadata.CatUnknown:

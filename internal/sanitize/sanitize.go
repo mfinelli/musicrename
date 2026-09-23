@@ -51,7 +51,10 @@ type Result struct {
 	Value string
 	// ManualOverride reports whether the result came from a hardcoded manual
 	// override rather than the standard pipeline. When true, transliteration,
-	// lowercasing, regex stripping, and truncation were all skipped.
+	// lowercasing, regex stripping, and whitespace normalization were all
+	// skipped. (Truncation isn't part of CleanStringResult and so callers
+	// building path components should use PathComponent, which truncates
+	// and trims override values too.)
 	ManualOverride bool
 }
 
@@ -184,6 +187,45 @@ func Truncate(name string, limit int) string {
 func TruncateWithOffset(name string, dirName string, maxLimit int) string {
 	limit := max(maxLimit-utf8.RuneCountInString(dirName)-1, 0)
 	return Truncate(name, limit)
+}
+
+// Length limits, in characters (runes), for the path components produced by
+// PathComponent and PathComponentIn.
+const (
+	// ArtistLimit is the maximum length of an artist directory name.
+	ArtistLimit = 60
+	// AlbumLimit is the maximum length of an album name, excluding any
+	// "[year] " prefix.
+	AlbumLimit = 60
+	// FilenameLimit is the maximum length of a filename stem, excluding
+	// the extension. Files in a subdirectory of an album (see
+	// PathComponentIn) get a correspondingly smaller limit.
+	FilenameLimit = 40
+)
+
+// PathComponent turns raw metadata into a string suitable for use as a single
+// directory or filename component: it runs input through the sanitization
+// pipeline (or its manual override) for the given kind, truncates the result
+// to limit characters, and finally trims any leading or trailing whitespace.
+//
+// The final trim is a last-resort guarantee rather than something the
+// pipeline normally needs: CleanString output is already trimmed and
+// Truncate never leaves a trailing space where it cuts, but manual overrides
+// bypass the pipeline entirely, and no path component should ever begin or
+// end with whitespace regardless of where it came from.
+//
+// An empty result is possible (e.g. input "!!!") and must be handled by the
+// caller.
+func PathComponent(input string, kind OverrideType, limit int) string {
+	return strings.TrimSpace(Truncate(strings.TrimSpace(CleanString(input, kind)), limit))
+}
+
+// PathComponentIn is PathComponent for a file stored in a subdirectory of an
+// album (e.g. "artwork", "scans", "extras"): the limit is reduced by the
+// length of dir plus one for the path separator, as in TruncateWithOffset, so
+// that the relative path recorded in sums.md5 stays within limit characters.
+func PathComponentIn(input string, kind OverrideType, dir string, limit int) string {
+	return strings.TrimSpace(TruncateWithOffset(strings.TrimSpace(CleanString(input, kind)), dir, limit))
 }
 
 // GetFirstLetterPath creates a nested directory structure based on the first

@@ -44,8 +44,8 @@ type CreateOptions struct {
 // playlists/ tree: headers only (per opts), and without any entries.
 //
 // The destination filename is derived from opts.Name via the same
-// sanitization pipeline PlanRenames/ExecuteRenames use (sanitize.CleanString
-// with TrackOverride, truncated to 40 characters). An opts.Name that
+// sanitization pipeline PlanRenames/ExecuteRenames use (sanitize.PathComponent
+// with TrackOverride and sanitize.FilenameLimit). An opts.Name that
 // sanitizes to an empty string is an error since there's nothing reasonable
 // to name the file. A destination that already exists is also an error:
 // Create never overwrites an existing playlist.
@@ -61,7 +61,7 @@ type CreateOptions struct {
 //
 // Returns the new file's absolute path on success.
 func Create(libraryRootRoot string, opts CreateOptions) (path, warning string, err error) {
-	stem := sanitize.Truncate(sanitize.CleanString(opts.Name, sanitize.TrackOverride), 40)
+	stem := sanitize.PathComponent(opts.Name, sanitize.TrackOverride, sanitize.FilenameLimit)
 	if stem == "" {
 		return "", "", fmt.Errorf("name %q sanitizes to an empty string", opts.Name)
 	}

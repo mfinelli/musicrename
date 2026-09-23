@@ -207,8 +207,7 @@ func Add(videoRoot string, in AddInput) (*AddResult, error) {
 // (rather than only embedded in dir) so callers such as Rename's dry-run
 // output can group by it without re-deriving it from the computed path.
 func destination(videoRoot, artist, title, ext string) (bucket, dir, videoPath string, err error) {
-	sanArtist := sanitize.CleanStringResult(artist, sanitize.ArtistOverride)
-	truncArtist := sanitize.Truncate(sanArtist.Value, 60)
+	truncArtist := sanitize.PathComponent(artist, sanitize.ArtistOverride, sanitize.ArtistLimit)
 	if truncArtist == "" {
 		return "", "", "", fmt.Errorf("artist %q sanitizes to an empty string", artist)
 	}
@@ -219,8 +218,7 @@ func destination(videoRoot, artist, title, ext string) (bucket, dir, videoPath s
 	}
 	bucket = strings.SplitN(afp, string(filepath.Separator), 2)[0]
 
-	sanTitle := sanitize.CleanStringResult(title, sanitize.TrackOverride)
-	truncTitle := sanitize.Truncate(sanTitle.Value, 40)
+	truncTitle := sanitize.PathComponent(title, sanitize.TrackOverride, sanitize.FilenameLimit)
 	if truncTitle == "" {
 		return "", "", "", fmt.Errorf("title %q sanitizes to an empty string", title)
 	}

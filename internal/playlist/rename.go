@@ -49,8 +49,8 @@ type Skipped struct {
 // PlanRenames walks libraryRootRoot's playlists/ tree (see [WalkTree]) and
 // computes the destination filename implied by each playlist's #PLAYLIST:
 // directive, passed through the same sanitization pipeline used everywhere
-// else in this project (sanitize.CleanString with TrackOverride), truncated
-// to 40 characters (the same limit used for other root-level filenames).
+// else in this project (sanitize.PathComponent with TrackOverride and
+// sanitize.FilenameLimit, the same limit used for other root-level filenames).
 //
 // A file with no #PLAYLIST: directive, or whose directive value sanitizes
 // to an empty string, is skipped and described in the returned slice rather
@@ -88,7 +88,7 @@ func PlanRenames(libraryRootRoot string) (ops []RenameOp, skipped []Skipped, err
 			return nil
 		}
 
-		stem := sanitize.Truncate(sanitize.CleanString(gp.Name, sanitize.TrackOverride), 40)
+		stem := sanitize.PathComponent(gp.Name, sanitize.TrackOverride, sanitize.FilenameLimit)
 		if stem == "" {
 			skipped = append(skipped, Skipped{
 				Path:    path,

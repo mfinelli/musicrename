@@ -71,7 +71,7 @@ func libraryRootRootFor(path string) string {
 // differently-cased or punctuated remote names that sanitize to the same stem
 // don't collide.
 func newPlaylistFilename(playlistsDir, name string) string {
-	stem := sanitize.Truncate(sanitize.CleanString(name, sanitize.TrackOverride), 40)
+	stem := sanitize.PathComponent(name, sanitize.TrackOverride, sanitize.FilenameLimit)
 	if stem == "" {
 		stem = "playlist"
 	}

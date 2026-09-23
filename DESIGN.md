@@ -110,7 +110,8 @@ The resulting normal form:
 - applies length limits
 
 Known exceptional names may have explicit overrides. An override is
-authoritative and bypasses the remainder of the sanitization process.
+authoritative and bypasses the normalization steps above, but it is still
+subject to the length limits below.
 
 Length limits are:
 
@@ -123,7 +124,11 @@ Filename limits are reduced when necessary for files in `artwork/`, `scans/`, or
 
 Truncation is a hard character limit rather than a word-boundary operation. If
 the cut exposes trailing spaces, they are trimmed, so a truncated name may be
-shorter than its limit but never ends in a space.
+shorter than its limit.
+
+As a final step, every directory or file name component, whether produced by the
+normal form or by an override, has any leading or trailing whitespace removed.
+No path component ever begins or ends with whitespace.
 
 ### 2.4 Track Names
 

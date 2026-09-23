@@ -332,6 +332,115 @@ func TestTruncateWithOffset(t *testing.T) {
 	}
 }
 
+// withOverride temporarily adds a manual override for the duration of the
+// test, so PathComponent's handling of override values (which bypass the
+// pipeline, including its whitespace normalization) can be exercised without
+// depending on the contents of the real override map.
+func withOverride(t *testing.T, input string, kind OverrideType, value string) {
+	t.Helper()
+	prev, existed := manualOverrides[input]
+	manualOverrides[input] = map[OverrideType]string{kind: value}
+	t.Cleanup(func() {
+		if existed {
+			manualOverrides[input] = prev
+		} else {
+			delete(manualOverrides, input)
+		}
+	})
+}
+
+func TestPathComponent(t *testing.T) {
+	t.Run("limits match the documented values", func(t *testing.T) {
+		// Hardcoded on purpose: changing a limit renames files across
+		// the whole library, so it should break this test and force a
+		// deliberate DESIGN.md update rather than slip through.
+		assert.Equal(t, 60, ArtistLimit)
+		assert.Equal(t, 60, AlbumLimit)
+		assert.Equal(t, 40, FilenameLimit)
+	})
+
+	t.Run("pipeline", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    string
+			kind     OverrideType
+			limit    int
+			expected string
+		}{
+			{
+				name:     "within limit is only cleaned",
+				input:    "Crazy in Love",
+				kind:     TrackOverride,
+				limit:    FilenameLimit,
+				expected: "crazy in love",
+			},
+			{
+				// Real-world regression: the 40-character cut lands
+				// right after "ice ".
+				name:     "cut on a word boundary leaves no trailing space",
+				input:    "United State of Pop 2021 (Strawberry Ice Cream)",
+				kind:     TrackOverride,
+				limit:    FilenameLimit,
+				expected: "united state of pop 2021 strawberry ice",
+			},
+			{
+				name:     "input that sanitizes to nothing is empty",
+				input:    "!!!",
+				kind:     TrackOverride,
+				limit:    FilenameLimit,
+				expected: "",
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				assert.Equal(t, test.expected, PathComponent(test.input, test.kind, test.limit))
+			})
+		}
+	})
+
+	t.Run("overrides", func(t *testing.T) {
+		t.Run("real override is used as-is", func(t *testing.T) {
+			assert.Equal(t, "ac⁄dc", PathComponent("AC/DC", ArtistOverride, ArtistLimit))
+		})
+
+		t.Run("stray surrounding whitespace is trimmed", func(t *testing.T) {
+			withOverride(t, "Stray", TrackOverride, "  stray value \t")
+			assert.Equal(t, "stray value", PathComponent("Stray", TrackOverride, FilenameLimit))
+		})
+
+		t.Run("leading whitespace does not count toward the limit", func(t *testing.T) {
+			withOverride(t, "Leading", TrackOverride, "   abcdefghij")
+			assert.Equal(t, "abcde", PathComponent("Leading", TrackOverride, 5))
+		})
+
+		t.Run("non-space whitespace exposed by the cut is trimmed", func(t *testing.T) {
+			// Truncate itself only trims ASCII spaces (all the
+			// pipeline can produce); the final trim catches the tab.
+			withOverride(t, "Tab", TrackOverride, "abc\tdef")
+			assert.Equal(t, "abc", PathComponent("Tab", TrackOverride, 4))
+		})
+	})
+}
+
+func TestPathComponentIn(t *testing.T) {
+	t.Run("limit is reduced by the subdirectory name and separator", func(t *testing.T) {
+		// extras = 6 chars; effective limit = 40 - 6 - 1 = 33, which
+		// lands right after "from the ".
+		assert.Equal(t, "interview with the band from the",
+			PathComponentIn("Interview with the Band from the Tour Book", TrackOverride, "extras", FilenameLimit))
+	})
+
+	t.Run("within reduced limit is only cleaned", func(t *testing.T) {
+		assert.Equal(t, "front cover", PathComponentIn("Front Cover", TrackOverride, "artwork", FilenameLimit))
+	})
+
+	t.Run("override whitespace is trimmed", func(t *testing.T) {
+		withOverride(t, "Stray", TrackOverride, " booklet ")
+		assert.Equal(t, "booklet", PathComponentIn("Stray", TrackOverride, "scans", FilenameLimit))
+	})
+}
+
 func TestGetFirstLetterPath(t *testing.T) {
 	tests := []struct {
 		name     string
