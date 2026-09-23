@@ -237,31 +237,8 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 		)
 	}
 
-	// 3. Determine track numbering strategy.
-	//
-	// maxTrack drives zero-padding: 2 digits by default, 3 if any track
-	// exceeds 99. A nil TrackNumber (absent tag) is excluded from this
-	// calculation; those tracks format as "00" and a warning is emitted by
-	// the command layer.
-	//
-	// hasMultiDisc is true when two or more distinct DISCNUMBER values are
-	// present. A single disc always has at most one distinct value, so this
-	// is safe even when all tracks share DISCNUMBER=1.
-	maxTrack := 0
-	discNumbers := make(map[int]bool)
-	for _, t := range album.Tracks {
-		if t.TrackNumber != nil && *t.TrackNumber > maxTrack {
-			maxTrack = *t.TrackNumber
-		}
-		if t.DiscNumber > 0 {
-			discNumbers[t.DiscNumber] = true
-		}
-	}
-	padding := 2
-	if maxTrack > 99 {
-		padding = 3
-	}
-	hasMultiDisc := len(discNumbers) > 1
+	// 3. Determine track numbering strategy (padding, disc prefix).
+	numbering := NewNumbering(album.Tracks)
 
 	albumPlan := &AlbumPlan{
 		AlbumArtist: truncArtist,
@@ -288,39 +265,9 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 
 	// 4. Plan audio file moves.
 	for _, track := range album.Tracks {
-		// TITLE fallback: when the tag is absent, use the original filename
-		// stem so the file is still placed rather than dropped.
-		title := track.Title
-		if title == "" {
-			title = strings.TrimSuffix(filepath.Base(track.Path), filepath.Ext(track.Path))
-			albumPlan.Warnings = append(albumPlan.Warnings,
-				fmt.Sprintf("missing TITLE tag for %s (using filename stem)", track.Path))
-		}
-
-		// Always lowercase the extension for filesystem consistency.
-		ext := strings.ToLower(filepath.Ext(track.Path))
-
-		// A nil TrackNumber means the tag was absent; use 0 as the formatted
-		// value so the file sorts before track 1.
-		trackNum := 0
-		if track.TrackNumber != nil {
-			trackNum = *track.TrackNumber
-		} else {
-			albumPlan.Warnings = append(albumPlan.Warnings,
-				fmt.Sprintf("missing TRACKNUMBER tag for %s", track.Path))
-		}
-		trackNumStr := fmt.Sprintf("%0*d", padding, trackNum)
-
-		prefix := trackNumStr + " "
-		if hasMultiDisc {
-			prefix = fmt.Sprintf("%d-%s ", track.DiscNumber, trackNumStr)
-		}
-
-		// The title gets whatever the prefix and extension leave of the
-		// sums.md5 path budget, so every sums.md5 line for a track stays
-		// within 80 characters.
-		truncTitle := sanitize.PathComponent(title, sanitize.TrackOverride, sanitize.TrackTitleLimit(prefix, ext))
-		fileName := prefix + truncTitle + ext
+		name := TrackName(track, numbering)
+		albumPlan.Warnings = append(albumPlan.Warnings, name.Warnings...)
+		fileName := name.FileName
 
 		newPath := filepath.Join(fullAlbumDir, fileName)
 		op, err := p.createMoveOp(track.Path, newPath, globalDests)
@@ -396,6 +343,108 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 	}
 
 	return albumPlan, nil
+}
+
+// Numbering holds the album-level decisions that shape every track's
+// filename prefix. Use NewNumbering to compute it from an album's tracks.
+type Numbering struct {
+	// padding is the zero-padded width of track numbers: 2 by default, 3
+	// if any track exceeds 99.
+	padding int
+	// multiDisc is true when two or more distinct DISCNUMBER values are
+	// present, in which case every track is prefixed with its disc number.
+	multiDisc bool
+}
+
+// NewNumbering computes the numbering strategy for an album from all of its
+// tracks. A nil TrackNumber (absent tag) is excluded from the padding
+// calculation; those tracks format as "00". A single disc always has at
+// most one distinct DISCNUMBER value, so an album whose tracks all have
+// DISCNUMBER=1 gets no disc prefix.
+//
+// NewNumbering does not validate partial DISCNUMBER metadata; PlanAlbum
+// rejects such albums before any names are computed.
+func NewNumbering(tracks []*metadata.Track) Numbering {
+	maxTrack := 0
+	discNumbers := make(map[int]bool)
+	for _, t := range tracks {
+		if t.TrackNumber != nil && *t.TrackNumber > maxTrack {
+			maxTrack = *t.TrackNumber
+		}
+		if t.DiscNumber > 0 {
+			discNumbers[t.DiscNumber] = true
+		}
+	}
+
+	n := Numbering{padding: 2, multiDisc: len(discNumbers) > 1}
+	if maxTrack > 99 {
+		n.padding = 3
+	}
+	return n
+}
+
+// Prefix returns the filename prefix for track under this numbering,
+// including its trailing separator: "01 " for a single-disc album, "1-01 "
+// for a multi-disc one.
+func (n Numbering) Prefix(track *metadata.Track) string {
+	// A nil TrackNumber means the tag was absent; use 0 as the formatted
+	// value so the file sorts before track 1.
+	trackNum := 0
+	if track.TrackNumber != nil {
+		trackNum = *track.TrackNumber
+	}
+	trackNumStr := fmt.Sprintf("%0*d", n.padding, trackNum)
+
+	if n.multiDisc {
+		return fmt.Sprintf("%d-%s ", track.DiscNumber, trackNumStr)
+	}
+	return trackNumStr + " "
+}
+
+// TrackNameResult is the outcome of naming a single audio track.
+type TrackNameResult struct {
+	// FileName is the track's complete destination filename (prefix,
+	// title, and lowercased extension), without any directory.
+	FileName string
+	// Title is the sanitized, truncated title as it appears in FileName,
+	// along with whether it came from a manual override.
+	Title sanitize.Result
+	// Warnings holds non-fatal problems found while naming the track
+	// (e.g. missing TITLE or TRACKNUMBER tags).
+	Warnings []string
+}
+
+// TrackName computes the destination filename for track under numbering.
+// It is the single source of truth for track filenames: PlanAlbum uses it
+// for every track, and read-only commands (e.g. inspect) use it to show
+// exactly what rename would produce.
+func TrackName(track *metadata.Track, numbering Numbering) TrackNameResult {
+	var result TrackNameResult
+
+	// TITLE fallback: when the tag is absent, use the original filename
+	// stem so the file is still placed rather than dropped.
+	title := track.Title
+	if title == "" {
+		title = strings.TrimSuffix(filepath.Base(track.Path), filepath.Ext(track.Path))
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("missing TITLE tag for %s (using filename stem)", track.Path))
+	}
+
+	if track.TrackNumber == nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("missing TRACKNUMBER tag for %s", track.Path))
+	}
+
+	// Always lowercase the extension for filesystem consistency.
+	ext := strings.ToLower(filepath.Ext(track.Path))
+	prefix := numbering.Prefix(track)
+
+	// The title gets whatever the prefix and extension leave of the
+	// sums.md5 path budget, so every sums.md5 line for a track stays
+	// within 80 characters.
+	result.Title = sanitize.PathComponentResult(title, sanitize.TrackOverride, sanitize.TrackTitleLimit(prefix, ext))
+	result.FileName = prefix + result.Title.Value + ext
+	return result
 }
 
 // createMoveOp registers newPath in globalDests and returns a MoveOperation

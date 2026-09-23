@@ -352,3 +352,58 @@ func TestProcessLibrary(t *testing.T) {
 		assert.Len(t, albums, 2)
 	})
 }
+
+func TestProcessAlbum(t *testing.T) {
+	t.Run("populates tags and resolves album-level metadata", func(t *testing.T) {
+		dir := t.TempDir()
+		testutil.MakeAudioFile(t, dir, "01 one.flac", map[string]string{
+			"TITLE": "One", "ARTIST": "Test Artist", "ALBUMARTIST": "Album Artist",
+			"ALBUMARTISTSORT": "Artist, Album", "ALBUM": "Test Album", "TRACKNUMBER": "1",
+		})
+		testutil.MakeAudioFile(t, dir, "02 two.flac", map[string]string{
+			"TITLE": "Two", "ARTIST": "Test Artist", "ALBUMARTIST": "Album Artist",
+			"ALBUM": "Test Album", "TRACKNUMBER": "2",
+		})
+
+		album, err := ProcessAlbum(dir)
+		require.NoError(t, err)
+		assert.Equal(t, dir, album.RootPath)
+		require.Len(t, album.Tracks, 2)
+		for _, tr := range album.Tracks {
+			assert.NotEmpty(t, tr.Title)
+			assert.NotNil(t, tr.TrackNumber)
+		}
+		assert.Equal(t, "Album Artist", album.ResolvedArtist)
+		assert.Equal(t, "Artist, Album", album.ResolvedArtistSort)
+	})
+
+	t.Run("does not descend into audio-bearing subdirectories", func(t *testing.T) {
+		dir := t.TempDir()
+		testutil.MakeAudioFile(t, dir, "01 one.flac", map[string]string{
+			"TITLE": "One", "ARTIST": "Artist", "TRACKNUMBER": "1",
+		})
+		sub := filepath.Join(dir, "other album")
+		require.NoError(t, os.MkdirAll(sub, 0o755))
+		testutil.MakeAudioFile(t, sub, "01 other.flac", map[string]string{
+			"TITLE": "Other", "ARTIST": "Artist", "TRACKNUMBER": "1",
+		})
+
+		album, err := ProcessAlbum(dir)
+		require.NoError(t, err)
+		require.Len(t, album.Tracks, 1)
+		assert.Equal(t, filepath.Join(dir, "01 one.flac"), album.Tracks[0].Path)
+	})
+
+	t.Run("directory without audio is an error", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0o644))
+
+		_, err := ProcessAlbum(dir)
+		assert.Error(t, err)
+	})
+
+	t.Run("missing directory is an error", func(t *testing.T) {
+		_, err := ProcessAlbum(filepath.Join(t.TempDir(), "does-not-exist"))
+		assert.Error(t, err)
+	})
+}

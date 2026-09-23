@@ -537,6 +537,84 @@ func TestPlanLibrary_TrackTitleLength(t *testing.T) {
 	})
 }
 
+func TestNewNumbering(t *testing.T) {
+	t.Run("single-disc album uses two-digit prefix without disc", func(t *testing.T) {
+		tracks := []*metadata.Track{{TrackNumber: new(1)}, {TrackNumber: new(12)}}
+		n := NewNumbering(tracks)
+		assert.Equal(t, "01 ", n.Prefix(tracks[0]))
+		assert.Equal(t, "12 ", n.Prefix(tracks[1]))
+	})
+
+	t.Run("any track above 99 switches every track to three digits", func(t *testing.T) {
+		tracks := []*metadata.Track{{TrackNumber: new(1)}, {TrackNumber: new(100)}}
+		n := NewNumbering(tracks)
+		assert.Equal(t, "001 ", n.Prefix(tracks[0]))
+		assert.Equal(t, "100 ", n.Prefix(tracks[1]))
+	})
+
+	t.Run("two distinct disc numbers add a disc prefix", func(t *testing.T) {
+		tracks := []*metadata.Track{
+			{TrackNumber: new(1), DiscNumber: 1},
+			{TrackNumber: new(1), DiscNumber: 10},
+		}
+		n := NewNumbering(tracks)
+		assert.Equal(t, "1-01 ", n.Prefix(tracks[0]))
+		assert.Equal(t, "10-01 ", n.Prefix(tracks[1]))
+	})
+
+	t.Run("a single shared disc number adds no disc prefix", func(t *testing.T) {
+		tracks := []*metadata.Track{
+			{TrackNumber: new(1), DiscNumber: 1},
+			{TrackNumber: new(2), DiscNumber: 1},
+		}
+		assert.Equal(t, "01 ", NewNumbering(tracks).Prefix(tracks[0]))
+	})
+
+	t.Run("absent track number formats as zero and is ignored for padding", func(t *testing.T) {
+		tracks := []*metadata.Track{{TrackNumber: nil}, {TrackNumber: new(5)}}
+		n := NewNumbering(tracks)
+		assert.Equal(t, "00 ", n.Prefix(tracks[0]))
+	})
+}
+
+func TestTrackName(t *testing.T) {
+	t.Run("matches the filename PlanLibrary produces", func(t *testing.T) {
+		lib := t.TempDir()
+		tracks := []*metadata.Track{
+			{Path: "/src/a.flac", Title: "United State of Pop 2021 (Strawberry Ice Cream)", Album: "A", Year: "2000", TrackNumber: new(1), DiscNumber: 1},
+			{Path: "/src/b.MP3", Title: "Crazy in Love", Album: "A", Year: "2000", TrackNumber: new(2), DiscNumber: 2},
+		}
+		album := makeAlbum("/src", "Artist", tracks, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		n := NewNumbering(tracks)
+		for _, tr := range tracks {
+			op := findMove(&plan.Albums[0], tr.Path)
+			require.NotNil(t, op)
+			assert.Equal(t, filepath.Base(op.NewPath), TrackName(tr, n).FileName)
+		}
+	})
+
+	t.Run("title is the part of the filename between prefix and extension", func(t *testing.T) {
+		tr := &metadata.Track{Path: "/src/a.flac", Title: "Crazy in Love", TrackNumber: new(1)}
+		name := TrackName(tr, NewNumbering([]*metadata.Track{tr}))
+		assert.Equal(t, "01 crazy in love.flac", name.FileName)
+		assert.Equal(t, "crazy in love", name.Title.Value)
+		assert.False(t, name.Title.ManualOverride)
+		assert.Empty(t, name.Warnings)
+	})
+
+	t.Run("missing TITLE and TRACKNUMBER produce warnings", func(t *testing.T) {
+		tr := &metadata.Track{Path: "/src/some file.flac"}
+		name := TrackName(tr, NewNumbering([]*metadata.Track{tr}))
+		require.Len(t, name.Warnings, 2)
+		assert.Contains(t, name.Warnings[0], "missing TITLE")
+		assert.Contains(t, name.Warnings[1], "missing TRACKNUMBER")
+	})
+}
+
 func TestPlanLibrary_TitleFallback(t *testing.T) {
 	t.Run("empty title falls back to sanitized filename stem", func(t *testing.T) {
 		lib := t.TempDir()

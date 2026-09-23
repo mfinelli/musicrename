@@ -40,3 +40,22 @@ func TestNewAlbum(t *testing.T) {
 	assert.NotNil(t, album.Warnings)
 	assert.Empty(t, album.Warnings)
 }
+
+func TestAlbumTrackByPath(t *testing.T) {
+	album := NewAlbum("/music/album")
+	one := &Track{Path: "/music/album/01 one.flac"}
+	two := &Track{Path: "/music/album/02 two.flac"}
+	album.Tracks = append(album.Tracks, one, two)
+
+	t.Run("returns the matching track", func(t *testing.T) {
+		assert.Same(t, two, album.TrackByPath("/music/album/02 two.flac"))
+	})
+
+	t.Run("returns nil when no track matches", func(t *testing.T) {
+		assert.Nil(t, album.TrackByPath("/music/album/03 three.flac"))
+	})
+
+	t.Run("does not match on base name alone", func(t *testing.T) {
+		assert.Nil(t, album.TrackByPath("/elsewhere/01 one.flac"))
+	})
+}

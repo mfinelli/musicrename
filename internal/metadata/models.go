@@ -137,3 +137,16 @@ func NewAlbum(path string) *Album {
 		Warnings: make([]string, 0),
 	}
 }
+
+// TrackByPath returns the track whose Path is exactly path, or nil if the
+// album has no such track. Paths are compared as-is (no cleaning or case
+// folding), so callers should pass paths built the same way the scanner
+// builds them (an absolute album root joined with the file name).
+func (a *Album) TrackByPath(path string) *Track {
+	for _, t := range a.Tracks {
+		if t.Path == path {
+			return t
+		}
+	}
+	return nil
+}

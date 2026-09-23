@@ -229,29 +229,51 @@ func ProcessLibrary(root string) ([]*Album, error) {
 	}
 
 	reader := NewReader()
-
 	for _, album := range albums {
-		for _, track := range album.Tracks {
-			if err := reader.ReadTrack(track); err != nil {
-				album.Warnings = append(album.Warnings,
-					fmt.Sprintf("could not read tags for %s: %v", track.Path, err))
-			}
-		}
-
-		album.ResolvedArtist = album.ResolveAlbumArtist()
-		if album.ResolvedArtist == "" {
-			album.Warnings = append(album.Warnings,
-				fmt.Sprintf("could not resolve artist for album at %s; it will be skipped", album.RootPath))
-		}
-
-		// Populate sort tag for first-letter bucketing. Any track with the tag will do
-		for _, t := range album.Tracks {
-			if t.AlbumArtistSort != "" {
-				album.ResolvedArtistSort = t.AlbumArtistSort
-				break
-			}
-		}
+		readAlbum(reader, album)
 	}
 
 	return albums, nil
+}
+
+// ProcessAlbum is ProcessLibrary for exactly one directory: dir itself is
+// treated as the album root and is not walked recursively, so an album-level
+// question about a single file (e.g. `inspect`) never reads tags from any
+// other directory. Returns an error if dir cannot be read or contains no
+// audio files.
+func ProcessAlbum(dir string) (*Album, error) {
+	album, isAlbum := processDirectory(dir)
+	if !isAlbum {
+		return nil, fmt.Errorf("%s is not an album directory (no readable audio files)", dir)
+	}
+
+	readAlbum(NewReader(), album)
+	return album, nil
+}
+
+// readAlbum reads the tags of every track in album and resolves its
+// album-level metadata (ResolvedArtist, ResolvedArtistSort), recording
+// non-fatal problems in album.Warnings. Shared by ProcessLibrary and
+// ProcessAlbum so both produce identically-populated albums.
+func readAlbum(reader *Reader, album *Album) {
+	for _, track := range album.Tracks {
+		if err := reader.ReadTrack(track); err != nil {
+			album.Warnings = append(album.Warnings,
+				fmt.Sprintf("could not read tags for %s: %v", track.Path, err))
+		}
+	}
+
+	album.ResolvedArtist = album.ResolveAlbumArtist()
+	if album.ResolvedArtist == "" {
+		album.Warnings = append(album.Warnings,
+			fmt.Sprintf("could not resolve artist for album at %s; it will be skipped", album.RootPath))
+	}
+
+	// Populate sort tag for first-letter bucketing. Any track with the tag will do
+	for _, t := range album.Tracks {
+		if t.AlbumArtistSort != "" {
+			album.ResolvedArtistSort = t.AlbumArtistSort
+			break
+		}
+	}
 }

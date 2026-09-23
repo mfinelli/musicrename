@@ -30,6 +30,7 @@ import (
 	"go.senan.xyz/taglib"
 
 	"github.com/mfinelli/musicrename/internal/metadata"
+	"github.com/mfinelli/musicrename/internal/planner"
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
 
@@ -114,9 +115,28 @@ func runInspect(cmd *cobra.Command, args []string) error {
 		year = strings.SplitN(rawDate, "-", 2)[0]
 	}
 
+	// A track's filename depends on the rest of its album (number padding,
+	// whether there's a disc prefix, and therefore how much of the
+	// sums.md5 path budget is left for the title), so read the containing
+	// directory as an album and name this track exactly as rename would.
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolving %q: %w", path, err)
+	}
+	albumData, err := metadata.ProcessAlbum(filepath.Dir(absPath))
+	if err != nil {
+		return fmt.Errorf("reading album for %q: %w", filepath.Base(path), err)
+	}
+	track := albumData.TrackByPath(absPath)
+	if track == nil {
+		return fmt.Errorf("%q was not found in its album directory", filepath.Base(path))
+	}
+	trackName := planner.TrackName(track, planner.NewNumbering(albumData.Tracks))
+
 	// Sanitize the text fields that feed into directory and file names
-	// so that what's shown is exactly what rename would use.
-	cleanTitle := sanitize.PathComponentResult(title, sanitize.TrackOverride, sanitize.FilenameLimit)
+	// so that what's shown is exactly what rename would use. The title
+	// comes from the track's planned filename.
+	cleanTitle := trackName.Title
 	cleanArtist := sanitize.PathComponentResult(artist, sanitize.ArtistOverride, sanitize.ArtistLimit)
 	cleanAlbumArtist := sanitize.PathComponentResult(albumArtist, sanitize.ArtistOverride, sanitize.ArtistLimit)
 	cleanAlbum := sanitize.PathComponentResult(album, sanitize.AlbumOverride, sanitize.AlbumLimit)
@@ -151,6 +171,7 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	inspectPrintField(out, "Year", yearDisplay)
 	inspectPrintField(out, "Track", inspectDash(trackNum))
 	inspectPrintField(out, "Disc", inspectDash(discNum))
+	inspectPrintField(out, "Filename", trackName.FileName)
 	fmt.Fprintln(out)
 
 	if ext == ".flac" {
