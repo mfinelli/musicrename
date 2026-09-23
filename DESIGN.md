@@ -121,7 +121,9 @@ Length limits are:
 Filename limits are reduced when necessary for files in `artwork/`, `scans/`, or
 `extras/` so that checksum paths remain within the intended path-length bound.
 
-Truncation is a hard character limit rather than a word-boundary operation.
+Truncation is a hard character limit rather than a word-boundary operation. If
+the cut exposes trailing spaces, they are trimmed, so a truncated name may be
+shorter than its limit but never ends in a space.
 
 ### 2.4 Track Names
 

@@ -201,8 +201,35 @@ func TestTruncate(t *testing.T) {
 		{
 			name:     "Truncate long string",
 			input:    "this is a very long string that needs cutting",
+			limit:    11,
+			expected: "this is a v",
+		},
+		{
+			// The cut lands right after a space; the exposed trailing
+			// space must not survive into a directory or file name.
+			name:     "Trailing space exposed by cut is trimmed",
+			input:    "this is a very long string that needs cutting",
 			limit:    10,
-			expected: "this is a ",
+			expected: "this is a",
+		},
+		{
+			// Real-world regression: a 40-character filename limit
+			// cut "united state of pop 2021 strawberry ice cream"
+			// immediately after "ice ", producing a directory and
+			// filename ending in a space.
+			name:     "Trailing space trimmed at 40-character filename limit",
+			input:    "united state of pop 2021 strawberry ice cream",
+			limit:    40,
+			expected: "united state of pop 2021 strawberry ice",
+		},
+		{
+			// Input already within the limit is returned untouched,
+			// even though CleanString output never has trailing
+			// spaces in practice.
+			name:     "Trailing space kept when no truncation happens",
+			input:    "short ",
+			limit:    10,
+			expected: "short ",
 		},
 		{
 			name:     "Truncate to zero",
@@ -284,6 +311,16 @@ func TestTruncateWithOffset(t *testing.T) {
 			dirName:  "scans",
 			maxLimit: 40,
 			expected: "this is a filename that is exactly",
+		},
+		{
+			// extras = 6 chars; effective limit = 40 - 6 - 1 = 33.
+			// The cut lands right after "from ", whose trailing space
+			// must be trimmed.
+			name:     "Trailing space trimmed with offset",
+			input:    "interview with the band from the tour book",
+			dirName:  "extras",
+			maxLimit: 40,
+			expected: "interview with the band from the",
 		},
 	}
 

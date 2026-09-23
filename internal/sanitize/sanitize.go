@@ -151,6 +151,10 @@ func CleanStringResult(input string, kind OverrideType) Result {
 // Operates on runes rather than bytes to correctly handle multi-byte
 // characters such as those produced by manual overrides.
 // A limit of zero or less returns an empty string.
+//
+// When the cut lands on or just after a word boundary, any trailing spaces
+// exposed by the cut are trimmed, so the result may be shorter than limit
+// but never ends in a space.
 func Truncate(name string, limit int) string {
 	if limit <= 0 {
 		return ""
@@ -159,7 +163,7 @@ func Truncate(name string, limit int) string {
 	if len(runes) <= limit {
 		return name
 	}
-	return string(runes[:limit])
+	return strings.TrimRight(string(runes[:limit]), " ")
 }
 
 // TruncateWithOffset calculates a dynamic truncation limit based on the rune
