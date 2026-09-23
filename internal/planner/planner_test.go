@@ -633,7 +633,114 @@ func TestPlanLibrary_TitleFallback(t *testing.T) {
 
 		op := findMove(&plan.Albums[0], "/src/03 original filename.flac")
 		require.NotNil(t, op)
-		assert.True(t, strings.HasSuffix(op.NewPath, "03 03 original filename.flac"))
+		// The stem's "03 " prefix is not repeated.
+		assert.True(t, strings.HasSuffix(op.NewPath, "/03 original filename.flac"))
+	})
+
+	t.Run("stem without a number prefix is used whole", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/Original Filename.flac", Album: "Album", Year: "2000", TrackNumber: new(3)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/Original Filename.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "03 original filename.flac", filepath.Base(op.NewPath))
+	})
+
+	t.Run("a different track number in the stem is kept", func(t *testing.T) {
+		// Only this track's prefix is stripped; anything else in the
+		// stem is treated as part of the title.
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/07 original.flac", Album: "Album", Year: "2000", TrackNumber: new(3)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/07 original.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "03 07 original.flac", filepath.Base(op.NewPath))
+	})
+
+	t.Run("multi-disc prefix in the stem is stripped", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/1-03 original.flac", Album: "Album", Year: "2000", TrackNumber: new(3), DiscNumber: 1},
+			{Path: "/src/2-01 other.flac", Title: "Other", Album: "Album", Year: "2000", TrackNumber: new(1), DiscNumber: 2},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/1-03 original.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "1-03 original.flac", filepath.Base(op.NewPath))
+	})
+
+	t.Run("title that sanitizes to nothing falls back to the stem", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/Some Song.flac", Title: "!!!", Album: "Album", Year: "2000", TrackNumber: new(3)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/Some Song.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "03 some song.flac", filepath.Base(op.NewPath))
+		assert.Contains(t, strings.Join(plan.Albums[0].Warnings, "\n"), "sanitizes to an empty string")
+	})
+
+	t.Run("no usable title or stem leaves the track number only", func(t *testing.T) {
+		lib := t.TempDir()
+		album := makeAlbum("/src", "Artist", []*metadata.Track{
+			{Path: "/src/!!!.flac", Title: "???", Album: "Album", Year: "2000", TrackNumber: new(3)},
+		}, nil)
+
+		plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+		require.NoError(t, err)
+
+		op := findMove(&plan.Albums[0], "/src/!!!.flac")
+		require.NotNil(t, op)
+		assert.Equal(t, "03.flac", filepath.Base(op.NewPath))
+		assert.Contains(t, strings.Join(plan.Albums[0].Warnings, "\n"), "no usable title")
+	})
+
+	t.Run("fallback names are idempotent", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			fileName string
+			title    string
+		}{
+			{name: "missing title", fileName: "03 original filename.flac", title: ""},
+			{name: "title that sanitizes to nothing", fileName: "03 some song.flac", title: "!!!"},
+			{name: "no usable title at all", fileName: "03.flac", title: "???"},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				lib := t.TempDir()
+				// Place the track exactly where a previous rename put it.
+				albumDir := filepath.Join(lib, "a", "artist", "[2000] album")
+				trackPath := filepath.Join(albumDir, test.fileName)
+				album := makeAlbum(albumDir, "Artist", []*metadata.Track{
+					{Path: trackPath, Title: test.title, Album: "Album", Year: "2000", TrackNumber: new(3)},
+				}, nil)
+
+				plan, err := New(lib).PlanLibrary([]*metadata.Album{album})
+				require.NoError(t, err)
+
+				op := findMove(&plan.Albums[0], trackPath)
+				require.NotNil(t, op)
+				assert.True(t, op.IsNoOp, "expected no-op, planned %s", op.NewPath)
+			})
+		}
 	})
 }
 
@@ -1059,7 +1166,7 @@ func TestPlanLibrary_Warnings(t *testing.T) {
 		// Filename stem should still be used to produce a valid destination.
 		op := findMove(&plan.Albums[0], "/src/03 original name.flac")
 		require.NotNil(t, op)
-		assert.True(t, strings.HasSuffix(op.NewPath, "03 03 original name.flac"))
+		assert.True(t, strings.HasSuffix(op.NewPath, "/03 original name.flac"))
 	})
 
 	t.Run("missing TRACKNUMBER tag produces a warning", func(t *testing.T) {

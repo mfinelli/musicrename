@@ -91,6 +91,9 @@ fallback or an explicit error over guessing.
 | `TRACKNUMBER`                   | Sort among other unnumbered tracks alphabetically and warn |
 | both `ARTIST` and `ALBUMARTIST` | Cannot construct a valid destination; skip with an error   |
 
+A `TITLE` that sanitizes to an empty string (for example, one made up entirely
+of punctuation) is treated the same as a missing `TITLE`.
+
 If any track in an album has `DISCNUMBER`, every track must have one. Partial
 disc-number metadata invalidates the album.
 
@@ -157,6 +160,12 @@ The sanitized title receives whatever the prefix and extension leave. For
 example, a single-disc FLAC track title may be 38 characters, a multi-disc FLAC
 track title 36, and a track on disc 10 or later 35. No assumption about disc or
 track counts is needed.
+
+When the title falls back to the filename stem, a leading copy of the track's
+own number prefix is removed from the stem first, so a file that `rename` has
+already named (`03 original.flac`) keeps its name rather than gaining another
+prefix (`03 03 original.flac`). If neither the title nor the stem yields any
+usable characters, the filename is the number prefix alone (`03.flac`).
 
 ---
 

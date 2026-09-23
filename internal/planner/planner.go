@@ -421,20 +421,6 @@ type TrackNameResult struct {
 func TrackName(track *metadata.Track, numbering Numbering) TrackNameResult {
 	var result TrackNameResult
 
-	// TITLE fallback: when the tag is absent, use the original filename
-	// stem so the file is still placed rather than dropped.
-	title := track.Title
-	if title == "" {
-		title = strings.TrimSuffix(filepath.Base(track.Path), filepath.Ext(track.Path))
-		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("missing TITLE tag for %s (using filename stem)", track.Path))
-	}
-
-	if track.TrackNumber == nil {
-		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("missing TRACKNUMBER tag for %s", track.Path))
-	}
-
 	// Always lowercase the extension for filesystem consistency.
 	ext := strings.ToLower(filepath.Ext(track.Path))
 	prefix := numbering.Prefix(track)
@@ -442,9 +428,65 @@ func TrackName(track *metadata.Track, numbering Numbering) TrackNameResult {
 	// The title gets whatever the prefix and extension leave of the
 	// sums.md5 path budget, so every sums.md5 line for a track stays
 	// within 80 characters.
-	result.Title = sanitize.PathComponentResult(title, sanitize.TrackOverride, sanitize.TrackTitleLimit(prefix, ext))
+	limit := sanitize.TrackTitleLimit(prefix, ext)
+
+	// TITLE fallback: when the tag is absent, or present but made up
+	// entirely of characters the sanitizer strips (e.g. "!!!"), use the
+	// original filename stem so the file still gets a meaningful name.
+	if track.Title == "" {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("missing TITLE tag for %s (using filename stem)", track.Path))
+		result.Title = stemTitle(track.Path, prefix, limit)
+	} else {
+		result.Title = sanitize.PathComponentResult(track.Title, sanitize.TrackOverride, limit)
+		if result.Title.Value == "" {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("TITLE tag %q for %s sanitizes to an empty string (using filename stem)",
+					track.Title, track.Path))
+			result.Title = stemTitle(track.Path, prefix, limit)
+		}
+	}
+
+	if track.TrackNumber == nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("missing TRACKNUMBER tag for %s", track.Path))
+	}
+
+	// With no usable title from either source, the filename is just the
+	// number prefix, without its separator: "03.flac", never "03 .flac".
+	if result.Title.Value == "" {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("no usable title for %s; filename has the track number only", track.Path))
+		result.FileName = strings.TrimSpace(prefix) + ext
+		return result
+	}
+
 	result.FileName = prefix + result.Title.Value + ext
 	return result
+}
+
+// stemTitle derives a title from the track's current filename stem for the
+// TITLE fallback, truncated to limit.
+//
+// If the sanitized stem begins with the track's number prefix (as it will
+// once rename has already named the file), that prefix is removed first.
+// Without this, every rename of a track with no usable TITLE would prepend
+// another copy of its number ("03 foo" -> "03 03 foo" -> ...), breaking
+// idempotency. A stem consisting of nothing but the prefix (a file
+// previously named "03.flac") yields an empty title. The comparison is made
+// in sanitized form because sanitization strips the "-" from a disc
+// prefix ("1-03 " sanitizes to "103").
+func stemTitle(path, prefix string, limit int) sanitize.Result {
+	stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	clean := sanitize.CleanString(stem, sanitize.TrackOverride)
+	cleanPrefix := sanitize.CleanString(prefix, sanitize.TrackOverride)
+
+	if clean == cleanPrefix {
+		return sanitize.Result{}
+	}
+	clean = strings.TrimPrefix(clean, cleanPrefix+" ")
+
+	return sanitize.PathComponentResult(clean, sanitize.TrackOverride, limit)
 }
 
 // createMoveOp registers newPath in globalDests and returns a MoveOperation

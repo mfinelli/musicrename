@@ -514,9 +514,11 @@ unless *--yes* is passed (this cannot be undone).
 
 *Missing tags*
 	A missing *YEAR* omits the year prefix from the album folder. A missing
-	*TITLE* falls back to the original filename stem. A missing *TRACKNUMBER*
-	sorts the file alphabetically among its untracked peers. Missing both
-	*ARTIST* and *ALBUMARTIST* is a fatal error for that album.
+	*TITLE*, or one that sanitizes to nothing, falls back to the original
+	filename stem; if that is empty too, the file is named with its track
+	number only (*03.flac*). A missing *TRACKNUMBER* sorts the file
+	alphabetically among its untracked peers. Missing both *ARTIST* and
+	*ALBUMARTIST* is a fatal error for that album.
 
 # PLAYLISTS
 

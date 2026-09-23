@@ -140,6 +140,10 @@ mrr inspect "01 back in black.flac"
   tag, all tracks must have one or the album is skipped with an error.
 - **Track numbers:** zero-padded to two digits; switches to three digits if any
   track on the album exceeds 99. A value of `0` is valid (pre-gap track).
+- **Titles:** a missing `TITLE`, or one that sanitizes to nothing, falls back to
+  the original filename stem (without a leading copy of the track's number, so
+  re-running `rename` doesn't keep adding one). If that's empty too, the file is
+  named with its track number only (`03.flac`).
 - **Sort bucketing:** if the `ALBUMARTISTSORT` tag is present, its first
   character determines the directory bucket (`b/` for "Beatles, The") while the
   folder name still comes from `ALBUMARTIST` ("the beatles").
