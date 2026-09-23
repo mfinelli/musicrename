@@ -4,6 +4,23 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## v4.3.0 — 2026-09-23
+
+- Truncated names no longer end in a space. A cut that landed on a word boundary
+  could leave a trailing space on a directory or before a file's extension (e.g.
+  `video add` with a long title); `check`/`video check` now flag any existing
+  paths like this and `rename`/`video rename` fix them.
+- Track filenames are now capped at 46 characters so every `sums.md5` line stays
+  within 80 columns. The title gets whatever the track number prefix and
+  extension leave (38 for a single-disc FLAC, 36 multi-disc, 35 from disc 10),
+  so `rename` will shorten some existing long titles.
+- `inspect` shows the title exactly as `rename` would write it (it previously
+  ignored the length limit) and adds a `Filename` line with the full name.
+- A missing `TITLE` no longer adds another copy of the track number on every
+  `rename` (`03 03 original.flac`). A `TITLE` that sanitizes to nothing now
+  falls back to the filename stem too, and if neither yields a title the file is
+  named with its track number only (`03.flac`).
+
 ## v4.2.1 — 2026-09-07
 
 - Add shell completion for file extensions, target names, and playlist arguments
