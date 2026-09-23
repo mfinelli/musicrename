@@ -285,7 +285,7 @@ offsets and timestamp precision.
 
 ---
 
-# 7. Music Videos
+## 7. Music Videos
 
 Music videos are maintained separately from the audio library.
 
@@ -375,7 +375,7 @@ from source-content changes.
 
 ---
 
-# 8. Device Synchronization
+## 8. Device Synchronization
 
 Device synchronization copies a curated subset of the library to removable
 storage.
@@ -519,7 +519,7 @@ persistent database.
 
 ---
 
-# 9. Playlists
+## 9. Playlists
 
 There are two distinct playlist concepts.
 
@@ -606,7 +606,7 @@ Playlist operations update `playlists/sums.md5` when it already exists.
 
 ---
 
-# 10. Navidrome Synchronization
+## 10. Navidrome Synchronization
 
 Navidrome synchronization concerns playlists only. Audio files remain in the
 shared library and are not copied by `musicrename`.
@@ -680,7 +680,7 @@ Server errors are never interpreted as confirmation that a playlist is absent.
 
 ---
 
-# 11. Architectural Principles
+## 11. Architectural Principles
 
 Several principles govern the design:
 

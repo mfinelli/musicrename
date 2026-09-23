@@ -155,6 +155,7 @@ by one path per line (relative to the directory containing the library root):
 #PLAYLIST:Road Trip
 #NAVIDROME-ID:abc-123
 #TARGETS:ipod,sdcard
+#SORT:artist,album,track
 main/b/beyonce/[2003] dangerously in love/01 crazy in love.flac
 christmas/m/mariah carey/[1994] merry christmas/01 all i want for christmas is you.flac
 ```
@@ -164,6 +165,7 @@ christmas/m/mariah carey/[1994] merry christmas/01 all i want for christmas is y
 | `#PLAYLIST:name`   | Display name, independent of the sanitized filename           |
 | `#NAVIDROME-ID:id` | Correlated Navidrome playlist ID; absent if never pushed      |
 | `#TARGETS:...`     | Which sync targets this applies to; absent means every target |
+| `#SORT:...`        | Last sort criteria (or `shuffle`), reapplied by a bare `sort` |
 
 ### Device Sync Workflow
 
