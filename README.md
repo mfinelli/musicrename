@@ -77,6 +77,12 @@ Reads metadata tags and moves files into the normalized hierarchy. Unknown files
 (those that don't match any recognized category) are left in place and reported
 as warnings. Collisions or overwrite conflicts abort the run immediately.
 
+`rename` updates `sums.md5` and album `{target}.m3u8` manifests, but not
+library-wide playlists. If a rename moves tracks that are already in a playlist,
+run `mrr sync navidrome pull` next (Navidrome tracks the moves and the pull
+writes the new paths back), then `mrr playlist check`, and only then any device
+sync.
+
 ```sh
 mrr rename --dry-run ~/music
 ```

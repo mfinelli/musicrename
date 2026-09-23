@@ -96,6 +96,13 @@ Collision detection runs before any files are moved. If two source files
 resolve to the same destination path, or if any destination path already exists
 on the filesystem, the entire run is aborted and all conflicts are reported.
 
+*sums.md5* entries and album *{target}.m3u8* manifests are updated for renamed
+files; library-wide playlists under *playlists/* are not. If a rename moves
+tracks that a playlist already references, run *mrr sync navidrome pull* next
+(Navidrome tracks the moves and the pull writes the new paths back), then *mrr
+playlist check*, and only then any *mrr sync ipod*/*sdcard*. See *NAVIDROME
+SYNC* below.
+
 *--dry-run*
 	Preview all planned moves without touching the filesystem.
 

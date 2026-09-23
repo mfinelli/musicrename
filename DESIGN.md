@@ -172,6 +172,11 @@ When a file is renamed, existing checksum and album-selection references are
 updated as appropriate without unnecessarily changing the file's recorded
 content hash.
 
+Global playlists are intentionally **not** updated by `rename`. Renaming is
+primarily an ingestion-time operation, when the files being moved cannot yet
+appear in any global playlist. When a rename does move tracks that playlists
+already reference, the playlists are reconciled through Navidrome instead.
+
 After successful moves, empty source directories are removed on a best-effort
 basis.
 
@@ -670,6 +675,9 @@ There is no persistent synchronization database.
 This is appropriate for a single-user workflow but is not intended to provide
 concurrent multi-writer conflict resolution.
 
+Local playlist edits are only ever made after a pull, and a push is never made
+without pulling first.
+
 ### 10.5 Deletion
 
 Deletion is intentionally conservative.
@@ -684,6 +692,29 @@ Explicit deletion through `musicrename sync navidrome delete` is the mechanism
 for intentionally deleting a playlist both locally and remotely.
 
 Server errors are never interpreted as confirmation that a playlist is absent.
+
+### 10.6 Library Renames
+
+When `rename` moves tracks that global playlists already reference, the local
+playlist entries are left pointing at the old paths. Navidrome is responsible
+for reconciling them: its scanner recognizes moved files by their tags, which
+`rename` doesn't change, so the remote playlists continue to reference the
+correct tracks. The next pull, which scans first, writes the new paths back into
+the local playlists.
+
+The expected sequence after such a rename is therefore:
+
+1. `rename`
+2. `sync navidrome pull`
+3. `playlist check`
+4. any device synchronization
+
+Device synchronization must not run between the rename and the pull. Global
+playlists contribute to device selection, so stale entries would temporarily
+deselect those tracks and remove them from the device until the next sync.
+
+Playlists that have never been pushed to Navidrome are not reconciled this way;
+`playlist check` reports their broken entries.
 
 ---
 
