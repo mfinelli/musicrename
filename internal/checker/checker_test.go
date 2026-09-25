@@ -307,6 +307,56 @@ func TestCheckAlbumTags_EmptyAlbum(t *testing.T) {
 	})
 }
 
+func TestCheckAlbumMusicBrainzID(t *testing.T) {
+	t.Run("no tracks at all produces no warning", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumMusicBrainzID(nil, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("a single track produces no warning (nothing to compare)", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumMusicBrainzID([]string{"d1d196ec-bb2b-4636-81a0-b8f5c5774514"}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("the whole album missing the tag is not a finding", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumMusicBrainzID([]string{"", "", ""}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("every track agreeing produces no warning", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		id := "d1d196ec-bb2b-4636-81a0-b8f5c5774514"
+		checkAlbumMusicBrainzID([]string{id, id, id}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("two different non-empty values produces a warning", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumMusicBrainzID([]string{
+			"d1d196ec-bb2b-4636-81a0-b8f5c5774514",
+			"00000000-0000-0000-0000-000000000000",
+		}, ar)
+		w := findWarning(ar, "MUSICBRAINZ_ALBUMID")
+		require.NotNil(t, w)
+		assert.Equal(t, "/a", w.Path)
+	})
+
+	t.Run("some tracks tagged and others missing the tag produces a warning", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumMusicBrainzID([]string{"d1d196ec-bb2b-4636-81a0-b8f5c5774514", ""}, ar)
+		assert.NotNil(t, findWarning(ar, "MUSICBRAINZ_ALBUMID"))
+	})
+
+	t.Run("only one warning even with several tracks disagreeing", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumMusicBrainzID([]string{"a", "b", "c", "d"}, ar)
+		assert.Len(t, ar.Warnings, 1)
+	})
+}
+
 func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 	t.Run("missing REPLAYGAIN_TRACK_GAIN produces warning", func(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
@@ -349,6 +399,35 @@ func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 	})
 }
 
+func TestCheckTrackAudio_MusicBrainzAlbumID(t *testing.T) {
+	t.Run("returns the tag's value when present", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":                 "Track",
+			"ARTIST":                "Artist",
+			"MUSICBRAINZ_ALBUMID":   "d1d196ec-bb2b-4636-81a0-b8f5c5774514",
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+		})
+		track := &metadata.Track{Path: path}
+		ar := &AlbumResult{}
+		mbid := checkTrackAudio(track, ar)
+		assert.Equal(t, "d1d196ec-bb2b-4636-81a0-b8f5c5774514", mbid)
+	})
+
+	t.Run("returns an empty string when the tag is absent", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":                 "Track",
+			"ARTIST":                "Artist",
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			// Intentionally no MUSICBRAINZ_ALBUMID.
+		})
+		track := &metadata.Track{Path: path}
+		ar := &AlbumResult{}
+		assert.Empty(t, checkTrackAudio(track, ar))
+	})
+}
+
 func TestCheckTrackAudio_EmbeddedArtwork(t *testing.T) {
 	t.Run("embedded artwork produces warning", func(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
@@ -381,8 +460,9 @@ func TestCheckTrackAudio_UnreadableFile(t *testing.T) {
 		// must not add a duplicate warning.
 		track := &metadata.Track{Path: "/nonexistent/track.flac"}
 		ar := &AlbumResult{}
-		checkTrackAudio(track, ar)
+		mbid := checkTrackAudio(track, ar)
 		assert.Empty(t, ar.Warnings)
+		assert.Empty(t, mbid)
 	})
 }
 
@@ -734,6 +814,22 @@ func TestCheckAlbum(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, findWarning(ar, "filename does not match spec"))
 		assert.Nil(t, findWarning(ar, "album directory does not match spec"))
+	})
+
+	t.Run("mismatched MUSICBRAINZ_ALBUMID across real tracks surfaces end to end", func(t *testing.T) {
+		dir := t.TempDir()
+		testutil.MakeAudioFile(t, dir, "01 track.flac", map[string]string{
+			"TITLE": "Track 1", "ARTIST": "Artist", "TRACKNUMBER": "1", "DATE": "2000",
+			"MUSICBRAINZ_ALBUMID": "d1d196ec-bb2b-4636-81a0-b8f5c5774514",
+		})
+		testutil.MakeAudioFile(t, dir, "02 track.flac", map[string]string{
+			"TITLE": "Track 2", "ARTIST": "Artist", "TRACKNUMBER": "2", "DATE": "2000",
+			"MUSICBRAINZ_ALBUMID": "00000000-0000-0000-0000-000000000000",
+		})
+
+		ar, err := CheckAlbum(dir, "")
+		require.NoError(t, err)
+		assert.NotNil(t, findWarning(ar, "MUSICBRAINZ_ALBUMID"))
 	})
 }
 
