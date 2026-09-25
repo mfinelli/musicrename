@@ -29,6 +29,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.senan.xyz/taglib"
 
+	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/musicbrainz"
 )
@@ -44,15 +45,20 @@ against the snapshot recorded the last time diff ran for this album
 
 If album-path is omitted it defaults to the current working directory.
 Either way it must be a single album directory (one directly containing
-audio files). A library root or an artist directory is rejected because the 
-MusicBrainz project specifically asks not to run this kind of check across an 
+audio files). A library root or an artist directory is rejected because the
+MusicBrainz project specifically asks not to run this kind of check across an
 entire library.
 
 With no prior snapshot, the current data is recorded as the baseline and
 nothing is reported (because there is nothing to compare it against yet).
 
 --dry-run shows the same comparison without updating the snapshot, so a
-later run (dry or not) reports the identical diff again.`,
+later run (dry or not) reports the identical diff again.
+
+If the album already has a sums.md5, it is updated to match (added or
+updated, whichever applies) whenever the snapshot is actually written. Pass
+--skip-md5 to leave sums.md5 untouched entirely; --dry-run implies it, since
+nothing is written for sums.md5 to track in the first place.`,
 	Args: cobra.MaximumNArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		// album-path is always a directory
@@ -63,11 +69,13 @@ later run (dry or not) reports the identical diff again.`,
 
 func init() {
 	musicbrainzDiffCmd.Flags().Bool("dry-run", false, "Show the diff without recording a new snapshot")
+	musicbrainzDiffCmd.Flags().Bool("skip-md5", false, "Do not update sums.md5 even if it exists")
 	musicbrainzCmd.AddCommand(musicbrainzDiffCmd)
 }
 
 func runMusicbrainzDiff(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	skipMD5, _ := cmd.Flags().GetBool("skip-md5")
 
 	path := "."
 	if len(args) > 0 {
@@ -112,6 +120,16 @@ func runMusicbrainzDiff(cmd *cobra.Command, args []string) error {
 	result, err := musicbrainz.Check(context.Background(), mbid, absPath, dryRun)
 	if err != nil {
 		return fmt.Errorf("checking musicbrainz: %w", err)
+	}
+
+	// dryRun already means nothing was written for sums.md5 to track, so
+	// there's nothing to update in that case regardless of skipMD5.
+	if !dryRun && !skipMD5 {
+		if _, err := os.Stat(filepath.Join(absPath, hasher.SumsFilename)); err == nil {
+			if err := hasher.UpdateFile(absPath, musicbrainz.MetadataFilename); err != nil {
+				return fmt.Errorf("updating %s: %w", hasher.SumsFilename, err)
+			}
+		}
 	}
 
 	printMusicbrainzDiffResult(out, result, dryRun)

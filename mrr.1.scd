@@ -806,6 +806,8 @@ to be run across a whole library.
 *--dry-run*
 	Report the comparison without updating the snapshot, so a later run
 	(dry or not) reports the identical diff again.
+*--skip-md5*
+	Do not update *sums.md5* even if it exists.
 
 # SEE ALSO
 
