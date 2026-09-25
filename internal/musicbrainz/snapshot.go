@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // MetadataFilename is the name of the per-album snapshot file this
@@ -120,8 +121,108 @@ func Diff(old, current *Release) []string {
 	report("packaging", old.Packaging, current.Packaging)
 
 	changes = append(changes, diffArtistCredits("artist", old.ArtistCredit, current.ArtistCredit)...)
+	changes = append(changes, diffGenres("release", old.Genres, current.Genres)...)
+	changes = append(changes, diffReleaseGroup(old.ReleaseGroup, current.ReleaseGroup)...)
+	changes = append(changes, diffLabelInfo(old.LabelInfo, current.LabelInfo)...)
 	changes = append(changes, diffMedia(old.Media, current.Media)...)
 
+	return changes
+}
+
+// diffReleaseGroup compares two ReleaseGroup values.
+func diffReleaseGroup(old, current ReleaseGroup) []string {
+	var changes []string
+	report := func(field, oldVal, newVal string) {
+		if oldVal != newVal {
+			changes = append(changes, fmt.Sprintf("release group %s: %q → %q", field, oldVal, newVal))
+		}
+	}
+
+	report("title", old.Title, current.Title)
+	report("disambiguation", old.Disambiguation, current.Disambiguation)
+	report("first release date", old.FirstReleaseDate, current.FirstReleaseDate)
+	report("primary type", old.PrimaryType, current.PrimaryType)
+	report("secondary types", strings.Join(old.SecondaryTypes, ", "), strings.Join(current.SecondaryTypes, ", "))
+
+	changes = append(changes, diffArtistCredits("release group artist", old.ArtistCredit, current.ArtistCredit)...)
+	changes = append(changes, diffGenres("release group", old.Genres, current.Genres)...)
+	return changes
+}
+
+// diffLabelInfo compares two LabelInfo lists positionally, plus reports a
+// changed count if the lists differ in length.
+func diffLabelInfo(old, current []LabelInfo) []string {
+	var changes []string
+	if len(old) != len(current) {
+		changes = append(changes, fmt.Sprintf("label count: %d → %d", len(old), len(current)))
+	}
+	for i := 0; i < len(old) && i < len(current); i++ {
+		o, c := old[i], current[i]
+		prefix := fmt.Sprintf("label %d", i+1)
+		if o.CatalogNumber != c.CatalogNumber {
+			changes = append(changes, fmt.Sprintf("%s catalog number: %q → %q", prefix, o.CatalogNumber, c.CatalogNumber))
+		}
+		if o.Label.ID != c.Label.ID {
+			changes = append(changes, fmt.Sprintf("%s id: %q → %q", prefix, o.Label.ID, c.Label.ID))
+		}
+		if o.Label.Name != c.Label.Name {
+			changes = append(changes, fmt.Sprintf("%s name: %q → %q", prefix, o.Label.Name, c.Label.Name))
+		}
+		if o.Label.SortName != c.Label.SortName {
+			changes = append(changes, fmt.Sprintf("%s sort name: %q → %q", prefix, o.Label.SortName, c.Label.SortName))
+		}
+		if o.Label.Disambiguation != c.Label.Disambiguation {
+			changes = append(changes, fmt.Sprintf("%s disambiguation: %q → %q", prefix, o.Label.Disambiguation, c.Label.Disambiguation))
+		}
+		if o.Label.Type != c.Label.Type {
+			changes = append(changes, fmt.Sprintf("%s type: %q → %q", prefix, o.Label.Type, c.Label.Type))
+		}
+	}
+	return changes
+}
+
+// diffGenres compares two genre lists as sets by name rather than
+// positionally: unlike an artist-credit or track list, a genre list is
+// community vote data that can reorder or have its vote counts shift
+// without anything meaningful actually changing, so only genres added or
+// removed are reported. A vote-count change on an already-present genre
+// is never reported.
+func diffGenres(label string, old, current []Genre) []string {
+	oldNames := make(map[string]bool, len(old))
+	for _, g := range old {
+		oldNames[g.Name] = true
+	}
+	currentNames := make(map[string]bool, len(current))
+	for _, g := range current {
+		currentNames[g.Name] = true
+	}
+
+	var changes []string
+	for _, g := range current {
+		if !oldNames[g.Name] {
+			changes = append(changes, fmt.Sprintf("%s genre tag added: %q", label, g.Name))
+		}
+	}
+	for _, g := range old {
+		if !currentNames[g.Name] {
+			changes = append(changes, fmt.Sprintf("%s genre tag removed: %q", label, g.Name))
+		}
+	}
+	return changes
+}
+
+// diffISRCs compares two ISRC lists positionally, plus reports a changed
+// count if the lists differ in length.
+func diffISRCs(label string, old, current []string) []string {
+	var changes []string
+	if len(old) != len(current) {
+		changes = append(changes, fmt.Sprintf("%s ISRC count: %d → %d", label, len(old), len(current)))
+	}
+	for i := 0; i < len(old) && i < len(current); i++ {
+		if old[i] != current[i] {
+			changes = append(changes, fmt.Sprintf("%s ISRC %d: %q → %q", label, i+1, old[i], current[i]))
+		}
+	}
 	return changes
 }
 
@@ -160,6 +261,7 @@ func diffArtistCredits(label string, old, current []ArtistCredit) []string {
 		if o.Artist.Country != c.Artist.Country {
 			changes = append(changes, fmt.Sprintf("%s artist country: %q → %q", prefix, o.Artist.Country, c.Artist.Country))
 		}
+		changes = append(changes, diffGenres(prefix+" artist", o.Artist.Genres, c.Artist.Genres)...)
 	}
 	return changes
 }
@@ -240,6 +342,8 @@ func diffMedia(old, current []Medium) []string {
 			}
 			changes = append(changes, diffArtistCredits(rlabel+" artist", or.ArtistCredit, cr.ArtistCredit)...)
 			changes = append(changes, diffComposers(rlabel, or.Composers(), cr.Composers())...)
+			changes = append(changes, diffISRCs(rlabel, or.ISRCs, cr.ISRCs)...)
+			changes = append(changes, diffGenres(rlabel, or.Genres, cr.Genres)...)
 		}
 	}
 	return changes

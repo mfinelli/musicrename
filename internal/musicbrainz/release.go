@@ -42,6 +42,56 @@ type Release struct {
 	Packaging      string         `json:"packaging"`
 	ArtistCredit   []ArtistCredit `json:"artist-credit"`
 	Media          []Medium       `json:"media"`
+	ReleaseGroup   ReleaseGroup   `json:"release-group"`
+	LabelInfo      []LabelInfo    `json:"label-info"`
+	Genres         []Genre        `json:"genres"`
+}
+
+// ReleaseGroup is the abstract "album" concept a Release is one specific
+// edition of e.g., "Back in Black" the release group, as distinct from a
+// particular 2003 US CD reissue of it (the Release). Corresponds to the
+// MUSICBRAINZ_RELEASEGROUPID tag.
+type ReleaseGroup struct {
+	ID               string         `json:"id"`
+	Title            string         `json:"title"`
+	Disambiguation   string         `json:"disambiguation"`
+	FirstReleaseDate string         `json:"first-release-date"`
+	PrimaryType      string         `json:"primary-type"` // e.g. "Album", "EP", "Single"
+	SecondaryTypes   []string       `json:"secondary-types"`
+	ArtistCredit     []ArtistCredit `json:"artist-credit"`
+	Genres           []Genre        `json:"genres"`
+}
+
+// LabelInfo is one release-to-label association, corresponding to the
+// LABEL and CATALOGNUMBER tags. A release can be issued by more than one
+// label at once, hence the slice on Release rather than a single value.
+type LabelInfo struct {
+	CatalogNumber string `json:"catalog-number"`
+	Label         Label  `json:"label"`
+}
+
+// Label is the subset of a MusicBrainz label entity embedded in a
+// LabelInfo.
+type Label struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	SortName       string `json:"sort-name"`
+	Disambiguation string `json:"disambiguation"`
+	Type           string `json:"type"` // e.g. "Imprint", "Original Production"
+}
+
+// Genre is one community-voted genre tag, on a Release, ReleaseGroup,
+// Recording, or Artist. Unlike this package's other fields, a genre list
+// isn't editorial data with one correct answer: it's a folksonomy tally
+// (Count is how many users applied it) that can reorder or have its
+// counts shift as people tag and un-tag things, without anything having
+// actually been corrected. Diff treats a genre list accordingly, as a set
+// of names rather than a positional list, and never reports on Count.
+type Genre struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Disambiguation string `json:"disambiguation"`
+	Count          int    `json:"count"`
 }
 
 // ArtistCredit is one entry in a release's, a track's, or a recording's
@@ -59,12 +109,13 @@ type ArtistCredit struct {
 // Artist is the subset of a MusicBrainz artist entity embedded in an
 // ArtistCredit.
 type Artist struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	SortName       string `json:"sort-name"`
-	Disambiguation string `json:"disambiguation"`
-	Type           string `json:"type"` // e.g. "Group", "Person"
-	Country        string `json:"country"`
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	SortName       string  `json:"sort-name"`
+	Disambiguation string  `json:"disambiguation"`
+	Type           string  `json:"type"` // e.g. "Group", "Person"
+	Country        string  `json:"country"`
+	Genres         []Genre `json:"genres"`
 }
 
 // Medium is one disc/side of a release (MusicBrainz's term for a single
@@ -107,6 +158,8 @@ type Recording struct {
 	FirstReleaseDate string              `json:"first-release-date"`
 	ArtistCredit     []ArtistCredit      `json:"artist-credit"`
 	Relations        []RecordingRelation `json:"relations"`
+	ISRCs            []string            `json:"isrcs"`
+	Genres           []Genre             `json:"genres"`
 }
 
 // RecordingRelation is one entry in a Recording's relations list, which

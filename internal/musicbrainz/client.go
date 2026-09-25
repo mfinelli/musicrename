@@ -69,9 +69,9 @@ func newClient() *client {
 }
 
 // getRelease fetches the release identified by mbid, including its
-// recordings (the track listing), artist credits, and each recording's
-// relationships (which is how writer/composer credit surfaces), in a single
-// request.
+// recordings (the track listing), artist credits, each recording's
+// relationships (which is how writer/composer credit surfaces), release
+// group, labels, ISRCs, and genre tags, in a single request.
 //
 // recording-level-rels/work-rels/work-level-rels/artist-rels is the
 // documented combination for pulling a release's nested recordings'
@@ -85,7 +85,8 @@ func (c *client) getRelease(ctx context.Context, mbid string) (*Release, error) 
 	}
 
 	params := url.Values{}
-	params.Set("inc", "recordings+artist-credits+recording-level-rels+work-rels+work-level-rels+artist-rels")
+	params.Set("inc", "recordings+artist-credits+recording-level-rels+work-rels+work-level-rels+"+
+		"artist-rels+release-groups+labels+isrcs+genres")
 	params.Set("fmt", "json")
 
 	req, err := http.NewRequestWithContext(
