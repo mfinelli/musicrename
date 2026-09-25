@@ -741,73 +741,54 @@ Playlists that have never been pushed to Navidrome are not reconciled this way;
 
 ## 11. MusicBrainz Drift Detection
 
-`musicrename musicbrainz diff` detects when a MusicBrainz release's metadata has
-changed since it was last looked at, so a correction made upstream (a title fix,
-a changed artist credit, a corrected composer credit) can be noticed and pulled
-in, even though the local tags may since have been hand-edited independently of
-MusicBrainz.
+`musicrename musicbrainz diff` detects changes to a MusicBrainz release since it
+was last checked, allowing upstream corrections to be noticed even when local
+tags have subsequently been edited independently.
 
 ### 11.1 Scope
 
-The command operates on exactly one album per invocation. By design it never
-walks an entire library: MusicBrainz's rate-limiting documentation explicitly
-asks API consumers not to poll for metadata changes, since the project has no
-supported mechanism for it. A single, on-demand, human-initiated lookup against
-one release matches how a person actually browses the MusicBrainz website; a
-periodic sweep across an entire library does not.
+The command operates on exactly one album per invocation and never scans the
+library. This is an explicit, on-demand check rather than a mechanism for
+polling MusicBrainz for changes.
 
-The release to check is identified by the `MUSICBRAINZ_ALBUMID` tag on the
-album's first track, selected the same way `ResolveAlbumArtist` picks a track:
-by lowest positive `TRACKNUMBER`, falling back to directory order if no track
-has one. Every track on a well-tagged album carries the same release ID, so
-reading it from one track is sufficient; cross-track mismatches are not
-currently detected.
+The release is identified by the `MUSICBRAINZ_ALBUMID` tag on the album's first
+track, selected using the same rule as `ResolveAlbumArtist`: the track with the
+lowest positive `TRACKNUMBER`, falling back to directory order. Cross-track
+release-ID mismatches are not currently detected.
 
 ### 11.2 Tracked Fields
 
-The release is fetched with its recordings (track listing), artist credits,
-release group, labels, ISRCs, and genre tags, plus each recording's
-relationships. Composer/writer credit is not a direct field: MusicBrainz models
-it as a recording's "performance" relationship to a Work (the abstract
-composition, distinct from any one recording of it), and the Work's own
-"writer"-type relationships to artists. Personnel credits (engineer, producer,
-instrument, vocal, ...) arrive in the same response but are not tracked, since
-they have no corresponding tag in this project's metadata model.
+The MusicBrainz release is fetched with its recordings, artist credits, release
+group, labels, ISRCs, genre tags, and recording relationships.
 
-Genre tags are compared differently from every other field. A MusicBrainz genre
-list is community vote data and so an entry's vote count can rise and fall, and
-the list can reorder, without any correction having actually happened. Comparing
-it positionally, the way an artist-credit or track list is compared, would
-report that churn as if it were drift. Genres are instead compared as a set of
-names: only an addition or removal is reported, and a vote-count change on an
-already-present genre is not.
+Composer/writer credits are derived from a recording's relationship to a Work
+and the Work's writer relationships to artists. Personnel credits such as
+engineers, producers, instruments, and vocals are not tracked because they have
+no corresponding field in the project's metadata model.
+
+Genres are compared as a set of names rather than positionally. Changes to vote
+counts or ordering therefore do not constitute drift; only additions and
+removals are reported.
 
 ### 11.3 Snapshot Persistence
 
-Consistent with keeping state in the files being managed rather than a separate
-database, the release data fetched on each run is persisted as
-`musicbrainz.json.gz` in the album directory, so it travels with the library
-rather than existing only on whichever machine last ran the check.
+The fetched release data is persisted as `musicbrainz.json.gz` in the album
+directory, keeping the snapshot with the library rather than in machine-local
+state.
 
 ### 11.4 Comparison Semantics
 
-The comparison is always between the previously recorded snapshot and
-MusicBrainz's current data, and not between the current local tag values and
-MusicBrainz. This is what allows tags to be hand-edited after the fact without
-those edits being mistaken for upstream drift on the next run: drift is
-specifically "MusicBrainz changed since the snapshot was taken", not "the local
-file disagrees with MusicBrainz".
+Drift is the difference between the previous MusicBrainz snapshot and the
+current MusicBrainz data, not the difference between local tags and MusicBrainz.
+Local metadata edits therefore do not appear as upstream drift.
 
-An album with no existing snapshot is a first run: the current data is simply
-recorded as the baseline, with nothing to report, since there is nothing yet to
-compare it against.
+An album without a snapshot establishes the current data as the baseline and
+reports no changes.
 
-A run that finds differences updates the snapshot to the newly fetched data, so
-a later run reports only further drift, not the same difference again.
-`--dry-run` reports the same comparison without updating the snapshot, so a
-later run against an unchanged upstream release reports the identical diff
-again; this is the mechanism for previewing what changed before deciding when to
-actually act on it.
+When differences are found, the snapshot is updated to the newly fetched data,
+so subsequent checks report only further changes. `--dry-run` performs the
+comparison without updating the snapshot, allowing the same diff to be reviewed
+again later.
 
 ---
 
