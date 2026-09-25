@@ -254,6 +254,9 @@ Checks include:
 - inconsistent album
 - partial disc-number metadata
 - duplicate track numbers
+- inconsistent MusicBrainz release ID (`MUSICBRAINZ_ALBUMID`) across tracks,
+  present on some tracks but not others, or two different non-empty values; an
+  album with the tag on none of its tracks is not itself a finding
 
 ### Audio quality
 
@@ -753,8 +756,10 @@ polling MusicBrainz for changes.
 
 The release is identified by the `MUSICBRAINZ_ALBUMID` tag on the album's first
 track, selected using the same rule as `ResolveAlbumArtist`: the track with the
-lowest positive `TRACKNUMBER`, falling back to directory order. Cross-track
-release-ID mismatches are not currently detected.
+lowest positive `TRACKNUMBER`, falling back to directory order. `check`
+separately flags a release-ID mismatch across an album's tracks. A flagged
+album's `MUSICBRAINZ_ALBUMID` should be corrected (typically by re-tagging with
+Picard) before its `diff` result can be trusted.
 
 ### 11.2 Tracked Fields
 

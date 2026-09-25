@@ -140,6 +140,9 @@ Checks include:
 - Missing *TITLE*, *TRACKNUMBER*, *DATE*, or artist tags
 - Inconsistent *ALBUMARTIST* or *ALBUM* across tracks
 - Partial *DISCNUMBER* coverage or duplicate track numbers
+- Inconsistent *MUSICBRAINZ_ALBUMID* across tracks (present on some but not
+  others, or two different non-empty values). An album with the tag on none
+  of its tracks is not itself a finding.
 - Missing *REPLAYGAIN_TRACK_GAIN* or *REPLAYGAIN_ALBUM_GAIN* tags
 - Embedded artwork inside audio files
 - Missing or duplicate primary artwork (*folder.jpg* / *folder.png* /

@@ -12,6 +12,9 @@ my own reference.
   label/catalog number, ISRCs, and genre tags), recording a snapshot
   (`musicbrainz.json.gz`) so later runs detect only new drift rather than
   comparing against a possibly hand-edited tag value.
+- `check` flags an album whose tracks disagree on `MUSICBRAINZ_ALBUMID`, since
+  `musicbrainz diff` only reads the tag from one track and trusts it for the
+  whole album.
 
 ## v4.3.0 — 2026-09-23
 
