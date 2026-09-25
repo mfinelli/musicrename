@@ -5,8 +5,9 @@
 `musicrename` is a Go CLI for maintaining a curated local music library. It
 normalizes music files into a predictable directory structure derived from
 metadata, audits the resulting library, maintains file integrity information,
-manages playlists, synchronizes selected music to removable devices, and
-synchronizes playlists with Navidrome.
+manages playlists, synchronizes selected music to removable devices,
+synchronizes playlists with Navidrome, and detects upstream MusicBrainz metadata
+drift.
 
 The library is **curator-managed rather than heuristic-driven**. Metadata and
 explicit selections are authoritative; the tool avoids trying to infer a user's
@@ -738,7 +739,79 @@ Playlists that have never been pushed to Navidrome are not reconciled this way;
 
 ---
 
-## 11. Architectural Principles
+## 11. MusicBrainz Drift Detection
+
+`musicrename musicbrainz diff` detects when a MusicBrainz release's metadata has
+changed since it was last looked at, so a correction made upstream (a title fix,
+a changed artist credit, a corrected composer credit) can be noticed and pulled
+in, even though the local tags may since have been hand-edited independently of
+MusicBrainz.
+
+### 11.1 Scope
+
+The command operates on exactly one album per invocation. By design it never
+walks an entire library: MusicBrainz's rate-limiting documentation explicitly
+asks API consumers not to poll for metadata changes, since the project has no
+supported mechanism for it. A single, on-demand, human-initiated lookup against
+one release matches how a person actually browses the MusicBrainz website; a
+periodic sweep across an entire library does not.
+
+The release to check is identified by the `MUSICBRAINZ_ALBUMID` tag on the
+album's first track, selected the same way `ResolveAlbumArtist` picks a track:
+by lowest positive `TRACKNUMBER`, falling back to directory order if no track
+has one. Every track on a well-tagged album carries the same release ID, so
+reading it from one track is sufficient; cross-track mismatches are not
+currently detected.
+
+### 11.2 Tracked Fields
+
+The release is fetched with its recordings (track listing), artist credits,
+release group, labels, ISRCs, and genre tags, plus each recording's
+relationships. Composer/writer credit is not a direct field: MusicBrainz models
+it as a recording's "performance" relationship to a Work (the abstract
+composition, distinct from any one recording of it), and the Work's own
+"writer"-type relationships to artists. Personnel credits (engineer, producer,
+instrument, vocal, ...) arrive in the same response but are not tracked, since
+they have no corresponding tag in this project's metadata model.
+
+Genre tags are compared differently from every other field. A MusicBrainz genre
+list is community vote data and so an entry's vote count can rise and fall, and
+the list can reorder, without any correction having actually happened. Comparing
+it positionally, the way an artist-credit or track list is compared, would
+report that churn as if it were drift. Genres are instead compared as a set of
+names: only an addition or removal is reported, and a vote-count change on an
+already-present genre is not.
+
+### 11.3 Snapshot Persistence
+
+Consistent with keeping state in the files being managed rather than a separate
+database, the release data fetched on each run is persisted as
+`musicbrainz.json.gz` in the album directory, so it travels with the library
+rather than existing only on whichever machine last ran the check.
+
+### 11.4 Comparison Semantics
+
+The comparison is always between the previously recorded snapshot and
+MusicBrainz's current data, and not between the current local tag values and
+MusicBrainz. This is what allows tags to be hand-edited after the fact without
+those edits being mistaken for upstream drift on the next run: drift is
+specifically "MusicBrainz changed since the snapshot was taken", not "the local
+file disagrees with MusicBrainz".
+
+An album with no existing snapshot is a first run: the current data is simply
+recorded as the baseline, with nothing to report, since there is nothing yet to
+compare it against.
+
+A run that finds differences updates the snapshot to the newly fetched data, so
+a later run reports only further drift, not the same difference again.
+`--dry-run` reports the same comparison without updating the snapshot, so a
+later run against an unchanged upstream release reports the identical diff
+again; this is the mechanism for previewing what changed before deciding when to
+actually act on it.
+
+---
+
+## 12. Architectural Principles
 
 Several principles govern the design:
 
@@ -759,9 +832,9 @@ heuristics.
 
 ### No unnecessary persistent state
 
-Where possible, state is represented by the files being managed
-themselves—`sums.md5`, source-hash sidecars, playlist directives, and Navidrome
-IDs—rather than by a separate database.
+Where possible, state is represented by the files being managed themselves
+(`sums.md5`, source-hash sidecars, playlist directives, Navidrome IDs, and
+MusicBrainz snapshots, etc.) rather than by a separate database.
 
 ### Preserve integrity information
 
