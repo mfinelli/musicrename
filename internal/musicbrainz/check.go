@@ -40,7 +40,14 @@ type CheckResult struct {
 // are the same, but nothing is written: a later run (dry or not) against
 // an unchanged upstream release reports the identical diff again.
 func Check(ctx context.Context, mbid, dir string, dryRun bool) (*CheckResult, error) {
-	current, err := newClient().getRelease(ctx, mbid)
+	return check(ctx, newClient(), mbid, dir, dryRun)
+}
+
+// check is Check's actual implementation, taking an explicit client so
+// tests can point it at a fake server rather than the real MusicBrainz
+// API.
+func check(ctx context.Context, c *client, mbid, dir string, dryRun bool) (*CheckResult, error) {
+	current, err := c.getRelease(ctx, mbid)
 	if err != nil {
 		return nil, err
 	}
