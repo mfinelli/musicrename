@@ -159,12 +159,14 @@ func CheckTrack(filePath string) (*AlbumResult, error) {
 func checkAlbum(album *metadata.Album, libraryRoot string) (*AlbumResult, error) {
 	ar := &AlbumResult{AlbumPath: album.RootPath}
 
+	mbids := make([]string, 0, len(album.Tracks))
 	for _, track := range album.Tracks {
 		checkTrackTags(track, ar)
-		checkTrackAudio(track, ar)
+		mbids = append(mbids, checkTrackAudio(track, ar))
 	}
 
 	checkAlbumTags(album, ar)
+	checkAlbumMusicBrainzID(mbids, ar)
 	checkArtwork(album, ar)
 	checkIntegrity(album, ar)
 	checkUnknownFiles(album, ar)
@@ -215,12 +217,17 @@ func checkTrackTags(track *metadata.Track, ar *AlbumResult) {
 // fields needed for path planning. Checker-specific audio attributes are
 // read here in a separate pass rather than expanding the shared data model.
 // The WASM call is read-only and inexpensive relative to the overall check run.
-func checkTrackAudio(track *metadata.Track, ar *AlbumResult) {
+//
+// mbid returns the track's MUSICBRAINZ_ALBUMID tag value ("" if absent or
+// the file couldn't be opened), for checkAlbumMusicBrainzID's cross-track
+// comparison. It's read here alongside everything else rather than as its own
+// separate pass, since the file is already open for the checks above.
+func checkTrackAudio(track *metadata.Track, ar *AlbumResult) (mbid string) {
 	file, err := taglib.OpenReadOnly(track.Path)
 	if err != nil {
 		// The primary scan phase already records a warning for unreadable
 		// files; skip silently here to avoid duplicating it.
-		return
+		return ""
 	}
 	defer file.Close()
 
@@ -237,6 +244,9 @@ func checkTrackAudio(track *metadata.Track, ar *AlbumResult) {
 				Message: "missing REPLAYGAIN_ALBUM_GAIN tag",
 			})
 		}
+		if vals := tags[taglib.MusicBrainzAlbumID]; len(vals) > 0 {
+			mbid = vals[0]
+		}
 	}
 
 	if props := file.Properties(); len(props.Images) > 0 {
@@ -245,6 +255,8 @@ func checkTrackAudio(track *metadata.Track, ar *AlbumResult) {
 			Message: fmt.Sprintf("embedded artwork detected (%d image(s))", len(props.Images)),
 		})
 	}
+
+	return mbid
 }
 
 // checkTrackFilename warns when the file's current basename does not match
@@ -370,6 +382,31 @@ func checkAlbumTags(album *metadata.Album, ar *AlbumResult) {
 			})
 		} else {
 			seen[key] = t.Path
+		}
+	}
+}
+
+// checkAlbumMusicBrainzID warns when not every track's MUSICBRAINZ_ALBUMID
+// tag agrees, mbid being the value checkTrackAudio read from each track in
+// album.Tracks order. An album with the tag on none of its tracks is not
+// itself a finding (there's nothing to disagree about); this only flags an
+// actual disagreement, whether that's two different populated values or
+// some tracks carrying the tag while others are missing it. Either way
+// musicbrainz diff's single-track read (see musicbrainzFirstTrack) would be
+// reading from a source that isn't representative of the whole album.
+func checkAlbumMusicBrainzID(mbids []string, ar *AlbumResult) {
+	if len(mbids) == 0 {
+		return
+	}
+
+	first := mbids[0]
+	for _, id := range mbids[1:] {
+		if id != first {
+			ar.Warnings = append(ar.Warnings, Warning{
+				Path:    ar.AlbumPath,
+				Message: "inconsistent MUSICBRAINZ_ALBUMID tags across tracks",
+			})
+			return
 		}
 	}
 }

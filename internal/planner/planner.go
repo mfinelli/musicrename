@@ -38,6 +38,7 @@ import (
 	"strings"
 
 	"github.com/mfinelli/musicrename/internal/metadata"
+	"github.com/mfinelli/musicrename/internal/musicbrainz"
 	"github.com/mfinelli/musicrename/internal/sanitize"
 )
 
@@ -324,8 +325,19 @@ func (p *planner) planAlbum(album *metadata.Album, globalDests map[string]string
 				newPath = filepath.Join(fullAlbumDir, "extras", truncStem+ext)
 
 			case metadata.CatRootText:
-				truncStem := sanitize.PathComponent(rawStem, sanitize.TrackOverride, sanitize.FilenameLimit)
-				newPath = filepath.Join(fullAlbumDir, truncStem+ext)
+				if filepath.Base(oldPath) == musicbrainz.MetadataFilename {
+					// Like CatPrimaryArt's hardcoded "folder"+ext above:
+					// this exact name is never sanitized. rawStem/ext
+					// above only split on the *last* "." (so rawStem
+					// here would be "musicbrainz.json", not
+					// "musicbrainz"), and PathComponent has no reason to
+					// know this particular multi-dot name needs to
+					// survive intact.
+					newPath = filepath.Join(fullAlbumDir, musicbrainz.MetadataFilename)
+				} else {
+					truncStem := sanitize.PathComponent(rawStem, sanitize.TrackOverride, sanitize.FilenameLimit)
+					newPath = filepath.Join(fullAlbumDir, truncStem+ext)
+				}
 
 			case metadata.CatUnknown:
 				// Leave unknown files in place and record a warning.

@@ -4,6 +4,20 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## Unreleased
+
+- Add `musicbrainz diff`, which compares a single album against its MusicBrainz
+  release and reports anything that's changed upstream since the last check
+  (title, artist credit, composer/writer credit, track listing, release group,
+  label/catalog number, ISRCs, and genre tags), recording a snapshot
+  (`musicbrainz.json.gz`) so later runs detect only new drift rather than
+  comparing against a possibly hand-edited tag value.
+- `check` flags an album whose tracks disagree on `MUSICBRAINZ_ALBUMID`, since
+  `musicbrainz diff` only reads the tag from one track and trusts it for the
+  whole album.
+- Add `musicbrainz check`, which lists every album in a library missing a
+  `MUSICBRAINZ_ALBUMID` tag (or, with `--has-id`, every album that has one).
+
 ## v4.3.0 — 2026-09-23
 
 - Truncated names no longer end in a space. A cut that landed on a word boundary

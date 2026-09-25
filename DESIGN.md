@@ -5,8 +5,9 @@
 `musicrename` is a Go CLI for maintaining a curated local music library. It
 normalizes music files into a predictable directory structure derived from
 metadata, audits the resulting library, maintains file integrity information,
-manages playlists, synchronizes selected music to removable devices, and
-synchronizes playlists with Navidrome.
+manages playlists, synchronizes selected music to removable devices,
+synchronizes playlists with Navidrome, and detects upstream MusicBrainz metadata
+drift.
 
 The library is **curator-managed rather than heuristic-driven**. Metadata and
 explicit selections are authoritative; the tool avoids trying to infer a user's
@@ -253,6 +254,9 @@ Checks include:
 - inconsistent album
 - partial disc-number metadata
 - duplicate track numbers
+- inconsistent MusicBrainz release ID (`MUSICBRAINZ_ALBUMID`) across tracks,
+  present on some tracks but not others, or two different non-empty values; an
+  album with the tag on none of its tracks is not itself a finding
 
 ### Audio quality
 
@@ -738,7 +742,75 @@ Playlists that have never been pushed to Navidrome are not reconciled this way;
 
 ---
 
-## 11. Architectural Principles
+## 11. MusicBrainz Drift Detection
+
+`musicrename musicbrainz diff` detects changes to a MusicBrainz release since it
+was last checked, allowing upstream corrections to be noticed even when local
+tags have subsequently been edited independently.
+`musicrename musicbrainz check` is a separate, simpler command: a local-only
+visibility listing of which albums do or don't have a `MUSICBRAINZ_ALBUMID` tag
+at all, with no bearing on drift detection itself.
+
+### 11.1 Scope
+
+The command operates on exactly one album per invocation and never scans the
+library. This is an explicit, on-demand check rather than a mechanism for
+polling MusicBrainz for changes.
+
+The release is identified by the `MUSICBRAINZ_ALBUMID` tag on the album's first
+track, selected using the same rule as `ResolveAlbumArtist`: the track with the
+lowest positive `TRACKNUMBER`, falling back to directory order. `check`
+separately flags a release-ID mismatch across an album's tracks. A flagged
+album's `MUSICBRAINZ_ALBUMID` should be corrected (typically by re-tagging with
+Picard) before its `diff` result can be trusted.
+
+### 11.2 Tracked Fields
+
+The MusicBrainz release is fetched with its recordings, artist credits, release
+group, labels, ISRCs, genre tags, and recording relationships.
+
+Composer/writer credits are derived from a recording's relationship to a Work
+and the Work's writer relationships to artists. Personnel credits such as
+engineers, producers, instruments, and vocals are not tracked because they have
+no corresponding field in the project's metadata model.
+
+Genres are compared as a set of names rather than positionally. Changes to vote
+counts or ordering therefore do not constitute drift; only additions and
+removals are reported.
+
+### 11.3 Snapshot Persistence
+
+The fetched release data is persisted as `musicbrainz.json.gz` in the album
+directory, keeping the snapshot with the library rather than in machine-local
+state.
+
+### 11.4 Comparison Semantics
+
+Drift is the difference between the previous MusicBrainz snapshot and the
+current MusicBrainz data, not the difference between local tags and MusicBrainz.
+Local metadata edits therefore do not appear as upstream drift.
+
+An album without a snapshot establishes the current data as the baseline and
+reports no changes.
+
+When differences are found, the snapshot is updated to the newly fetched data,
+so subsequent checks report only further changes. `--dry-run` performs the
+comparison without updating the snapshot, allowing the same diff to be reviewed
+again later.
+
+### 11.5 Coverage Listing
+
+`musicbrainz check` lists every album under a library root that has no
+`MUSICBRAINZ_ALBUMID` tag, or, with `--has-id`, every album that does.
+
+An album missing the tag is not an error condition (it's the expected state for
+anything not yet tagged with Picard). `musicbrainz check` is therefore a
+visibility tool rather than an audit, and always exits `0` regardless of what it
+finds, unlike the `check` family's exit-non-zero-on-findings convention.
+
+---
+
+## 12. Architectural Principles
 
 Several principles govern the design:
 
@@ -759,9 +831,9 @@ heuristics.
 
 ### No unnecessary persistent state
 
-Where possible, state is represented by the files being managed
-themselves—`sums.md5`, source-hash sidecars, playlist directives, and Navidrome
-IDs—rather than by a separate database.
+Where possible, state is represented by the files being managed themselves
+(`sums.md5`, source-hash sidecars, playlist directives, Navidrome IDs, and
+MusicBrainz snapshots, etc.) rather than by a separate database.
 
 ### Preserve integrity information
 

@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/mfinelli/musicrename/internal/hasher"
+	"github.com/mfinelli/musicrename/internal/musicbrainz"
 )
 
 // AudioExtensions lists every recognized audio file extension without the
@@ -100,7 +101,7 @@ func categorizeRootFile(name string) FileCategory {
 	if audioExts[ext] {
 		return CatAudio
 	}
-	if textExts[ext] || name == hasher.SumsFilename {
+	if textExts[ext] || name == hasher.SumsFilename || name == musicbrainz.MetadataFilename {
 		return CatRootText
 	}
 	// The exact filename folder.mp4 is primary animated art; any other .mp4
