@@ -4,6 +4,15 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## Unreleased
+
+- Add `musicbrainz diff`, which compares a single album against its MusicBrainz
+  release and reports anything that's changed upstream since the last check
+  (title, artist credit, composer/writer credit, track listing, release group,
+  label/catalog number, ISRCs, and genre tags), recording a snapshot
+  (`musicbrainz.json.gz`) so later runs detect only new drift rather than
+  comparing against a possibly hand-edited tag value.
+
 ## v4.3.0 — 2026-09-23
 
 - Truncated names no longer end in a space. A cut that landed on a word boundary
