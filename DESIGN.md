@@ -747,6 +747,9 @@ Playlists that have never been pushed to Navidrome are not reconciled this way;
 `musicrename musicbrainz diff` detects changes to a MusicBrainz release since it
 was last checked, allowing upstream corrections to be noticed even when local
 tags have subsequently been edited independently.
+`musicrename musicbrainz check` is a separate, simpler command: a local-only
+visibility listing of which albums do or don't have a `MUSICBRAINZ_ALBUMID` tag
+at all, with no bearing on drift detection itself.
 
 ### 11.1 Scope
 
@@ -794,6 +797,16 @@ When differences are found, the snapshot is updated to the newly fetched data,
 so subsequent checks report only further changes. `--dry-run` performs the
 comparison without updating the snapshot, allowing the same diff to be reviewed
 again later.
+
+### 11.5 Coverage Listing
+
+`musicbrainz check` lists every album under a library root that has no
+`MUSICBRAINZ_ALBUMID` tag, or, with `--has-id`, every album that does.
+
+An album missing the tag is not an error condition (it's the expected state for
+anything not yet tagged with Picard). `musicbrainz check` is therefore a
+visibility tool rather than an audit, and always exits `0` regardless of what it
+finds, unlike the `check` family's exit-non-zero-on-findings convention.
 
 ---
 

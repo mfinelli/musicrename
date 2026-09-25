@@ -549,6 +549,14 @@ mrr musicbrainz diff ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
 mrr musicbrainz diff --dry-run   # defaults to the current directory
 ```
 
+`mrr musicbrainz check` lists every album under a library root with no
+`MUSICBRAINZ_ALBUMID` tag at all, so you know which ones to focus on tagging.
+
+```sh
+mrr musicbrainz check ~/music
+mrr musicbrainz check ~/music --has-id   # list the opposite
+```
+
 ## Contributing
 
 This is a personal tool but if you stumble across it and find it useful, PRs and

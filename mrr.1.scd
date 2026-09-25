@@ -11,7 +11,7 @@ mrr - normalize and organize a local music library
 *mrr playlist* <command> [options] [_path_]++
 *mrr sync ipod|sdcard* [options] <_device-path_> [_path_]++
 *mrr sync navidrome* <command> [options] [_playlist_]++
-*mrr musicbrainz* <command> [options] [_album-path_]++
+*mrr musicbrainz* <command> [options] [_path_]++
 *mrr login|logout* [options]
 
 # DESCRIPTION
@@ -811,6 +811,21 @@ to be run across a whole library.
 	(dry or not) reports the identical diff again.
 *--skip-md5*
 	Do not update *sums.md5* even if it exists.
+
+## mrr musicbrainz check [_library-root_]
+
+Lists every album under _library-root_ that
+has no *MUSICBRAINZ_ALBUMID* tag at all, or, with *--has-id*, every album
+that does. If omitted, _library-root_ defaults to the current working
+directory.
+
+A visibility tool rather than an audit: always exits *0* regardless of what
+it finds. An album with no *MUSICBRAINZ_ALBUMID* tag is not itself an error
+condition.
+
+*--has-id*
+	List albums that already have a *MUSICBRAINZ_ALBUMID* tag, instead of
+	ones missing it.
 
 # SEE ALSO
 

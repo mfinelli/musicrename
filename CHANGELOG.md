@@ -15,6 +15,8 @@ my own reference.
 - `check` flags an album whose tracks disagree on `MUSICBRAINZ_ALBUMID`, since
   `musicbrainz diff` only reads the tag from one track and trusts it for the
   whole album.
+- Add `musicbrainz check`, which lists every album in a library missing a
+  `MUSICBRAINZ_ALBUMID` tag (or, with `--has-id`, every album that has one).
 
 ## v4.3.0 — 2026-09-23
 
