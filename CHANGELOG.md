@@ -4,7 +4,7 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
-## Unreleased
+## v4.4.0 — 2026-09-26
 
 - Add `musicbrainz diff`, which compares a single album against its MusicBrainz
   release and reports anything that's changed upstream since the last check
