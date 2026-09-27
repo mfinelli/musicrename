@@ -4,7 +4,7 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
-## Unreleased
+## v4.5.0 — 2026-09-27
 
 - `lyrics` gains `--url`, which fetches a specific LRCLIB track directly by URL
   and embeds it, skipping the title/artist/album/duration matching strategy
