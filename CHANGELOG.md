@@ -4,6 +4,15 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## Unreleased
+
+- `lyrics` gains `--url`, which fetches a specific LRCLIB track directly by URL
+  and embeds it, skipping the title/artist/album/duration matching strategy
+  entirely. Valid only in track mode. For tracks where on-disk tags (e.g. extra
+  artists appended to the title) keep the normal matching from finding the right
+  result, but the correct LRCLIB entry is already known (e.g. found by hand on
+  lrclib.net).
+
 ## v4.4.0 — 2026-09-26
 
 - Add `musicbrainz diff`, which compares a single album against its MusicBrainz
