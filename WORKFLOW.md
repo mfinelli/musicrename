@@ -32,6 +32,22 @@ Homepage: <https://www.foobar2000.org/>
   release, then manually update the path in foobar2000 via
   `File -> Preferences -> Advanced`, scroll down to `Tools -> Converter`, and
   double-click "Additional command-line encoder paths".
+- Requires two custom converter presets, "single-disc" and "multi-disc", which
+  are identical except for the output name format:
+  - **Output**:
+    - Output path: "Ask me later (useful for saving presets)"
+    - If a file already exists: "Ask"
+    - Output style and file name formatting: "Convert each track to an
+      individual file"
+    - Name format (single-disc):
+      `%album artist%/%year% %album%/%tracknumber% %title%`
+    - Name format (multi-disc):
+      `%album artist%/%year% %album%/%discnumber%-%tracknumber% %title%`
+  - **Output format**: FLAC, level 8
+  - **Processing**: none configured
+  - **Other**:
+    - When finished: "Show full status report"
+    - Transfer tags, attached pictures, and ReplayGain
 
 ### MusicBrainz Picard
 
@@ -57,6 +73,25 @@ Homepage: <https://picard.musicbrainz.org/>
   $set(originaldate,%originaldate%)
   $delete(originalyear)
   ```
+
+  A second tagger script, "Move feat. to title", needs to run _after_ the
+  Navidrome script above (this is achieved simply by placing it below Navidrome
+  in the script list):
+
+  ```
+  $set(_feat_regex,\(?i\)\\s+\\\(?\(\(?:feat\\.|featuring\)\\s+[^\)]+\)\\\)?)
+
+  $set(_feat_title,$rsearch(%artist%,%_feat_regex%))
+  $set(artist,$rreplace(%artist%,%_feat_regex%,))
+  $set(title,$if(%_feat_title%,%title% \(%_feat_title%\),%title%))
+
+  $set(_feat_album,$rsearch(%albumartist%,%_feat_regex%))
+  $set(albumartist,$rreplace(%albumartist%,%_feat_regex%,))
+  $set(album,$if(%_feat_album%,%album% \(%_feat_album%\),%album%))
+  ```
+
+- Under `Options -> Metadata`, select both "Use release relationships" and "Use
+  track relationships".
 
 ### gscan2pdf
 
@@ -143,3 +178,50 @@ differs from a physical CD rip:
   file. Note that for purchased albums this file is named `sums.md5` (rather
   than `Album name.md5` used for rips).
 - Copy everything to Dropbox and the NAS, same as the physical rip flow.
+
+## Converting (foobar2000)
+
+1. Once the rip has been archived, load the `.cue` file into foobar2000. It
+   automatically shows the file split into the tracks defined in the cue sheet.
+2. Select all of the tracks (the whole album), right-click, and choose
+   "Convert", using the "single-disc" or "multi-disc" preset as appropriate.
+3. The destination directory is the `WORKING` directory in the home `Music`
+   directory.
+
+Note: this is the point where the "rip from CD" and "purchase album online"
+workflows unify, since purchased albums ship with tracks already split. For the
+purchase workflow, extract the album into that same `WORKING` directory instead
+(inside its own album directory, if the archive doesn't already have one).
+
+## Tagging (MusicBrainz Picard)
+
+1. Open Picard and add the recently converted/extracted files. They appear under
+   "Unclustered Files".
+2. Select them and click "Cluster".
+3. Right-click the cluster and select "Lookup in Browser", then navigate to the
+   MusicBrainz URL saved earlier (`musicbrainz.txt`).
+4. On the MusicBrainz release page, click the "tagger" image/button (usually
+   near the top right, by the album art).
+5. The album loads into Picard. Drag the tracks from the cluster over onto the
+   album.
+6. Click Save.
+
+## Finalizing (foobar2000)
+
+1. Add the freshly tagged tracks back into foobar2000.
+2. This is where any custom edits can be made, e.g. removing the "ExactAudioCopy
+   vX.Y" comment.
+3. Right-click the tracks and select `Tagging -> Remove all pictures`.
+4. Select all the tracks, right-click, and choose
+   `ReplayGain -> Scan as single albums (by tags)`. Occasionally this needs to
+   be overridden by directly choosing "Scan as single album" and then updating
+   the file tags.
+
+## Lyrics (`mrr`)
+
+1. Switch into the album's `WORKING` directory.
+2. Run `mrr lyrics`. This is generally done only for studio albums and live
+   albums, remixes, and similar are (usually) excluded.
+3. For any tracks where the automatic lookup fails, find a suitable lyric link
+   directly on LRCLIB, then pass it in track mode for that single track:
+   `mrr lyrics --url https://lrclib.net/tracks/... "./01 track.flac"`.
