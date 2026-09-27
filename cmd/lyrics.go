@@ -62,7 +62,11 @@ recursively.
 
 If path is omitted it defaults to the current working directory.
 
-Existing lyrics tags are never overwritten unless --force is passed.`,
+Existing lyrics tags are never overwritten unless --force is passed.
+
+--url accepts a specific LRCLIB track URL or numeric ID and embeds that
+exact track directly, bypassing the matching strategy above entirely. It is
+valid only in track mode (path must be a single audio file).`,
 	Args: cobra.MaximumNArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		// Either an audio file or a directory is valid here, so fall back
@@ -74,6 +78,7 @@ Existing lyrics tags are never overwritten unless --force is passed.`,
 
 func init() {
 	lyricsCmd.Flags().Bool("force", false, "Re-fetch and overwrite existing lyrics")
+	lyricsCmd.Flags().String("url", "", "Fetch a specific LRCLIB track by URL (track mode only)")
 	rootCmd.AddCommand(lyricsCmd)
 }
 
@@ -91,12 +96,29 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 	}
 
 	force, _ := cmd.Flags().GetBool("force")
+	rawURL, _ := cmd.Flags().GetString("url")
 	out := cmd.OutOrStdout()
 	ctx := context.Background()
 
 	info, err := os.Stat(abs)
 	if err != nil {
 		return fmt.Errorf("accessing %s: %w", abs, err)
+	}
+
+	if rawURL != "" {
+		if info.IsDir() {
+			return fmt.Errorf("--url is only valid with a single track, not a directory (%s)", abs)
+		}
+		ext := strings.ToLower(filepath.Ext(abs))
+		if !metadata.IsAudioExt(ext) {
+			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
+				abs, metadata.DottedExtList(metadata.AudioExtensions))
+		}
+		id, err := lyrics.ParseID(rawURL)
+		if err != nil {
+			return fmt.Errorf("--url: %w", err)
+		}
+		return runLyricsTrackByID(ctx, out, abs, id, force, start)
 	}
 
 	if !info.IsDir() {
@@ -148,6 +170,36 @@ func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool,
 		return err
 	}
 
+	fmt.Fprintln(out)
+	printLyricsSummaryLine(out, summary, time.Since(start))
+	return nil
+}
+
+// runLyricsTrackByID handles the --url form of track mode: a single audio
+// file paired with a specific LRCLIB track ID, bypassing the usual
+// title/artist/album/duration matching strategy entirely.
+func runLyricsTrackByID(ctx context.Context, out io.Writer, path string, id int, force bool, start time.Time) error {
+	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	fmt.Fprintln(out)
+
+	status, err := lyrics.FetchByID(ctx, path, id, force)
+	if err != nil {
+		return err
+	}
+
+	var summary lyrics.Summary
+	switch status {
+	case lyrics.StatusEmbedded:
+		summary.Embedded++
+	case lyrics.StatusSkipped:
+		summary.Skipped++
+	case lyrics.StatusNotFound:
+		summary.NotFound++
+	case lyrics.StatusFailed:
+		summary.Failed++
+	}
+
+	lyricsProgressCallback(out, "  ")(path, status)
 	fmt.Fprintln(out)
 	printLyricsSummaryLine(out, summary, time.Since(start))
 	return nil

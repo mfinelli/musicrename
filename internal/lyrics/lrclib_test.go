@@ -123,6 +123,73 @@ func TestLrclibClient_Get(t *testing.T) {
 	})
 }
 
+func TestLrclibClient_GetByID(t *testing.T) {
+	t.Run("returns track on 200", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/get/1", r.URL.Path)
+			json.NewEncoder(w).Encode(sampleTrack)
+		}))
+		defer srv.Close()
+
+		c := newTestClient(srv.URL)
+		got, err := c.getByID(context.Background(), 1)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, "Back In Black", got.TrackName)
+		assert.Equal(t, sampleTrack.PlainLyrics, got.PlainLyrics)
+		assert.Equal(t, sampleTrack.SyncedLyrics, got.SyncedLyrics)
+	})
+
+	t.Run("returns nil on 404", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		c := newTestClient(srv.URL)
+		got, err := c.getByID(context.Background(), 999999)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("returns error on unexpected status", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+
+		c := newTestClient(srv.URL)
+		_, err := c.getByID(context.Background(), 1)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "500")
+	})
+
+	t.Run("returns error on malformed JSON", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("not json"))
+		}))
+		defer srv.Close()
+
+		c := newTestClient(srv.URL)
+		_, err := c.getByID(context.Background(), 1)
+		assert.Error(t, err)
+	})
+
+	t.Run("honors context cancellation", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(sampleTrack)
+		}))
+		defer srv.Close()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		c := newTestClient(srv.URL)
+		_, err := c.getByID(ctx, 1)
+		assert.Error(t, err)
+	})
+}
+
 func TestLrclibClient_Search(t *testing.T) {
 	t.Run("returns first result on 200", func(t *testing.T) {
 		results := []lrclibTrack{

@@ -99,6 +99,14 @@ are embedded in FLAC files; unsynced lyrics are embedded in MP3 and M4A.
 mrr lyrics --force ~/music/b/beyonce
 ```
 
+When the automatic matching doesn't find the right track, pass `--url` with a
+specific LRCLIB track URL found by hand, along with a single track path:
+
+```sh
+mrr lyrics --url https://lrclib.net/api/get/12345 \
+  "~/music/b/beyonce/01 dangerously in love.flac"
+```
+
 ### `check`
 
 Audits for metadata completeness, album consistency, audio quality tags

@@ -141,6 +141,42 @@ func (c *lrclibClient) search(ctx context.Context, trackName, artistName, albumN
 	return &tracks[0], nil
 }
 
+// getByID calls the LRCLIB /get/{id} endpoint directly, for when the caller
+// already knows exactly which LRCLIB track to use (e.g. an ID or URL found
+// manually on lrclib.net) and wants to skip title/artist/album/duration
+// matching entirely. It returns nil, nil when the server responds with 404
+// (no track with that ID).
+func (c *lrclibClient) getByID(ctx context.Context, id int) (*lrclibTrack, error) {
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limiter: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.base+"/get/"+strconv.Itoa(id), nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("/get/%d returned HTTP %d", id, resp.StatusCode)
+	}
+
+	var track lrclibTrack
+	if err := json.NewDecoder(resp.Body).Decode(&track); err != nil {
+		return nil, fmt.Errorf("decode /get/%d response: %w", id, err)
+	}
+	return &track, nil
+}
+
 // fetchForTrack implements the four-step fetch strategy described in the
 // design document, stopping as soon as any step returns a match:
 //

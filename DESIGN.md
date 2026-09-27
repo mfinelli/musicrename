@@ -319,6 +319,13 @@ Existing lyrics are preserved unless `--force` is used.
 LRC timestamps are normalized before being embedded, including normalization of
 offsets and timestamp precision.
 
+`--url` accepts a specific LRCLIB track URL or numeric ID and embeds that exact
+track directly, skipping the matching strategy above entirely. It is valid only
+in track mode (a single file). This covers cases where on-disk tags (e.g.
+additional artists appended to the track title) prevent the normal strategy from
+finding the correct match, even though the correct match is known and easily
+found by hand on lrclib.net.
+
 ---
 
 ## 7. Music Videos

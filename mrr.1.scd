@@ -130,6 +130,11 @@ Existing lyrics tags are never overwritten unless *--force* is passed.
 *--force*
 	Re-fetch and overwrite existing lyrics tags.
 
+*--url*=_url-or-id_
+	Fetch a specific LRCLIB track directly by its URL or numeric ID, skipping
+	the matching strategy above entirely. Valid only in track mode (_path_
+	must be a single audio file).
+
 ## mrr check [_path_]
 
 Audits a library or album for metadata and structural issues. Emits all

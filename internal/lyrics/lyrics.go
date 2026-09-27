@@ -37,6 +37,10 @@
 //	summary, err := lyrics.Fetch(ctx, tracks, false, func(path string, status lyrics.LyricStatus) {
 //	    fmt.Printf("\r  → %s", filepath.Base(path))
 //	})
+//
+// FetchByID embeds a single, specific LRCLIB track (identified by ID; see
+// ParseID for extracting one from a lrclib.net URL) directly, bypassing the
+// title/artist/album/duration matching strategy above entirely.
 package lyrics
 
 import (
@@ -99,6 +103,41 @@ func Fetch(ctx context.Context, tracks []TrackInfo, force bool, progress func(st
 	return fetch(ctx, newLrclibClient(), tracks, force, progress)
 }
 
+// FetchByID fetches a single, specific LRCLIB track by its numeric ID (see
+// ParseID) and embeds it into path's tags, bypassing the title/artist/
+// album/duration matching strategy in Fetch entirely.
+//
+// It exists for tracks where on-disk tags (e.g. additional artists appended
+// to the title) prevent Fetch's matching strategy from finding the right
+// result, but the person already knows which LRCLIB track is correct.
+//
+// Existing lyrics tags are left untouched unless force is true, exactly as
+// in Fetch. If id doesn't exist on LRCLIB at all, that's reported as an
+// error (the caller supplied a specific, presumably verified, ID); if id
+// exists but has nothing embeddable for path's format, that's StatusNotFound,
+// matching Fetch's behaviour for the equivalent case.
+func FetchByID(ctx context.Context, path string, id int, force bool) (LyricStatus, error) {
+	return fetchByID(ctx, newLrclibClient(), path, id, force)
+}
+
+// fetchByID is the internal implementation, accepting an explicit client so
+// that tests can inject a test server without network access.
+func fetchByID(ctx context.Context, c *lrclibClient, path string, id int, force bool) (LyricStatus, error) {
+	if status, skip := checkSkip(path, force); skip {
+		return status, nil
+	}
+
+	result, err := c.getByID(ctx, id)
+	if err != nil {
+		return StatusFailed, err
+	}
+	if result == nil {
+		return StatusFailed, fmt.Errorf("lrclib: no track with id %d", id)
+	}
+
+	return applyResult(path, result), nil
+}
+
 // fetch is the internal implementation, accepting an explicit client so that
 // tests can inject a test server without network access.
 func fetch(ctx context.Context, c *lrclibClient, tracks []TrackInfo, force bool, progress func(string, LyricStatus)) (Summary, error) {
@@ -131,25 +170,44 @@ func fetch(ctx context.Context, c *lrclibClient, tracks []TrackInfo, force bool,
 // returns an error (failures are captured as StatusFailed so the caller can
 // continue processing the remaining tracks).
 func processTrack(ctx context.Context, c *lrclibClient, track TrackInfo, force bool) LyricStatus {
-	if !force {
-		has, err := hasLyrics(track.Path)
-		if err != nil {
-			return StatusFailed
-		}
-		if has {
-			return StatusSkipped
-		}
+	if status, skip := checkSkip(track.Path, force); skip {
+		return status
 	}
 
 	result, err := c.fetchForTrack(ctx, track.Title, track.Artist, track.Album, track.Duration)
 	if err != nil {
 		return StatusFailed
 	}
+	return applyResult(track.Path, result)
+}
+
+// checkSkip reports whether processing should stop before ever contacting
+// LRCLIB, per the standard --force semantics shared by Fetch and FetchByID.
+// When skip is true, status is the final status to report (StatusSkipped or
+// StatusFailed); when skip is false, status is meaningless and processing
+// should continue to the fetch step.
+func checkSkip(path string, force bool) (status LyricStatus, skip bool) {
+	if force {
+		return 0, false
+	}
+	has, err := hasLyrics(path)
+	if err != nil {
+		return StatusFailed, true
+	}
+	if has {
+		return StatusSkipped, true
+	}
+	return 0, false
+}
+
+// applyResult embeds a fetched LRCLIB result (if any) into path's tags and
+// returns the final LyricStatus, shared by Fetch and FetchByID.
+func applyResult(path string, result *lrclibTrack) LyricStatus {
 	if result == nil {
 		return StatusNotFound
 	}
 
-	embedded, err := embedLyrics(track.Path, result.SyncedLyrics, result.PlainLyrics)
+	embedded, err := embedLyrics(path, result.SyncedLyrics, result.PlainLyrics)
 	if err != nil {
 		return StatusFailed
 	}

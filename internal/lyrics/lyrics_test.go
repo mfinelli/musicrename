@@ -431,3 +431,110 @@ func TestFetch(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("%d", summary.Embedded+summary.Failed+summary.Skipped+summary.NotFound), "1")
 	})
 }
+
+func makeLrclibByIDServer(t *testing.T, id int, resp lrclibResponse) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != fmt.Sprintf("/get/%d", id) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+}
+
+func TestFetchByID(t *testing.T) {
+	syncedLRC := "[00:01.00] Hello\n[00:05.00] World"
+	plainText := "Hello\nWorld"
+
+	apiResp := lrclibResponse{
+		ID: 42, TrackName: "Test Track", ArtistName: "Test Artist",
+		AlbumName: "Test Album", Duration: 1,
+		PlainLyrics: plainText, SyncedLyrics: syncedLRC,
+	}
+
+	t.Run("embeds lyrics for FLAC and reports StatusEmbedded", func(t *testing.T) {
+		srv := makeLrclibByIDServer(t, 42, apiResp)
+		defer srv.Close()
+
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
+
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		require.NoError(t, err)
+		assert.Equal(t, StatusEmbedded, status)
+
+		lyricsTag, unsyncedTag := readLyricsTags(t, path)
+		assert.NotEmpty(t, lyricsTag)
+		assert.Equal(t, plainText, unsyncedTag)
+	})
+
+	t.Run("skips track that already has lyrics when not forcing", func(t *testing.T) {
+		srv := makeLrclibByIDServer(t, 42, apiResp)
+		defer srv.Close()
+
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
+		require.NoError(t, taglib.WriteTags(path, map[string][]string{
+			taglib.Lyrics: {"existing lyrics"},
+		}, 0))
+
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		require.NoError(t, err)
+		assert.Equal(t, StatusSkipped, status)
+	})
+
+	t.Run("overwrites existing lyrics when force is true", func(t *testing.T) {
+		srv := makeLrclibByIDServer(t, 42, apiResp)
+		defer srv.Close()
+
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
+		require.NoError(t, taglib.WriteTags(path, map[string][]string{
+			taglib.Lyrics: {"old lyrics"},
+		}, 0))
+
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, true)
+		require.NoError(t, err)
+		assert.Equal(t, StatusEmbedded, status)
+
+		lyricsTag, _ := readLyricsTags(t, path)
+		assert.NotEqual(t, "old lyrics", lyricsTag)
+	})
+
+	t.Run("reports StatusNotFound for MP3 when only synced lyrics available", func(t *testing.T) {
+		srv := makeLrclibByIDServer(t, 42, lrclibResponse{
+			ID: 42, SyncedLyrics: syncedLRC, PlainLyrics: "",
+		})
+		defer srv.Close()
+
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
+
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		require.NoError(t, err)
+		assert.Equal(t, StatusNotFound, status)
+	})
+
+	t.Run("returns an error when the id doesn't exist on LRCLIB", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
+
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 999999, false)
+		assert.Error(t, err)
+		assert.Equal(t, StatusFailed, status)
+	})
+
+	t.Run("reports StatusFailed on HTTP error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
+
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		assert.Error(t, err)
+		assert.Equal(t, StatusFailed, status)
+	})
+}
