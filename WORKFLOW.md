@@ -181,6 +181,10 @@ differs from a physical CD rip:
 
 ## Converting (foobar2000)
 
+Note: if the source isn't lossless FLAC to begin with, skip the convert steps
+entirely (e.g. an MP3 downloaded from SoundCloud or an artist's website that
+only offers lossy files).
+
 1. Once the rip has been archived, load the `.cue` file into foobar2000. It
    automatically shows the file split into the tracks defined in the cue sheet.
 2. Select all of the tracks (the whole album), right-click, and choose
@@ -225,3 +229,21 @@ purchase workflow, extract the album into that same `WORKING` directory instead
 3. For any tracks where the automatic lookup fails, find a suitable lyric link
    directly on LRCLIB, then pass it in track mode for that single track:
    `mrr lyrics --url https://lrclib.net/tracks/... "./01 track.flac"`.
+
+## Finishing up
+
+1. After adding lyrics and any other tag changes, run the album back through the
+   convert preset in foobar2000 again, this time outputting directly into the
+   home `Music` directory.
+2. Run `mrr rename` on the album.
+3. Run `mrr musicbrainz diff` to record the MusicBrainz baseline.
+4. Source the highest quality/resolution artwork available. Good sources:
+   - [Album Art Exchange](https://albumartexchange.com)
+   - [covers.musichoarders.xyz](https://covers.musichoarders.xyz)
+   - [fanart.tv](https://fanart.tv)
+
+   On covers.musichoarders.xyz, limiting results to Amazon Music, Apple Music,
+   iTunes, and Tidal can also sometimes surface an animated album art variant.
+
+5. Run `mrr sums` on the album.
+6. Copy to the NAS and verify checksums.
