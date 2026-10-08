@@ -12,7 +12,20 @@ Homepage: <https://www.exactaudiocopy.de/>
 - Runs under WINE.
 - Requires a pre-configured EAC config file (brought along from a previous
   setup) covering drive offset, secure ripping options, etc.
-- **TODO:** document the exact EAC configuration/settings.
+- First-run setup wizard:
+  1. On first start the wizard opens; click Next.
+  2. Select the proper drive.
+  3. Select "I prefer to have accurate results".
+  4. Insert a clean, unscratched disc (a copy of _Back in Black_ is a good
+     choice). The AccurateRip wizard will pop up; click "Configure".
+  5. If successful, return to the main wizard and click Next.
+  6. Once the test is finished, click Next through the following screens until
+     you reach the format selection, select FLAC, and click Next.
+  7. For the naming scheme, select "leave naming scheme unchanged".
+  8. On the next screen, check "I am an expert, let me use the full potential of
+     EAC".
+  9. Finish.
+- **TODO:** document the EAC settings to configure after the wizard.
 
 ### foobar2000
 
@@ -99,6 +112,12 @@ Homepage: <http://gscan2pdf.sourceforge.net/>
 
 - Used for scanning album artwork/liner notes.
 
+### MakeMKV
+
+Homepage: <https://www.makemkv.com/>
+
+- Only needed for discs that include a bonus video DVD.
+
 ### musicrename (`mrr`)
 
 Homepage: <https://github.com/mfinelli/musicrename>
@@ -113,6 +132,17 @@ Homepage: <https://github.com/mfinelli/musicrename>
 4. `Action -> Test & Copy Image and Create Cue Sheet (Compressed)`.
 5. Rip directly into the home `Music` directory. Filename is just the album
    name, e.g. `Dangerously in Love`; for multidisc albums, append `(disc N)`.
+
+### Bonus video DVD (MakeMKV)
+
+For releases that also include a video DVD:
+
+1. Insert the disc, click "Backup", and make sure the "Decrypt video files"
+   option is checked. Leave the default filename (the name of the disc).
+2. Save the result alongside the rip in an `extras` directory, and make sure the
+   resulting ISO is included in the MD5 sums file.
+
+**TODO:** document what to do with the DVD rip afterwards.
 
 ## Staging the rip
 
@@ -153,6 +183,7 @@ md5sum *.cue >> *.md5
 md5sum -b *.flac *.jpg >> *.md5
 md5sum *.log *.txt >> *.md5
 md5sum -b scans/* >> *.md5
+md5sum -b extras/*.iso >> *.md5  # optional: only for video discs
 ```
 
 ## Archival
