@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -63,6 +64,24 @@ func IsLosslessCodec(codec string) bool {
 		return true
 	}
 	return strings.HasPrefix(codec, "pcm_")
+}
+
+// ffmpegTag matches the "[flac @ 0x55af3b6a2c80] " prefix ffmpeg puts on a
+// message from one of its components.
+var ffmpegTag = regexp.MustCompile(`^\[[^\]]*@ 0x[0-9a-f]+\]\s*`)
+
+// firstLine returns the first non-empty line of ffmpeg or ffprobe's stderr
+// output, without the component prefix. Their complaints about a bad file run
+// to many lines, mostly repeating one another with memory addresses; the first
+// is the one that says what went wrong, and a report listing many tracks needs
+// each failure to fit on a line.
+func firstLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return ffmpegTag.ReplaceAllString(line, "")
+		}
+	}
+	return ""
 }
 
 // lfeIndex returns the channel index of the low-frequency-effects channel for
@@ -105,7 +124,7 @@ func (execProbeRunner) Run(ctx context.Context, args []string) (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+		if msg := firstLine(stderr.String()); msg != "" {
 			err = fmt.Errorf("%w: %s", err, msg)
 		}
 	}
@@ -233,7 +252,7 @@ func (c *cmdReader) Close() error {
 	}
 	err := c.cmd.Wait()
 	if c.eof && err != nil {
-		msg := strings.TrimSpace(c.stderr.String())
+		msg := firstLine(c.stderr.String())
 		if msg == "" {
 			return fmt.Errorf("ffmpeg: %w", err)
 		}

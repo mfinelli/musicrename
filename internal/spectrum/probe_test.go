@@ -196,3 +196,30 @@ func TestAnalyzeClosesTheSource(t *testing.T) {
 		assert.False(t, src.opened)
 	})
 }
+
+func TestFirstLine(t *testing.T) {
+	t.Run("keeps the first message and drops the component tag", func(t *testing.T) {
+		stderr := "[flac @ 0x55af3b6a2c80] invalid residual\n" +
+			"[flac @ 0x55af3b6a2c80] decode_frame() failed\n" +
+			"[aist#0:0/flac @ 0x55af3b6a74c0] Error submitting packet to decoder\n"
+
+		assert.Equal(t, "invalid residual", firstLine(stderr))
+	})
+
+	t.Run("skips leading blank lines and trims", func(t *testing.T) {
+		assert.Equal(t, "x.flac: No such file or directory", firstLine("\n  \nx.flac: No such file or directory  \n"))
+	})
+
+	t.Run("a message with no tag is left alone", func(t *testing.T) {
+		assert.Equal(t, "Invalid data found when processing input", firstLine("Invalid data found when processing input"))
+	})
+
+	t.Run("only a tag at the start is removed", func(t *testing.T) {
+		assert.Equal(t, "see [x @ 0x1f] here", firstLine("see [x @ 0x1f] here"))
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		assert.Equal(t, "", firstLine(""))
+		assert.Equal(t, "", firstLine("\n\n"))
+	})
+}

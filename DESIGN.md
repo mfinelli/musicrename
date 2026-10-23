@@ -5,9 +5,9 @@
 `musicrename` is a Go CLI for maintaining a curated local music library. It
 normalizes music files into a predictable directory structure derived from
 metadata, audits the resulting library, maintains file integrity information,
-manages playlists, synchronizes selected music to removable devices,
-synchronizes playlists with Navidrome, and detects upstream MusicBrainz metadata
-drift.
+checks whether files that claim to be lossless really are, manages playlists,
+synchronizes selected music to removable devices, synchronizes playlists with
+Navidrome, and detects upstream MusicBrainz metadata drift.
 
 The library is **curator-managed rather than heuristic-driven**. Metadata and
 explicit selections are authoritative; the tool avoids trying to infer a user's
@@ -817,7 +817,125 @@ finds, unlike the `check` family's exit-non-zero-on-findings convention.
 
 ---
 
-## 12. Architectural Principles
+## 12. Lossless Verification
+
+`musicrename spectrum` examines audio that claims to be lossless and reports
+evidence that it is really a lossy transcode, or otherwise not what it claims to
+be. This section records the design decisions. The method itself, the measured
+behavior of real encoders, and the limits of the technique are explained in
+`SPECTRUM.md`.
+
+### 12.1 Scope
+
+The command operates on a single track or on a single album directory. It is an
+explicit, on-demand examination of something the curator is specifically looking
+at, not a sweep.
+
+Only lossless codecs are analyzed (FLAC, and ALAC in `.m4a`). The decision is
+made from the file's codec as reported by `ffprobe`, and not by its extension,
+because an `.m4a` may hold either ALAC or AAC. In an album, lossy files are
+skipped and counted in the summary. A lossy file named directly is an error,
+since there is nothing to find out about it.
+
+The command doesn't modify the album. The only files it writes are spectrogram
+images, and only into a directory the user names with `--png`.
+
+### 12.2 Evidence, not certainty
+
+Lossy origin cannot be proven from the audio alone, so the result is a graded
+verdict rather than a yes or no:
+
+- `ok` — no evidence of a problem. This is the absence of evidence, not proof of
+  losslessness; a high-bitrate lossy encode may leave nothing to find.
+- `suspect` — a feature lossy encoding causes, which a genuine lossless source
+  can also have.
+- `likely fake` — strong evidence of a transcode or an upsample.
+- `inconclusive` — too little non-silent audio to judge. Not a finding.
+
+Cases that cannot be resolved are reported as ambiguous. In particular, a sharp
+cutoff between 19.5 and 21 kHz in a CD-rate file is never more than `suspect`: a
+high-bitrate encode and a deliberate mastering filter produce the same spectrum.
+The tool does not name the encoder it thinks was used, because the measured
+cutoff of one encoder varies with the audio and different encoders share
+cutoffs.
+
+This follows the principle of curator authority: the tool presents what it
+measured and how strongly it points to a conclusion, and the curator decides.
+
+### 12.3 Method
+
+The audio is decoded by `ffmpeg` at its native sample rate and channel count
+(resampling or downmixing would reshape the spectrum being measured), and
+everything after decoding is pure Go with no additional dependencies.
+
+A long-term average power spectrum is computed per channel with Welch's method:
+overlapping (50%) frames, each multiplied by a Hann window and Fourier
+transformed, with the power spectra averaged. Nearly silent frames are ignored.
+The window is needed so that leakage from loud low frequencies does not fill in
+the very quiet region above a lossy cutoff and hide it. Its length scales with
+the sample rate (4096 samples at 44.1 and 48 kHz, up to 16384 at 192 kHz) so
+that the frequency resolution is roughly constant (about 11 Hz per bin).
+
+The spectrum is condensed into bands about 100 Hz wide. A cliff is the
+lowest-frequency place above 5 kHz where the mean level of the 1 kHz below
+exceeds the mean level of the 1 kHz above by at least 15 dB. The cutoff is where
+the curve crosses halfway between the two levels. The lowest such edge is used,
+because what matters is where the content first ends.
+
+Three kinds of finding are produced:
+
+- **cutoff** — a sharp lowpass at a frequency typical of lossy encoders.
+- **upsampled** — a file at 88.2 kHz or higher whose content ends at or below 27
+  kHz, i.e. has nothing beyond what a CD-rate or lossy source could hold.
+- **bit depth** — a container wider than 16 bits that only ever uses 16 or
+  fewer, such as 16-bit audio padded to 24.
+
+A cutoff at or above 95% of the Nyquist frequency, or at or above 21 kHz at
+sample rates below 88.2 kHz, is ordinary anti-alias filtering and is not a
+finding.
+
+All channels are analyzed and the verdict is based on the one with the widest
+bandwidth, since a single full-bandwidth channel shows the file as a whole is
+not band-limited. The LFE channel of a 2.1, 5.1 or 7.1 layout is excluded: it is
+deliberately bass-only, has no cutoff to find, and would otherwise be mistaken
+for a full-bandwidth channel and mask a transcode in the others. Channels with
+too little non-silent audio are excluded as well.
+
+### 12.4 Thresholds
+
+Every tunable number lives in one documented struct, `spectrum.Thresholds`. The
+defaults come from measurements of real encoders on synthetic signals
+(`SPECTRUM.md` records them). They are not command-line flags: it is better to
+learn from real files which of them actually needs adjusting than to design a
+configuration surface in advance.
+
+### 12.5 Output and exit status
+
+Each track is reported with its format, a verdict, and the evidence behind it;
+`--verbose` adds the per-channel numbers. A summary line gives the number of
+tracks analyzed and the number flagged.
+
+The exit status follows the convention of the `check` family: non-zero when any
+track is `suspect` or `likely fake`. A track that cannot be decoded is an error
+and also exits non-zero. `inconclusive` is not a finding and does not affect the
+exit status.
+
+With `--png`, a spectrogram of each track is written for the curator to judge by
+eye. It is rendered by `ffmpeg` independently of the tool's own measurement. A
+failure to write one is only a warning because the analysis it illustrates has
+already succeeded and been reported.
+
+### 12.6 Non-goals
+
+- Identifying which encoder or bitrate produced a file.
+- Detecting lossy origin from codec-specific structure (such as MP3 granule
+  boundaries) rather than from the spectrum.
+- Scanning a library, or remembering results between runs. There is no cache or
+  database; the analysis takes about a second per track.
+
+---
+
+## 13. Architectural Principles
 
 Several principles govern the design:
 
@@ -865,3 +983,9 @@ opaque host-side synchronization database.
 Audio, video, and playlist filenames use the same sanitization model wherever
 their semantics permit it, keeping the library predictable and avoiding multiple
 competing naming conventions.
+
+### Evidence over assertion
+
+A heuristic check reports what it measured and how strongly that points to a
+conclusion. It separates ambiguous results from conclusive ones, does not claim
+more certainty than it has, and never acts on its own conclusions.

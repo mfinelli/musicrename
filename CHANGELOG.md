@@ -4,6 +4,18 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## Unreleased
+
+- Add `spectrum`, which checks whether a FLAC (or ALAC) track or album is really
+  lossless or a lossy encode (MP3, AAC, etc.) that was converted afterwards. It
+  measures the file's frequency spectrum and looks for the sharp cutoff lossy
+  encoders leave, and also reports hi-res files with nothing above CD bandwidth
+  and 24-bit files that only use 16 bits. Each track is `ok`, `suspect`,
+  `likely fake`, or `inconclusive`; the command exits non-zero on `suspect` or
+  worse. `--png` writes a spectrogram of each track for judging by eye and `-v`
+  shows the numbers behind each verdict. Works on one track or one album at a
+  time. See `SPECTRUM.md`.
+
 ## v4.5.0 — 2026-09-27
 
 - `lyrics` gains `--url`, which fetches a specific LRCLIB track directly by URL

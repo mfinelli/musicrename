@@ -80,6 +80,12 @@ func TestAssessCliff(t *testing.T) {
 		})
 	}
 
+	t.Run("sample rates are written without trailing zeros", func(t *testing.T) {
+		f, ok := assessCliff(hi96, th, cliff(22000, 60))
+		assert.True(t, ok)
+		assert.Contains(t, f.Detail, "96 kHz file")
+	})
+
 	t.Run("the detail names the cutoff and the drop", func(t *testing.T) {
 		f, ok := assessCliff(cd, th, cliff(16100, 37))
 		assert.True(t, ok)

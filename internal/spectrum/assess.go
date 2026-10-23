@@ -17,7 +17,10 @@
 
 package spectrum
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // Verdict is the overall conclusion about a track. The values are ordered by
 // severity so that the worst of several findings is simply the greatest.
@@ -39,6 +42,12 @@ const (
 	// probably a transcode or an upsample, not what it claims to be.
 	VerdictLikelyFake
 )
+
+// Flagged reports whether the verdict calls for attention: suspect or worse.
+// An inconclusive result is not flagged; there is nothing to act on.
+func (v Verdict) Flagged() bool {
+	return v >= VerdictSuspect
+}
 
 func (v Verdict) String() string {
 	switch v {
@@ -98,10 +107,10 @@ func assessCliff(info StreamInfo, th Thresholds, c *Cliff) (Finding, bool) {
 	case hiRes && f <= th.HiResLimitHz && strong:
 		if f < th.LossyEdgeHz {
 			return Finding{KindCutoff, VerdictLikelyFake, edge +
-				", a typical lossy-encoder lowpass, in a " + kHz(float64(info.SampleRate)) + " file"}, true
+				", a typical lossy-encoder lowpass, in a " + rateKHz(info.SampleRate) + " file"}, true
 		}
 		return Finding{KindUpsampled, VerdictLikelyFake, edge +
-			": nothing above CD/DVD bandwidth in a " + kHz(float64(info.SampleRate)) +
+			": nothing above CD/DVD bandwidth in a " + rateKHz(info.SampleRate) +
 			" file, so it looks upsampled"}, true
 
 	case hiRes:
@@ -140,7 +149,13 @@ func assessBitDepth(info StreamInfo, th Thresholds, effective int) (Finding, boo
 	}, true
 }
 
-// kHz formats a frequency in Hz as kilohertz with one decimal place.
+// kHz formats a measured frequency in Hz as kilohertz with one decimal place.
 func kHz(hz float64) string {
 	return fmt.Sprintf("%.1f kHz", hz/1000)
+}
+
+// rateKHz formats a sample rate in Hz as kilohertz without trailing zeros:
+// 44100 is "44.1 kHz", 96000 is "96 kHz".
+func rateKHz(rate int) string {
+	return strconv.FormatFloat(float64(rate)/1000, 'f', -1, 64) + " kHz"
 }
