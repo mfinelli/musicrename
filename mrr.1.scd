@@ -160,7 +160,7 @@ Checks include:
 
 Read-only; makes no filesystem changes.
 
-## mrr spectrum [_path_] [*--png* _dir_ [*--annotated*]] [*-v*]
+## mrr spectrum [_path_] [*--png* _dir_ [*--annotated* [*--fixed-scale*]]] [*-v*]
 
 Checks whether audio stored in a lossless container (FLAC, or ALAC in an
 *.m4a*) is really lossless, or is a lossy encode (MP3, AAC, ...) that was
@@ -209,6 +209,13 @@ or *likely fake*, or if a track cannot be decoded.
 	Draw each image from the analysis itself instead of with *ffmpeg*: the
 	detected cutoff is marked on it, and for hi-res files the top of CD
 	bandwidth. Requires *--png*.
+
+*--fixed-scale*
+	With *--annotated*, use the same color scale (-140 dB to -20 dB) for every
+	image, so that a color always means the same level and images of different
+	tracks can be compared. Without this option each image's scale is set
+	from its own loudness, which shows each file's shape clearly but makes
+	the same audio at different volumes look identical. Requires *--annotated*.
 
 *-v*, *--verbose*
 	Show the technical detail behind each verdict: the analysis window, the

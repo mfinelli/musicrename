@@ -194,7 +194,7 @@ func TestRenderAnnotated(t *testing.T) {
 	cliff := &Cliff{CutoffHz: 16100, DropDB: 43}
 	res := resultFor(sr, cliff, VerdictLikelyFake)
 
-	img := renderAnnotated(g, res, 0, "track.flac")
+	img := renderAnnotated(g, res, 0, "track.flac", AnnotateOptions{})
 
 	t.Run("has the expected size and background", func(t *testing.T) {
 		assert.Equal(t, image.Rect(0, 0, imageW, imageH), img.Bounds())
@@ -259,7 +259,7 @@ func TestRenderAnnotatedWithoutACliff(t *testing.T) {
 	g := lowpassGrid(44100, 22050, 400)
 	res := resultFor(44100, nil, VerdictOK)
 
-	img := renderAnnotated(g, res, 0, "good.flac")
+	img := renderAnnotated(g, res, 0, "good.flac", AnnotateOptions{})
 
 	assert.Equal(t, 0, count(img, img.Bounds(), colCutoff), "no cutoff, so no marker")
 	assert.Greater(t, count(img, image.Rect(0, 30, imageW, 42), colOK), 5)
@@ -271,7 +271,7 @@ func TestRenderAnnotatedHiRes(t *testing.T) {
 	g := lowpassGrid(sr, 25800, 200)
 	res := resultFor(sr, &Cliff{CutoffHz: 25800, DropDB: 38}, VerdictLikelyFake)
 
-	img := renderAnnotated(g, res, 0, "up.flac")
+	img := renderAnnotated(g, res, 0, "up.flac", AnnotateOptions{})
 
 	t.Run("marks the top of CD bandwidth with a dashed line", func(t *testing.T) {
 		y := freqY(22050, nyq)
@@ -297,7 +297,7 @@ func TestRenderAnnotatedEdgeCases(t *testing.T) {
 		g := &grid{sampleRate: 44100, window: 4096}
 		res := resultFor(44100, nil, VerdictInconclusive)
 
-		img := renderAnnotated(g, res, 0, "empty.flac")
+		img := renderAnnotated(g, res, 0, "empty.flac", AnnotateOptions{})
 
 		assert.Equal(t, image.Rect(0, 0, imageW, imageH), img.Bounds())
 		assert.Greater(t, countNot(img, image.Rect(0, 0, imageW, marginT-2), colBackground), 100)
@@ -307,7 +307,7 @@ func TestRenderAnnotatedEdgeCases(t *testing.T) {
 		g := lowpassGrid(44100, 22000, 100)
 		res := resultFor(44100, &Cliff{CutoffHz: 21990, DropDB: 40}, VerdictSuspect)
 
-		img := renderAnnotated(g, res, 0, "top.flac")
+		img := renderAnnotated(g, res, 0, "top.flac", AnnotateOptions{})
 
 		y := freqY(21990, 22050)
 		assert.Equal(t, colCutoff, img.RGBAAt(marginL+plotW/2, y))
@@ -332,7 +332,7 @@ func TestRenderAnnotatedEdgeCases(t *testing.T) {
 		g := &grid{sampleRate: 44100, window: window, cols: b.finish()}
 		res := resultFor(44100, nil, VerdictOK)
 
-		img := renderAnnotated(g, res, 0, "gap.flac")
+		img := renderAnnotated(g, res, 0, "gap.flac", AnnotateOptions{})
 
 		y := freqY(5000, 22050)
 		assert.Greater(t, luma(img.RGBAAt(marginL+plotW/4, y)), 100.0)
@@ -380,7 +380,7 @@ func TestWriteAnnotated(t *testing.T) {
 	t.Run("writes a PNG with the cutoff marked", func(t *testing.T) {
 		dst := filepath.Join(t.TempDir(), "out.png")
 
-		err := writeAnnotated(ctx, &fakeSource{data: data}, "/music/01 track.flac", dst, res, th)
+		err := writeAnnotated(ctx, &fakeSource{data: data}, "/music/01 track.flac", dst, res, th, AnnotateOptions{})
 
 		require.NoError(t, err)
 		img := decodePNG(t, dst)
@@ -391,14 +391,14 @@ func TestWriteAnnotated(t *testing.T) {
 
 	t.Run("closes the source", func(t *testing.T) {
 		src := &fakeSource{data: data}
-		require.NoError(t, writeAnnotated(ctx, src, "x.flac", filepath.Join(t.TempDir(), "o.png"), res, th))
+		require.NoError(t, writeAnnotated(ctx, src, "x.flac", filepath.Join(t.TempDir(), "o.png"), res, th, AnnotateOptions{}))
 		assert.True(t, src.closed)
 	})
 
 	t.Run("a source that cannot be opened is an error and writes nothing", func(t *testing.T) {
 		dst := filepath.Join(t.TempDir(), "out.png")
 
-		err := writeAnnotated(ctx, failSource{errors.New("boom")}, "x.flac", dst, res, th)
+		err := writeAnnotated(ctx, failSource{errors.New("boom")}, "x.flac", dst, res, th, AnnotateOptions{})
 
 		assert.ErrorContains(t, err, "boom")
 		_, statErr := os.Stat(dst)
@@ -409,7 +409,7 @@ func TestWriteAnnotated(t *testing.T) {
 		dst := filepath.Join(t.TempDir(), "out.png")
 		src := &fakeSource{data: data, closeErr: errors.New("ffmpeg: corrupt")}
 
-		err := writeAnnotated(ctx, src, "x.flac", dst, res, th)
+		err := writeAnnotated(ctx, src, "x.flac", dst, res, th, AnnotateOptions{})
 
 		assert.ErrorContains(t, err, "corrupt")
 		_, statErr := os.Stat(dst)
@@ -419,8 +419,136 @@ func TestWriteAnnotated(t *testing.T) {
 	t.Run("a destination that cannot be created is an error", func(t *testing.T) {
 		dst := filepath.Join(t.TempDir(), "no-such-dir", "out.png")
 
-		err := writeAnnotated(ctx, &fakeSource{data: data}, "x.flac", dst, res, th)
+		err := writeAnnotated(ctx, &fakeSource{data: data}, "x.flac", dst, res, th, AnnotateOptions{})
 
 		assert.Error(t, err)
+	})
+}
+
+// flatGrid returns a grid of identical frames in which every bin has power p.
+func flatGrid(sampleRate int, p float64, frames int) *grid {
+	window := WindowSize(sampleRate)
+	b := newGridBuilder(window, gridMaxColumns)
+	for range frames {
+		b.add(flatFrame(window, p))
+	}
+	return &grid{sampleRate: sampleRate, window: window, cols: b.finish()}
+}
+
+func TestRenderAnnotatedFixedScale(t *testing.T) {
+	const sr = 44100
+	res := resultFor(sr, nil, VerdictOK)
+
+	loud := flatGrid(sr, 1e-6, 100)  // -60 dB in every bin
+	quiet := flatGrid(sr, 1e-9, 100) // -90 dB in every bin
+
+	// A point in the middle of the plot, clear of the axes and markers.
+	probe := func(img *image.RGBA) color.RGBA {
+		return img.RGBAAt(marginL+plotW/2, freqY(8000, sr/2))
+	}
+	span := fixedScaleTopDB - fixedScaleBottomDB
+
+	t.Run("the fixed range is sensible", func(t *testing.T) {
+		assert.Greater(t, fixedScaleTopDB, fixedScaleBottomDB)
+		assert.Equal(t, 120.0, span)
+		// A 16-bit file's rounding-noise floor (about -129 dB) is inside
+		// the scale, just above its bottom, rather than off the end of it.
+		assert.Greater(t, -129.0, fixedScaleBottomDB)
+		assert.Less(t, -129.0, fixedScaleBottomDB+0.15*span)
+	})
+
+	t.Run("by default each picture is stretched to its own range", func(t *testing.T) {
+		a := renderAnnotated(loud, res, 0, "a.flac", AnnotateOptions{})
+		b := renderAnnotated(quiet, res, 0, "b.flac", AnnotateOptions{})
+
+		// Loud and quiet look identical: each is as loud as it gets.
+		assert.Equal(t, probe(a), probe(b))
+		assert.Equal(t, heat(1), probe(a))
+	})
+
+	t.Run("with a fixed scale the same level is always the same color", func(t *testing.T) {
+		opts := AnnotateOptions{FixedScale: true}
+		a := renderAnnotated(loud, res, 0, "a.flac", opts)
+		b := renderAnnotated(quiet, res, 0, "b.flac", opts)
+
+		assert.Equal(t, heat((-60-fixedScaleBottomDB)/span), probe(a))
+		assert.Equal(t, heat((-90-fixedScaleBottomDB)/span), probe(b))
+		assert.Greater(t, luma(probe(a)), luma(probe(b))+20, "the quieter file is darker")
+	})
+
+	t.Run("a fixed scale gives the same color for the same file however the rest sounds", func(t *testing.T) {
+		// The point of the option: what a pixel means does not depend on
+		// anything else in the picture. Add a very loud passage to one
+		// file and a given quiet pixel must not change color.
+		opts := AnnotateOptions{FixedScale: true}
+		window := WindowSize(sr)
+		b := newGridBuilder(window, gridMaxColumns)
+		for range 50 {
+			b.add(flatFrame(window, 1e-9))
+		}
+		for range 50 {
+			b.add(flatFrame(window, 1e-2)) // -20 dB: the top of the scale
+		}
+		mixed := &grid{sampleRate: sr, window: window, cols: b.finish()}
+
+		img := renderAnnotated(mixed, res, 0, "m.flac", opts)
+
+		quietSide := img.RGBAAt(marginL+plotW/4, freqY(8000, sr/2))
+		assert.Equal(t, heat((-90-fixedScaleBottomDB)/span), quietSide)
+	})
+
+	t.Run("levels beyond either end saturate", func(t *testing.T) {
+		opts := AnnotateOptions{FixedScale: true}
+		hot := renderAnnotated(flatGrid(sr, 1, 100), res, 0, "h.flac", opts)      // 0 dB
+		cold := renderAnnotated(flatGrid(sr, 1e-18, 100), res, 0, "c.flac", opts) // -180 dB
+
+		assert.Equal(t, heat(1), probe(hot))
+		assert.Equal(t, heat(0), probe(cold))
+	})
+
+	t.Run("the color bar still runs loud to quiet", func(t *testing.T) {
+		img := renderAnnotated(loud, res, 0, "a.flac", AnnotateOptions{FixedScale: true})
+
+		x := marginL + plotW + 18 + 5
+		assert.Equal(t, heat(1), img.RGBAAt(x, marginT))
+		assert.Equal(t, heat(0), img.RGBAAt(x, marginT+plotH-1))
+	})
+
+	t.Run("the footer says which scale was used", func(t *testing.T) {
+		rel := renderAnnotated(loud, res, 0, "a.flac", AnnotateOptions{})
+		fix := renderAnnotated(loud, res, 0, "a.flac", AnnotateOptions{FixedScale: true})
+
+		footer := image.Rect(marginL, imageH-26, imageW, imageH)
+		differs := false
+		for y := footer.Min.Y; y < footer.Max.Y && !differs; y++ {
+			for x := footer.Min.X; x < footer.Max.X; x++ {
+				if rel.RGBAAt(x, y) != fix.RGBAAt(x, y) {
+					differs = true
+					break
+				}
+			}
+		}
+		assert.True(t, differs)
+	})
+
+	t.Run("the option reaches the written file", func(t *testing.T) {
+		l := quantize(musicSignal(44100, synthSamples, 1, 0), 16)
+		r := quantize(musicSignal(44100, synthSamples, 2, 0), 16)
+		data := pcm(l, r)
+		th := DefaultThresholds()
+		resp, err := AnalyzeStream(bytes.NewReader(data), stereo44(16), th)
+		require.NoError(t, err)
+
+		dir := t.TempDir()
+		plain, fixed := filepath.Join(dir, "plain.png"), filepath.Join(dir, "fixed.png")
+		require.NoError(t, writeAnnotated(context.Background(), &fakeSource{data: data}, "x.flac", plain, resp, th, AnnotateOptions{}))
+		require.NoError(t, writeAnnotated(context.Background(), &fakeSource{data: data}, "x.flac", fixed, resp, th, AnnotateOptions{FixedScale: true}))
+
+		// Same audio, different scale: the two files cannot be identical.
+		a, errA := os.ReadFile(plain)
+		b, errB := os.ReadFile(fixed)
+		require.NoError(t, errA)
+		require.NoError(t, errB)
+		assert.NotEqual(t, a, b)
 	})
 }

@@ -935,6 +935,15 @@ silence handling of the analysis, so the picture shows what the analysis saw,
 and its memory is bounded however long the track is, because neighboring time
 columns are merged as the audio grows.
 
+By default each annotated picture's color scale is set from the file's loudness,
+which shows each file's shape as clearly as possible but makes pictures of
+differently loud files look alike. `--fixed-scale` (which requires
+`--annotated`) uses one scale for every picture so that a color always means the
+same level and tracks can be compared directly. It is not the default because a
+quiet recording looks nearly black on a fixed scale, hiding the edge the picture
+exists to show. Levels are per FFT bin, so pictures are exactly comparable at
+one sample rate and only roughly across rates.
+
 ### 12.6 Non-goals
 
 - Identifying which encoder or bitrate produced a file.

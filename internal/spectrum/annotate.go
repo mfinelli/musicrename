@@ -49,9 +49,38 @@ const (
 	imageH = marginT + plotH + marginB
 
 	// dynamicRangeDB is how many dB below the loudest part of the audio the
-	// color scale reaches.
+	// color scale reaches, when the scale is set from the audio itself.
 	dynamicRangeDB = 110.0
+
+	// fixedScaleTopDB and fixedScaleBottomDB are the levels at the two ends
+	// of the color scale when it is fixed (see AnnotateOptions). The top sits
+	// 20 dB under a full-scale sine, which real music's strongest bins rarely
+	// exceed; the bottom is 11 dB below the rounding-noise floor of a 16-bit
+	// file (about -129 dB), so that floor shows as a faint dark blue, clearly
+	// distinct from the pure black of anything quieter, such as a 24-bit
+	// file's much lower floor.
+	fixedScaleTopDB    = -20.0
+	fixedScaleBottomDB = -140.0
 )
+
+// AnnotateOptions adjusts how an annotated spectrogram is drawn. The zero value
+// gives the default picture.
+type AnnotateOptions struct {
+	// FixedScale draws with a color scale that is the same for every file
+	// (fixedScaleBottomDB to fixedScaleTopDB) instead of one set from the
+	// file's loudness. By default each picture is stretched to use its
+	// whole color range however loud or quiet the audio, which shows each
+	// file's shape clearly but makes pictures of different files look alike.
+	// With a fixed scale the same color always means the same level, so a
+	// quiet recording looks darker than a loud one and pictures can be
+	// compared directly.
+	//
+	// Levels are per FFT bin, and the window grows with the sample rate (see
+	// WindowSize), which shifts the level of noise-like sound by about 3 dB
+	// per doubling. Pictures of files at the same sample rate are therefore
+	// exactly comparable; across sample rates, only roughly.
+	FixedScale bool
+}
 
 var (
 	colBackground = color.RGBA{16, 16, 16, 255}
@@ -239,20 +268,23 @@ func verdictColor(v Verdict) color.RGBA {
 // renderAnnotated draws g as a spectrogram, with axes, a color scale, and
 // markers drawn from the analysis in res: the detected cutoff, and for hi-res
 // files the edge of CD bandwidth.
-func renderAnnotated(g *grid, res *Result, channel int, title string) *image.RGBA {
+func renderAnnotated(g *grid, res *Result, channel int, title string, opts AnnotateOptions) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, imageW, imageH))
 	c := canvas{img}
 	c.fill(img.Rect, colBackground)
 
 	nyq := float64(g.sampleRate) / 2
 	lo, hi := g.levelRange(dynamicRangeDB)
+	if opts.FixedScale {
+		lo, hi = fixedScaleBottomDB, fixedScaleTopDB
+	}
 	total := g.seconds()
 
 	c.drawPlot(g, lo, hi)
 	c.drawAxes(nyq, total)
 	c.drawColorBar(lo, hi)
 	c.drawHeader(res, channel, title)
-	c.drawFooter(g, lo, hi)
+	c.drawFooter(g, lo, hi, opts.FixedScale)
 	c.drawMarkers(res, nyq)
 
 	return img
@@ -352,12 +384,17 @@ func (c canvas) drawHeader(res *Result, channel int, title string) {
 	c.text(marginL+textWidth(info), 38, res.Verdict.String(), verdictColor(res.Verdict))
 }
 
-// drawFooter explains what the picture shows.
-func (c canvas) drawFooter(g *grid, lo, hi float64) {
+// drawFooter explains what the picture shows, including which color scale it
+// uses, so that a picture is never mistaken for one on the other scale.
+func (c canvas) drawFooter(g *grid, lo, hi float64, fixed bool) {
 	binHz := float64(g.sampleRate) / float64(g.window)
+	scale := "color scale relative to this file"
+	if fixed {
+		scale = "fixed color scale"
+	}
 	c.text(marginL, imageH-12, fmt.Sprintf(
-		"Hann window %d samples (%.1f Hz bins) | color scale %.0f to %.0f dB re full-scale sine, per bin",
-		g.window, binHz, lo, hi), colMuted)
+		"Hann window %d samples (%.1f Hz bins) | %s, %.0f to %.0f dB re full-scale sine, per bin",
+		g.window, binHz, scale, lo, hi), colMuted)
 }
 
 // drawMarkers draws the analysis onto the picture: the detected cutoff and, for
@@ -401,11 +438,11 @@ func (c canvas) drawMarkers(res *Result, nyq float64) {
 // was measured: the same channel, window and silence handling, with the
 // detected cutoff drawn on it. The extra pass costs about as much as the
 // analysis did.
-func WriteAnnotatedSpectrogram(ctx context.Context, src, dst string, res *Result, th Thresholds) error {
-	return writeAnnotated(ctx, execSource{}, src, dst, res, th)
+func WriteAnnotatedSpectrogram(ctx context.Context, src, dst string, res *Result, th Thresholds, opts AnnotateOptions) error {
+	return writeAnnotated(ctx, execSource{}, src, dst, res, th, opts)
 }
 
-func writeAnnotated(ctx context.Context, srcr source, srcPath, dst string, res *Result, th Thresholds) error {
+func writeAnnotated(ctx context.Context, srcr source, srcPath, dst string, res *Result, th Thresholds, opts AnnotateOptions) error {
 	channel := annotatedChannel(res)
 
 	g, err := openGrid(ctx, srcr, srcPath, res.Info, channel, th.SilenceDB)
@@ -413,7 +450,7 @@ func writeAnnotated(ctx context.Context, srcr source, srcPath, dst string, res *
 		return err
 	}
 
-	img := renderAnnotated(g, res, channel, filepath.Base(srcPath))
+	img := renderAnnotated(g, res, channel, filepath.Base(srcPath), opts)
 
 	f, err := os.Create(dst)
 	if err != nil {

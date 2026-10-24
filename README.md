@@ -135,13 +135,14 @@ the command exits non-zero if any track is `suspect` or `likely fake`. This is a
 heuristic: `ok` is not proof, and a high-bitrate lossy encode can pass. With
 `--png dir`, a spectrogram image of each track is written to `dir` for judging
 by eye (add `--annotated` to have the tool draw it with the detected cutoff
-marked); `-v` shows the numbers behind each verdict. See
+marked, and `--fixed-scale` to use the same color scale for every image so
+tracks can be compared); `-v` shows the numbers behind each verdict. See
 [SPECTRUM.md](SPECTRUM.md) for how it works, how it was calibrated, and what it
 can't detect.
 
 ```sh
 mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
-mrr spectrum "01 crazy in love.flac" --png /tmp/spectra --annotated -v
+mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love --png /tmp/spectra --annotated --fixed-scale
 ```
 
 ### `sums`

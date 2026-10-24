@@ -145,7 +145,7 @@ func TestWriteAnnotatedSpectrogramRealFiles(t *testing.T) {
 		require.NoError(t, err)
 
 		dst := filepath.Join(dir, filepath.Base(src)+".png")
-		require.NoError(t, WriteAnnotatedSpectrogram(ctx, src, dst, res, th))
+		require.NoError(t, WriteAnnotatedSpectrogram(ctx, src, dst, res, th, AnnotateOptions{}))
 		return res, decodePNG(t, dst)
 	}
 

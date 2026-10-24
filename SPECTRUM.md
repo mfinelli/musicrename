@@ -32,6 +32,7 @@ mrr spectrum album/                  # every track in one album
 mrr spectrum "01 track.flac"         # one track
 mrr spectrum album/ --png out/       # also write a spectrogram image per track
 mrr spectrum album/ --png out/ --annotated   # ...with the cutoff marked on it
+mrr spectrum album/ --png out/ --annotated --fixed-scale   # ...same scale
 mrr spectrum album/ -v               # show the numbers behind each verdict
 ```
 
@@ -484,6 +485,16 @@ about a thousand columns of 512 frequency rows are ever held. The second pass
 uses the same channel, window and silence handling as the analysis, so the
 picture shows what the analysis saw.
 
+**Two color scales for annotated spectrograms.** On a fixed scale a quiet
+recording looks nearly black, which hides the edge the picture exists to show.
+Scaling each picture to its own loudness keeps the shape visible for every file,
+so that is the default, and the fixed scale is there for the case where
+comparing files matters more than seeing each one at its best. The fixed range
+is -140 to -20 dB: a full-scale sine reads 0 dB, and the loudest bins of real
+music sit below about -20 dB, so the top 20 dB would be wasted; and the bottom
+is just under the rounding-noise floor of a 16-bit file, so that floor is
+visible as a faint color rather than lost.
+
 **Thresholds are compiled in and are not configurable at runtime.** They are all
 in one place (`spectrum.Thresholds`) with documentation on each, and are not
 exposed as command-line flags. They were set from measurements on synthetic
@@ -637,11 +648,34 @@ as the verdict, and marks what the tool concluded:
   verdict was based on) and the verdict in color: green for `ok`, yellow for
   `suspect`, red for `likely fake`.
 
-The color scale is set from the audio itself: the top is the loudness reached by
-all but the loudest 0.1% of the picture, and the scale runs 110 dB down from
-there. The values are therefore relative to this file, not to a fixed reference,
-and are comparable between pictures only roughly. The footer gives the window
-size and the scale actually used.
+There are two color scales, and the footer of every picture says which one it
+uses.
+
+- **Relative to the file (the default).** The top of the scale is the loudness
+  reached by all but the loudest 0.1% of the picture, and the scale runs 110 dB
+  down from there. Every picture uses its whole range of color however loud or
+  quiet the file is, which shows the shape of each file as clearly as possible.
+  The cost is that **pictures of different files cannot be compared by color**:
+  the same audio at two different volumes produces identical pictures, and only
+  the numbers on the color bar differ.
+- **Fixed (`--fixed-scale`, which requires `--annotated`).** The scale is -140
+  dB to -20 dB for every picture, so a given color always means the same level.
+  A quiet recording looks darker than a loud one, and a lossy file's empty
+  region looks darker than a genuine file's quiet one. Use it to compare tracks,
+  for example to see at a glance which tracks of an album are quieter, or
+  whether the high frequencies of two masterings really differ. Levels above -20
+  dB show as the brightest color and levels below -140 dB as black. A 16-bit
+  file's rounding-noise floor (about -129 dB) shows as a faint dark blue,
+  distinct from the pure black of anything quieter, such as a 24-bit file's far
+  lower floor.
+
+Levels are per FFT bin, and the window grows with the sample rate (see
+[How big a window?](#5-how-big-a-window-4096-8192-16384)), which lowers the
+level of noise-like sound by about 3 dB each time the window doubles. Pictures
+of files at the same sample rate, which is the usual case for an album, are
+exactly comparable on the fixed scale. Pictures of files at different sample
+rates are comparable only roughly: tonal peaks line up, but noise-like sound
+reads a few dB lower at the higher rate.
 
 ---
 
