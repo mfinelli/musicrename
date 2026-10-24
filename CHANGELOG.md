@@ -6,6 +6,19 @@ my own reference.
 
 ## Unreleased
 
+- Add `riplog`, which checks an Exact Audio Copy rip log for the correct
+  settings: secure mode, accurate stream, audio cache defeated, no C2 pointers,
+  normalization, or removal of silent blocks, the drive's known read offset and
+  overread setting, matching test and copy CRCs, no reported errors, AccurateRip
+  and CUETools database results, and FLAC verification, so a wrong option is
+  noticed right after the rip. It also checks that the cue sheet and FLAC image
+  beside the log match it: the same tracks, each `INDEX 01` at the log's start
+  sector, the same disc ID, and an image of CD audio exactly as long as the
+  disc. It also looks the disc's MusicBrainz disc ID up and checks that it is
+  one the release in `musicbrainz.txt` has, naming the releases that have it if
+  not; `--offline` skips that. Image rips from English-language EAC 1.x only.
+  Exits non-zero on errors, and on warnings with `--strict`; `-v` shows every
+  check.
 - Add `spectrum`, which checks whether a FLAC (or ALAC) track or album is really
   lossless or a lossy encode (MP3, AAC, etc.) that was converted afterwards. It
   measures the file's frequency spectrum and looks for the sharp cutoff lossy

@@ -954,7 +954,231 @@ one sample rate and only roughly across rates.
 
 ---
 
-## 13. Architectural Principles
+## 13. Rip Log Verification
+
+`musicrename riplog` checks an Exact Audio Copy (EAC) rip log against the
+settings a rip should have been made with. A rip made with a wrong setting still
+completes, and the result usually sounds fine, so the mistake is easy to make
+and hard to notice. The log records every setting that affects accuracy, which
+makes it possible to check them after the fact.
+
+### 13.1 Scope
+
+The command operates on a single `.log` file or on the `.log` files directly
+inside one directory (a multi-disc rip has one per disc). It is meant to be run
+on the original rip as archived, before the files are checksummed and before the
+image is split for the library.
+
+Only **image rips** from **English-language EAC 1.x** are supported: one disc
+ripped as one range, with a cue sheet. This is how the library's CDs are ripped
+(see `WORKFLOW.md`). Anything else (a per-track log, a log in another language,
+a log from EAC before 1.0) is reported as unsupported rather than judged against
+rules written for something else. An unsupported log counts as an error, because
+it cannot be verified. Supporting more is possible but unneeded, and would
+multiply the number of log layouts the parser has to know.
+
+### 13.2 Policy, not a score
+
+Some other tools attempt to grade a log with a score, deducting points for each
+departure from some setting, but that model is a poor fit here.
+
+`riplog` instead runs a fixed list of checks and reports each as one of:
+
+- **ok** — the check holds.
+- **note** — informational; needs no action.
+- **warning** — something could not be confirmed or looks unusual, but nothing
+  is known to be wrong.
+- **error** — a setting is wrong, the log shows a problem with the rip, or the
+  log cannot be verified as it should be.
+
+### 13.3 The profile
+
+The required settings are the author's own and are hardcoded in the package
+(`settingRules` in `internal/riplog/verify.go`), not configurable, for the same
+reason device targets are: a short, personally-curated list lives in code rather
+than behind a configuration system. A rip with any of them wrong should be
+redone, because the mistake is in the audio and not only in the log.
+
+| Setting                                     | Required | Why                                                                      |
+| ------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| Read mode                                   | Secure   | Only secure mode re-reads sectors until they agree.                      |
+| Utilize accurate stream                     | Yes      | Otherwise the drive's reading can drift unnoticed.                       |
+| Defeat audio cache                          | Yes      | Otherwise re-reads may come from the drive's cache and hide errors.      |
+| Make use of C2 pointers                     | No       | A drive's own error report can be wrong, and trusting it skips re-reads. |
+| Fill up missing offset samples with silence | Yes      | Otherwise audio is shifted rather than padded at the ends.               |
+| Delete leading and trailing silent blocks   | No       | It removes audio, so the result no longer matches the disc.              |
+| Null samples used in CRC calculations       | Yes      | Otherwise CRCs differ from those AccurateRip and other rippers compute.  |
+| Add ID3 tag                                 | No       | ID3 tags do not belong in FLAC files, which use Vorbis comments.         |
+
+Besides these settings it checks that:
+
+- no normalization is recorded;
+- the encoder is `flac.exe` and its command line includes `-V`, so the encode is
+  verified to decode back to the same audio;
+- the read offset and the overread setting are the ones known for the drive
+  (13.5);
+- both the test and the copy pass were made and their CRCs agree, and the log
+  says the copy is OK;
+- no errors were reported;
+- the log's table of contents has tracks, and AccurateRip results cover all of
+  them;
+- AccurateRip confirmed every track. A disc that AccurateRip does not know, or a
+  pressing that differs, is a warning rather than an error, since neither is
+  evidence of a bad rip;
+- the CUETools database result, when present, confirms every track. Its absence
+  is a warning, since it comes from a plugin that may not be installed;
+- the cue sheet and FLAC image that go with the log agree with it (13.6);
+- the disc is one the MusicBrainz release in `musicbrainz.txt` has (13.7);
+- the log carries its checksum (13.8).
+
+Settings outside the profile, such as the interface EAC used or the encoder's
+bitrate and quality, are not looked at, whether the log states them or not.
+
+### 13.4 Unverifiable is not verified
+
+A setting the log is expected to state but does not is an error ("not found in
+the log, so it cannot be verified"). A check never passes because the
+information it needs is missing. "Expected" means part of the profile: a log
+with `Read mode` deleted fails, while one with a line deleted that the profile
+does not look at is unchanged.
+
+### 13.5 Drive offset and overread
+
+The read offset is a property of the drive: how far its reading is shifted from
+where the audio really is. A wrong one shifts every track. The offsets of the
+drives actually used are a small table in code (`internal/riplog/drives.go`),
+each one a value AccurateRip has confirmed for that drive. A known drive must
+match its offset; a mismatch is an error.
+
+Overread (`Overread into Lead-In and Lead-Out`) is also a property of the drive
+and is recorded in the same table. To correct for a drive's offset, EAC needs a
+few samples from beyond the edge of the audio: past the end of the last track
+for a positive offset, before the start of the first track for a negative one. A
+drive that can read into the lead-in and lead-out supplies them; for one that
+cannot, EAC fills them in with silence, which is why
+`Fill up missing offset samples with silence` is required to be on. The log
+cannot say which kind of drive it is, and turning overread on for a drive that
+cannot do it can cause read errors, so the table records the setting as
+determined for each drive (EAC can test for it), and a known drive's log must
+match. The difference is a handful of samples at the very ends of the disc.
+
+The log's drive line carries its adapter and ID, which vary, so it is normalized
+before lookup (lower-cased, adapter and revision removed). For an unknown drive
+the offset result depends on whether AccurateRip confirmed every track at the
+offset used: if so, it is a note that the drive and offset can be added to the
+table; if not, a warning that the offset cannot be verified. Overread is only
+noted, since there is nothing to compare it with. When a drive is added or
+replaced, run EAC's AccurateRip configuration, rip a disc AccurateRip knows, and
+add the drive to the table, with its overread setting.
+
+### 13.6 Cue sheet and image
+
+An image rip is a log, a cue sheet, and one FLAC file holding the whole disc,
+and the three have to belong together. For a log `Album.log`, `riplog` expects
+`Album.cue` beside it (the name EAC gives them, and so also for `(disc N)`) and
+reads the audio file the cue sheet names. It checks that:
+
+- the cue sheet is there and can be read. EAC writes cue sheets in the system's
+  ANSI code page unless told otherwise, so one with an accent in a title is not
+  valid UTF-8; text that is not is read as Windows-1252;
+- it names exactly one file, which is a `.flac` in the same directory and is a
+  well-formed FLAC file. The file's name is also compared with the image the log
+  says was ripped; a difference is only a warning, since the files may have been
+  renamed;
+- the image is CD audio: 44.1 kHz, 16-bit, stereo;
+- the image holds exactly the audio the disc has, which is (the last track's end
+  sector + 1) × 588 samples, 588 being the samples in each channel of a sector
+  (44,100 a second over 75 sectors a second). That catches an image cut short or
+  padded, which still decodes and so passes any check on its contents;
+- it has the same tracks as the log, numbered the same, all of them audio;
+- every track's `INDEX 01` is exactly where the log's table of contents puts the
+  track: the log's start sector, written as minutes, seconds and frames;
+- its `REM DISCID` equals the freedb disc ID computed from the log's table of
+  contents. EAC computes the one in the cue sheet from that same table, so a cue
+  sheet from another disc cannot pass this even if its tracks happen to line up;
+- any `INDEX 00` lines make sense: each lies inside the track before it.
+
+The format and the length are read from the FLAC's STREAMINFO block: the first
+42 bytes of every FLAC file hold its sample rate, channel count, bit depth and
+exact sample count.
+
+A disc can have audio before its first track: a hidden track in the pregap, or a
+short silence. The cue sheet then gives track 1 an `INDEX 00` at `00:00:00` and
+an `INDEX 01` at the log's start sector for it, so every position is measured
+from the first sector of the disc and is checked like any other. If that audio
+was left out of the image, the cue sheet's positions are all smaller than the
+log's by exactly its length, which is reported as such (the image starts at
+track 1, leaving out the hidden track or pregap) instead of as a list of
+unrelated mismatches. The image's expected length follows the cue sheet in
+either case, since its `00:00:00` is where the image begins.
+
+`INDEX 00` marks where a track's pregap begins and is what EAC's Detect Gaps
+leaves in the cue sheet. The checks can confirm that what is recorded is
+consistent, but not that nothing is missing: a disc with no pregaps and a rip
+made without detecting them produce the same cue sheet. A cue sheet with none is
+therefore a note rather than a failure, and seeing that gaps were detected is
+left to the workflow (`WORKFLOW.md`).
+
+### 13.7 MusicBrainz release
+
+The same album is often several releases on MusicBrainz, one per pressing, and
+ripping one while tagging another is easy to do and not obvious afterwards. The
+disc's MusicBrainz disc ID identifies its track layout, so it can be compared
+with the release saved in `musicbrainz.txt` beside the log (see `WORKFLOW.md`),
+which holds that release's URL and nothing else.
+
+The disc ID is computed from the log's table of contents the way MusicBrainz's
+libdiscid computes it from a disc's: a SHA-1 hash of the first and last track
+numbers and the offsets of the lead-out and of each of 99 track slots (zero for
+a track the disc does not have), written in hex and base64 encoded with a
+URL-safe alphabet. Every offset counts from the physical start of the disc's
+audio, 150 sectors before the sector 0 that EAC counts from. The computation
+reproduces the test vector MusicBrainz's libraries are tested with, and gives
+IDs that resolve to the right release for real discs, including one with audio
+before track 1, where the first offset is not the usual 150.
+
+One request asks MusicBrainz for the release's disc IDs, and the result is:
+
+- **listed on the release** — ok, saying which medium of a multi-disc release it
+  is;
+- **the release has disc IDs, but not this one** — a warning, since it is
+  probably a different pressing. One more request finds the releases that do
+  have this disc ID and names them, which is usually the answer;
+- **the release has no disc IDs yet** — a note: there is nothing to compare;
+- **MusicBrainz has no such release** — an error: `musicbrainz.txt` names one
+  that does not exist;
+- **no `musicbrainz.txt`** — a warning, and a file that is not a release URL (a
+  release group's, say) is an error;
+- **MusicBrainz cannot be reached** — a warning. Being offline says nothing
+  about the rip.
+
+`--offline` makes no request: the disc ID is still computed and shown, and noted
+as not compared. The requests follow the rules of the `musicbrainz` package: one
+release is asked about once per run, however many discs of it are checked,
+within MusicBrainz's rate limit, on demand for one album, and time-limited so
+that a machine with no network is told so rather than kept waiting.
+
+### 13.8 Log checksum
+
+EAC signs its logs with a checksum. `riplog` checks that the checksum is present
+and well formed, and does not verify it. Verifying it would show that a log has
+not been edited since EAC wrote it, which matters for a log received from
+someone else and not for one's own rip. A log with no checksum, or a malformed
+one, was edited, cut short, or written by an old EAC, and is an error.
+
+### 13.9 Output and exit status
+
+By default each log is shown with the checks that did not pass, followed by a
+count of those that did, so a good rip is a single line. `--verbose` lists every
+check with what was found.
+
+The exit status is non-zero when any log has an error. Warnings and notes do not
+fail the run, so a disc AccurateRip does not know does not stop a script; with
+`--strict`, warnings fail it too. The command only reads the logs.
+
+---
+
+## 14. Architectural Principles
 
 Several principles govern the design:
 
@@ -1008,3 +1232,9 @@ competing naming conventions.
 A heuristic check reports what it measured and how strongly that points to a
 conclusion. It separates ambiguous results from conclusive ones, does not claim
 more certainty than it has, and never acts on its own conclusions.
+
+### Unverifiable is not verified
+
+A check that cannot be performed because the information it needs is missing is
+reported as such. It is never passed silently, and a verifier does not treat the
+absence of evidence of a problem as evidence that there is none.

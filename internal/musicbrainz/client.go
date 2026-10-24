@@ -22,6 +22,10 @@
 // The comparison is always snapshot-then vs. MusicBrainz-now, not the
 // user's current tag vs. MusicBrainz-now.
 //
+// It also answers which disc IDs a release has, and which releases a disc ID
+// is attached to ([Lookup]), for checking that a ripped disc is the release it
+// is tagged as.
+//
 // This package intentionally only supports a single, on-demand, one-release
 // lookup at a time. MusicBrainz's own rate-limiting documentation
 // (https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting) explicitly

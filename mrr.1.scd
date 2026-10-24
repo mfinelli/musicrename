@@ -221,6 +221,54 @@ or *likely fake*, or if a track cannot be decoded.
 	Show the technical detail behind each verdict: the analysis window, the
 	bit depth, and each channel's cutoff and drop.
 
+## mrr riplog [_path_] [*--strict*] [*--offline*] [*-v*]
+
+Checks the settings recorded in an Exact Audio Copy rip log against the ones a
+rip should have been made with. EAC does not refuse to rip with a wrong setting,
+and the result usually sounds fine, so nothing at the time says anything is
+wrong.
+
+_path_ is a *.log* file, which is checked, or a directory, in which every *.log*
+file directly inside it is checked (a multi-disc rip has one per disc). A log
+named _Album_.log is expected to have _Album_.cue beside it. Run it
+on the original rip, before the files are checksummed and the image is split.
+Defaults to the current directory.
+
+The checks fall into three groups. The first is how accurately EAC read the
+disc: the read mode, accurate stream, whether the audio cache was defeated, and
+C2 pointers. The second is what was done to the audio: normalization, removal of
+silent blocks, and the handling of the drive's read offset and of the samples at
+the ends of the disc. The third is how the rip turned out: whether the test and
+copy passes agree, any reported errors, and what AccurateRip and the CUETools
+database made of it. The encoder must also be FLAC with verification on, and the
+log must carry its checksum, which is not verified. A fourth group is the files
+that go with the log: the cue sheet of the same name must agree with the log's
+table of contents, and the FLAC image it names must be CD audio of exactly the
+length the disc has. The last check is that the disc is one the MusicBrainz
+release saved in _musicbrainz.txt_ has, which needs a network connection. A required setting that the
+log does not state is an error. *mrr riplog --help* lists the settings and the
+values they must have.
+
+Each check is reported as ok, a note, a warning, or an error. By default only
+the checks that did not pass are listed.
+
+Only image rips (one disc, one file, with a cue sheet) from English-language
+EAC 1.x are supported. A log of any other kind is reported as unsupported, which
+counts as an error, since it cannot be verified.
+
+Read-only. Exits non-zero if any log has an error. Warnings, such as a disc that
+AccurateRip does not know, do not by themselves fail the run.
+
+*--strict*
+	Treat warnings as failures for the exit status.
+
+*--offline*
+	Do not look the disc up on MusicBrainz. Its disc ID is still computed and
+	shown, but not compared with the release.
+
+*-v*, *--verbose*
+	List every check, not only those that did not pass.
+
 ## mrr sums [_path_]
 
 Computes MD5 checksums for all files in an album and writes a *sums.md5* file
