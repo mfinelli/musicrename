@@ -34,15 +34,17 @@ func TestMSF(t *testing.T) {
 }
 
 func TestFreeDBID(t *testing.T) {
-	// The first two are the REM DISCID lines EAC wrote in those rips' cue
-	// sheets, so the algorithm is checked against EAC's own output.
+	// Each is the REM DISCID line EAC wrote in that rip's cue sheet, so the
+	// algorithm is checked against EAC's own output. The last is a disc with
+	// audio before track 1, whose first offset is not the usual 150.
 	tests := []struct {
 		fixture string
 		want    string
 	}{
 		{fixtureBlack, "7509E00A"},
 		{fixtureBday, "13111213"},
-		{fixtureCentral, "3E099506"}, // computed independently; no cue sheet
+		{fixtureCentral, "3E099506"},
+		{fixtureTransistor, "310F4D15"}, // track 1 starts at sector 12000
 	}
 	for _, tc := range tests {
 		t.Run(tc.fixture, func(t *testing.T) {
@@ -54,7 +56,12 @@ func TestFreeDBID(t *testing.T) {
 	}
 
 	t.Run("agrees with the cue sheets", func(t *testing.T) {
-		for log, cue := range map[string]string{fixtureBlack: fixtureBlackCue, fixtureBday: fixtureBdayCue} {
+		for log, cue := range map[string]string{
+			fixtureBlack:      fixtureBlackCue,
+			fixtureBday:       fixtureBdayCue,
+			fixtureCentral:    fixtureCentralCue,
+			fixtureTransistor: fixtureTransistorCue,
+		} {
 			l, err := ParseLog(fixture(t, log))
 			require.NoError(t, err)
 			c, err := ParseCue(fixture(t, cue))

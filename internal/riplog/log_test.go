@@ -75,6 +75,26 @@ func TestParseRealLogs(t *testing.T) {
 		assert.Nil(t, l.CTDB)
 	})
 
+	t.Run("an older EAC, on a disc with audio before track 1", func(t *testing.T) {
+		l, err := ParseLog(fixture(t, fixtureTransistor))
+
+		require.NoError(t, err)
+		assert.Equal(t, "1.5", l.Version)
+		assert.Equal(t, "311 / Transistor", l.Title)
+		assert.Equal(t, "PIONEER BD-RW   BDR-209D   Adapter: 1  ID: 0", l.Drive)
+		assert.Equal(t, `S:\EAC\311\[1997] Transistor.wav`, l.Range.Filename)
+
+		require.Len(t, l.TOC, 21)
+		assert.Equal(t, TOCTrack{Number: 1, Start: 12000, End: 25709}, l.TOC[0], "track 1 starts 2:40 in")
+		assert.Equal(t, TOCTrack{Number: 21, Start: 279510, End: 305774}, l.TOC[20])
+
+		require.NotNil(t, l.CTDB, "plugin version 2.1.6, not 2.2.6")
+		assert.Equal(t, "5XXF_GYThsD1L7Sd.3JTg.5EktQ-", l.CTDB.TOCID)
+		assert.True(t, l.CTDB.Found)
+		require.Len(t, l.CTDB.Tracks, 21)
+		assert.Equal(t, "( 31/233) Accurately ripped", l.CTDB.Tracks[0], "counts are padded with a space")
+	})
+
 	t.Run("a disc of a multi-disc release", func(t *testing.T) {
 		l, err := ParseLog(fixture(t, fixtureCentral))
 

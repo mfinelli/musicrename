@@ -53,7 +53,7 @@ func TestDecode(t *testing.T) {
 			got, err := decode(fixture(t, name))
 
 			require.NoError(t, err, name)
-			assert.True(t, strings.HasPrefix(got, "Exact Audio Copy V1.8"), name)
+			assert.True(t, strings.HasPrefix(got, "Exact Audio Copy V1."), name)
 			assert.NotContains(t, got, "\r", name)
 			assert.NotContains(t, got, "\ufeff", name)
 		}

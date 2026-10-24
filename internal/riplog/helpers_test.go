@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -38,7 +39,14 @@ const (
 	fixtureCentral = "central-park-disc-1.log" // disc 1 of a multi-disc release
 )
 
-var allFixtures = []string{fixtureBlack, fixtureBday, fixtureCentral}
+// A rip from an older EAC (1.5, on Windows), of a different drive, of a disc
+// with audio before track 1: it starts at sector 12000, 2:40 in.
+const (
+	fixtureTransistor    = "transistor.log"
+	fixtureTransistorCue = "transistor.cue"
+)
+
+var allFixtures = []string{fixtureBlack, fixtureBday, fixtureCentral, fixtureTransistor}
 
 // The cue sheets that go with two of the logs, as EAC wrote them. The B'day one
 // is in Windows-1252, not UTF-8, because of the accent in "Beyoncé".
@@ -210,6 +218,50 @@ func blackRip(t *testing.T) rip {
 func bdayRip(t *testing.T) rip {
 	t.Helper()
 	return buildRip(t, "B'day", fixture(t, fixtureBday), cueText(t, fixtureBdayCue))
+}
+
+// transistorStem is the name the Transistor rip's files have; the brackets are
+// part of it.
+const transistorStem = "[1997] Transistor"
+
+// transistorPretrack is the length of the audio before track 1 of the
+// Transistor disc, in frames (sectors).
+const transistorPretrack = 12000
+
+// transistorRip builds the real rip of a disc with audio before its first
+// track, with an image that includes it, as EAC makes them.
+func transistorRip(t *testing.T) rip {
+	t.Helper()
+	return buildRip(t, transistorStem, fixture(t, fixtureTransistor), cueText(t, fixtureTransistorCue))
+}
+
+// transistorRipLeftOut builds that rip as it would be if the audio before track
+// 1 had been left out of the image: the cue sheet starts at track 1 (no INDEX
+// 00, INDEX 01 at 00:00:00) and measures every other position from there, and
+// the FLAC is that much shorter. No real EAC output looks like this; it is the
+// real cue sheet with its positions shifted.
+func transistorRipLeftOut(t *testing.T) rip {
+	t.Helper()
+
+	cue := replaced(t, cueText(t, fixtureTransistorCue),
+		"    INDEX 00 00:00:00\n    INDEX 01 02:40:00", "    INDEX 01 00:00:00")
+	re := regexp.MustCompile(`(?m)^(\s+INDEX \d\d )(\d\d):(\d\d):(\d\d)$`)
+	cue = re.ReplaceAllStringFunc(cue, func(m string) string {
+		p := re.FindStringSubmatch(m)
+		mm, _ := strconv.Atoi(p[2])
+		ss, _ := strconv.Atoi(p[3])
+		ff, _ := strconv.Atoi(p[4])
+		frames := (mm*60+ss)*framesPerSecond + ff
+		if frames == 0 {
+			return m // track 1, which now starts the image
+		}
+		return p[1] + msf(frames-transistorPretrack)
+	})
+
+	log := fixture(t, fixtureTransistor)
+	r := buildRip(t, transistorStem, log, cue)
+	require.NoError(t, os.WriteFile(r.path(".flac"), imageFLAC(t, log, transistorPretrack), 0o644))
+	return r
 }
 
 // centralRip builds disc 1 of a multi-disc release, whose names have "(disc 1)"

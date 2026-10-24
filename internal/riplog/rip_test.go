@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -678,104 +677,56 @@ func TestCheckFileImageLength(t *testing.T) {
 	})
 }
 
-// hiddenTrackRip builds a rip of Back in Black as if the disc had audio before
-// track 1: the log says track 1 starts at sector pregap, not 0. With included
-// set, the cue sheet and image keep that audio, as EAC is understood to write
-// them (INDEX 00 at 00:00:00, INDEX 01 at the log's start sector, an image that
-// holds the whole disc); without it, the cue sheet and image begin at track 1.
-func hiddenTrackRip(t *testing.T, pregap int, included bool) rip {
-	t.Helper()
-
-	// The log: track 1 begins at sector pregap instead of 0.
-	logText := regexp.MustCompile(`(?m)^(\s+1\s+\|[^|]*\|[^|]*\|\s+)0(\s+\|\s+23429\s*)$`).
-		ReplaceAllString(fixtureText(t, fixtureBlack), "${1}"+strconv.Itoa(pregap)+"${2}")
-	require.NotEqual(t, fixtureText(t, fixtureBlack), logText, "the log's first track should have moved")
-	l, err := ParseLog([]byte(logText))
-	require.NoError(t, err)
-	require.Equal(t, pregap, l.TOC[0].Start)
-
-	// The cue sheet: its REM DISCID is the one EAC would have written for this
-	// layout.
-	cue := replaced(t, cueText(t, fixtureBlackCue), "REM DISCID 7509E00A", "REM DISCID "+l.FreeDBID())
-	start := 0
-	if included {
-		cue = replaced(t, cue, "    INDEX 01 00:00:00", "    INDEX 00 00:00:00\n    INDEX 01 "+msf(pregap))
-	} else {
-		// Every position after track 1 is measured from where the image starts.
-		start = pregap
-		cue = regexp.MustCompile(`(?m)^(\s+)INDEX (0[01]) (\d\d):(\d\d):(\d\d)$`).ReplaceAllStringFunc(cue, func(m string) string {
-			parts := regexp.MustCompile(`^(\s+)INDEX (0[01]) (\d\d):(\d\d):(\d\d)$`).FindStringSubmatch(m)
-			mm, _ := strconv.Atoi(parts[3])
-			ss, _ := strconv.Atoi(parts[4])
-			ff, _ := strconv.Atoi(parts[5])
-			frames := (mm*60+ss)*75 + ff
-			if frames == 0 {
-				return m // track 1, which starts the image
-			}
-			return parts[1] + "INDEX " + parts[2] + " " + msf(frames-pregap)
-		})
-	}
-
-	r := buildRip(t, "Back in Black", []byte(logText), cue)
-	require.NoError(t, os.WriteFile(r.path(".flac"), imageFLAC(t, []byte(logText), start), 0o644))
-	return r
-}
-
 func TestCheckFileHiddenTrack(t *testing.T) {
-	const pregap = 3000 // 40 seconds of audio before track 1
+	t.Run("the real rip, with the audio before track 1 in the image", func(t *testing.T) {
+		r := transistorRip(t).check(t)
 
-	t.Run("the audio before track 1 is in the image", func(t *testing.T) {
-		r := hiddenTrackRip(t, pregap, true).check(t)
-
-		assert.Equal(t, StatusPass, r.Worst(), "the whole image is consistent")
-		assert.Equal(t, "6 pregaps recorded (tracks 1, 2, 4, 6, 7, 8)", want(t, r, "cue-pregaps", StatusPass).Detail)
-		assert.Equal(t, "111505380 samples, as the log's table of contents gives",
-			want(t, r, "image-length", StatusPass).Detail, "the image holds the whole disc")
+		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "consistent from end to end")
+		assert.Contains(t, want(t, r, "cue-positions", StatusPass).Detail, "all 21 tracks")
+		assert.Equal(t, "310F4D15", want(t, r, "cue-disc-id", StatusPass).Detail)
+		assert.Equal(t, "11 pregaps recorded (tracks 1, 4, 5, 7, 8, 9, 10, 16, 17, 18, 20)",
+			want(t, r, "cue-pregaps", StatusPass).Detail, "track 1's is the hidden track")
+		assert.Equal(t, "179795700 samples, as the log's table of contents gives",
+			want(t, r, "image-length", StatusPass).Detail, "the whole disc, from sector 0")
 	})
 
 	t.Run("the audio before track 1 was left out", func(t *testing.T) {
-		r := hiddenTrackRip(t, pregap, false).check(t)
+		r := transistorRipLeftOut(t).check(t)
 
 		c := want(t, r, "cue-positions", StatusError)
 		assert.Contains(t, c.Detail, "image starts at track 1")
-		assert.Contains(t, c.Detail, "00:40:00")
-		assert.Contains(t, c.Detail, "3000 frames")
+		assert.Contains(t, c.Detail, "02:40:00")
+		assert.Contains(t, c.Detail, "12000 frames")
 		assert.Contains(t, c.Detail, "hidden track or pregap")
 
 		// The image is consistent with its own cue sheet, so its length is
 		// not the problem, and only the one cause is reported.
-		want(t, r, "image-length", StatusPass)
+		assert.Equal(t, "172739700 samples, as the log's table of contents gives",
+			want(t, r, "image-length", StatusPass).Detail)
 		assert.Equal(t, 1, r.Count(StatusError))
 	})
 
-	t.Run("an image that left the audio out is shorter than the whole disc", func(t *testing.T) {
-		r := hiddenTrackRip(t, pregap, false).check(t)
-
-		c := want(t, r, "image-length", StatusPass)
-
-		assert.Equal(t, strconv.FormatInt(int64(189635-pregap)*588, 10)+" samples, as the log's table of contents gives", c.Detail)
-	})
-
-	t.Run("a whole-disc cue sheet with an image that is too short", func(t *testing.T) {
-		rip := hiddenTrackRip(t, pregap, true)
-		l, err := ParseLog(fixture(t, fixtureBlack))
-		require.NoError(t, err)
-		// The length a leaves-it-out image would have.
-		require.NoError(t, os.WriteFile(rip.path(".flac"), cdFLAC(uint64(expectedImageSamples(l, pregap))), 0o644))
+	t.Run("an image that left it out, with a cue sheet that includes it", func(t *testing.T) {
+		rip := transistorRip(t)
+		log := fixture(t, fixtureTransistor)
+		require.NoError(t, os.WriteFile(rip.path(".flac"), imageFLAC(t, log, transistorPretrack), 0o644))
 
 		c := want(t, rip.check(t), "image-length", StatusError)
 
-		assert.True(t, strings.HasSuffix(c.Detail, "3000 sectors short"), c.Detail)
+		assert.True(t, strings.HasSuffix(c.Detail, "12000 sectors short"), c.Detail)
 	})
 
 	t.Run("positions that differ in some other way are reported as they are", func(t *testing.T) {
-		rip := hiddenTrackRip(t, pregap, false)
-		rewriteCue(t, rip, "INDEX 01 16:57:12", "INDEX 01 16:57:13") // track 5, 3000 frames earlier
+		rip := transistorRipLeftOut(t)
+		rewriteCue(t, rip, "INDEX 01 12:48:60", "INDEX 01 12:48:61") // track 5, 12000 frames earlier
 
 		c := want(t, rip.check(t), "cue-positions", StatusError)
 
+		// Not a pure shift, so it is not diagnosed as one: the differences are
+		// listed as they are, beginning with track 1, which the shift explains.
 		assert.NotContains(t, c.Detail, "image starts at track 1")
-		assert.Contains(t, c.Detail, "the cue sheet has")
+		assert.Contains(t, c.Detail, "track 1: the cue sheet has 00:00:00, the log 02:40:00")
+		assert.Contains(t, c.Detail, "and 18 more")
 	})
 
 	t.Run("an ordinary small difference is not mistaken for it", func(t *testing.T) {
@@ -785,6 +736,35 @@ func TestCheckFileHiddenTrack(t *testing.T) {
 		c := want(t, rip.check(t), "cue-positions", StatusError)
 
 		assert.NotContains(t, c.Detail, "image starts at track 1")
+	})
+}
+
+func TestCheckFileOlderEAC(t *testing.T) {
+	// A rip made on Windows with EAC 1.5, on a drive that is not in the table,
+	// which is the case the notes for an unknown drive are for.
+	r := transistorRip(t).check(t)
+
+	t.Run("it is still checked, with a note", func(t *testing.T) {
+		assert.False(t, r.Failed())
+		assert.Equal(t, 0, r.Count(StatusError))
+		c := want(t, r, "version", StatusInfo)
+		assert.Contains(t, c.Detail, "EAC 1.5")
+	})
+
+	t.Run("an unknown drive whose offset AccurateRip confirms", func(t *testing.T) {
+		c := want(t, r, "offset", StatusInfo)
+		assert.Contains(t, c.Detail, "pioneer bd-rw bdr-209d")
+		assert.Contains(t, c.Detail, "AccurateRip confirms offset +667")
+		assert.Contains(t, c.Detail, "add it to the drive table")
+
+		c = want(t, r, "overread", StatusInfo)
+		assert.Contains(t, c.Detail, "not verified")
+	})
+
+	t.Run("Windows paths and an older plugin do not matter", func(t *testing.T) {
+		want(t, r, "encoder", StatusPass) // C:\Program Files (x86)\Exact Audio Copy\FLAC\FLAC.EXE
+		want(t, r, "ctdb", StatusPass)    // CUETools DB Plugin V2.1.6, with padded counts such as "( 31/233)"
+		want(t, r, "cue-image", StatusPass)
 	})
 }
 

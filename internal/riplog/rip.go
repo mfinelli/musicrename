@@ -403,15 +403,16 @@ func checkCuePositions(r *Result, l *Log, c *Cue) {
 // leaves that audio out. It returns that length, in frames.
 //
 // A disc can have audio before its first track: a hidden track in the pregap,
-// or a short silence. EAC's convention, as understood here, is to include it,
-// so the cue sheet gives track 1 an INDEX 00 at 00:00:00 and an INDEX 01 at the
-// log's start sector, and every position is measured from the first sector of
-// the disc. A cue sheet whose positions are all that much smaller is what an
-// image without it would have.
+// or a short silence. EAC includes it in the image: the cue sheet gives track 1
+// an INDEX 00 at 00:00:00 and an INDEX 01 at the log's start sector, and every
+// position is measured from the first sector of the disc. A cue sheet whose
+// positions are all that much smaller is what an image without it would have.
 //
-// NOTE: This is written from how EAC is understood to work, and has not been
-// checked against a real rip of a disc with audio before track 1. The rips this
-// was built from all start at sector 0.
+// NOTE: The first half of that is how EAC is known to write such a disc, from a
+// real rip (testdata/transistor.cue: track 1 starts at sector 12000, with an
+// INDEX 00 at 00:00:00). The second half, what a cue sheet looks like when the
+// audio is left out, has not been seen from EAC and is inferred; it is
+// exercised only with a cue sheet made by shifting the real one.
 func imageStartsAtFirstTrack(l *Log, byNumber map[int]CueTrack) (before int, ok bool) {
 	before = l.TOC[0].Start
 	if before <= 0 {
