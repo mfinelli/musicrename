@@ -20,7 +20,6 @@ package riplog
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -102,7 +101,10 @@ func verifyCue(r *Result, l *Log, logPath string) {
 	}
 	r.add("cue-sheet", "Cue sheet", StatusPass, "%s", filepath.Base(cuePath))
 
-	checkCueImage(r, l, c, dir)
+	if info := checkCueImage(r, l, c, dir); info != nil {
+		checkImageFormat(r, *info)
+		checkImageLength(r, l, c, *info)
+	}
 	checkCueTracks(r, l, c)
 	checkCuePositions(r, l, c)
 	checkCueDiscID(r, l, c)
@@ -123,38 +125,21 @@ func stemOf(name string) string {
 	return strings.TrimSuffix(name, filepath.Ext(name))
 }
 
-// isFLAC reports whether the file begins with the FLAC signature.
-func isFLAC(path string) (bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return false, err
-	}
-	defer f.Close()
-
-	var magic [4]byte
-	if _, err := io.ReadFull(f, magic[:]); err != nil {
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			return false, nil
-		}
-		return false, err
-	}
-	return string(magic[:]) == "fLaC", nil
-}
-
 // checkCueImage confirms the cue sheet points at one FLAC file that is there,
-// and that it is the image the log says was ripped.
-func checkCueImage(r *Result, l *Log, c *Cue, dir string) {
+// and that it is the image the log says was ripped. It returns the file's
+// properties if it is a FLAC file that can be examined further, and nil if not.
+func checkCueImage(r *Result, l *Log, c *Cue, dir string) *streamInfo {
 	const id, name = "cue-image", "Audio image"
 
 	switch len(c.Files) {
 	case 0:
 		r.add(id, name, StatusError, "the cue sheet names no audio file")
-		return
+		return nil
 	case 1:
 	default:
 		r.add(id, name, StatusError,
 			"the cue sheet names %d audio files; an image rip has one", len(c.Files))
-		return
+		return nil
 	}
 
 	file := c.Files[0]
@@ -162,10 +147,10 @@ func checkCueImage(r *Result, l *Log, c *Cue, dir string) {
 	case strings.ContainsAny(file, `/\`):
 		r.add(id, name, StatusError,
 			"the cue sheet names a path (%q), not a file beside it", file)
-		return
+		return nil
 	case !strings.EqualFold(filepath.Ext(file), ".flac"):
 		r.add(id, name, StatusError, "%q is not a .flac file", file)
-		return
+		return nil
 	}
 
 	path := filepath.Join(dir, file)
@@ -179,34 +164,154 @@ func checkCueImage(r *Result, l *Log, c *Cue, dir string) {
 		} else {
 			r.add(id, name, StatusError, "%q is not in the directory", file)
 		}
-		return
+		return nil
 	case err != nil:
 		r.add(id, name, StatusError, "cannot read %q: %v", file, err)
-		return
+		return nil
 	case !info.Mode().IsRegular():
 		r.add(id, name, StatusError, "%q is not a regular file", file)
-		return
+		return nil
 	case info.Size() == 0:
 		r.add(id, name, StatusError, "%q is empty", file)
-		return
+		return nil
 	}
 
-	ok, err := isFLAC(path)
+	si, err := readStreamInfo(path)
 	switch {
+	case errors.Is(err, errNotFLAC):
+		r.add(id, name, StatusError, "%q: %v", file, err)
+		return nil
 	case err != nil:
 		r.add(id, name, StatusError, "cannot read %q: %v", file, err)
-		return
-	case !ok:
-		r.add(id, name, StatusError, "%q is not a FLAC file", file)
-		return
+		return nil
 	}
 
 	if ripped := windowsBase(l.Range.Filename); ripped != "" && stemOf(ripped) != stemOf(file) {
 		r.add(id, name, StatusWarning,
 			"the cue sheet names %q but the log ripped %q: are they from the same rip?", file, ripped)
-		return
+		return &si
 	}
 	r.add(id, name, StatusPass, "%s", file)
+	return &si
+}
+
+// A CD holds 44.1 kHz, 16-bit, stereo audio.
+const (
+	cdSampleRate = 44100
+	cdChannels   = 2
+	cdBits       = 16
+)
+
+// samplesPerSector is how many samples a CD sector holds in each channel:
+// 44,100 a second, in 75 sectors a second.
+const samplesPerSector = cdSampleRate / framesPerSecond
+
+// rateName formats a sample rate in Hz as kilohertz: "44.1 kHz".
+func rateName(rate int) string {
+	return fmt.Sprintf("%g kHz", float64(rate)/1000)
+}
+
+func channelsName(n int) string {
+	switch n {
+	case 1:
+		return "mono"
+	case 2:
+		return "stereo"
+	default:
+		return fmt.Sprintf("%d channels", n)
+	}
+}
+
+// checkImageFormat confirms the image is CD audio. A rip of a CD cannot be
+// anything else, so another format means something has re-processed it.
+func checkImageFormat(r *Result, info streamInfo) {
+	const id, name = "image-format", "Image format"
+
+	format := fmt.Sprintf("%s, %d-bit, %s", rateName(info.SampleRate), info.BitsPerSample, channelsName(info.Channels))
+	if info.SampleRate == cdSampleRate && info.Channels == cdChannels && info.BitsPerSample == cdBits {
+		r.add(id, name, StatusPass, "%s", format)
+		return
+	}
+	r.add(id, name, StatusError, "%s: a CD is %s, %d-bit, %s",
+		format, rateName(cdSampleRate), cdBits, channelsName(cdChannels))
+}
+
+// expectedImageSamples is how many samples an image should hold if it begins at
+// sector start of the disc and runs to the end of the last track.
+func expectedImageSamples(l *Log, start int) int64 {
+	last := l.TOC[len(l.TOC)-1]
+	return int64(last.End+1-start) * samplesPerSector
+}
+
+// checkImageLength confirms the image holds exactly the audio the log's table
+// of contents says the disc has. That catches an image that was cut short or
+// padded, which still decodes and so would pass any check on its contents.
+//
+// The table of contents gives where the last track ends. Where the image
+// begins comes from the cue sheet: its time 00:00:00 is the image's first
+// sample, so track 1's INDEX 01 in the cue sheet, set against where the log
+// says track 1 starts, gives the disc sector the image begins at. For a disc
+// whose audio starts at sector 0 that is sector 0, and the image holds the
+// whole disc. Working it out this way keeps the check right whether or not the
+// audio before track 1 (see checkCuePositions) is in the image.
+func checkImageLength(r *Result, l *Log, c *Cue, info streamInfo) {
+	const id, name = "image-length", "Image length"
+
+	if len(l.TOC) == 0 {
+		r.add(id, name, StatusError, "cannot compare: the log has no table of contents")
+		return
+	}
+
+	var track1 CueTrack
+	for _, t := range c.Tracks {
+		if t.Number == l.TOC[0].Number {
+			track1 = t
+		}
+	}
+	idx, ok := track1.Index(1)
+	if !ok {
+		r.add(id, name, StatusError,
+			"cannot tell where the image starts: track %d has no INDEX 01 in the cue sheet", l.TOC[0].Number)
+		return
+	}
+	start := l.TOC[0].Start - idx
+	if start < 0 {
+		r.add(id, name, StatusError,
+			"the cue sheet puts track %d at %s, later than the log's %s: the image would start before the disc",
+			l.TOC[0].Number, msf(idx), msf(l.TOC[0].Start))
+		return
+	}
+
+	if info.TotalSamples == 0 {
+		r.add(id, name, StatusWarning, "the FLAC does not record its length, so it cannot be checked")
+		return
+	}
+
+	got, want := int64(info.TotalSamples), expectedImageSamples(l, start)
+	if got == want {
+		r.add(id, name, StatusPass, "%d samples, as the log's table of contents gives", got)
+		return
+	}
+
+	diff, how := want-got, "short"
+	if diff < 0 {
+		diff, how = -diff, "long"
+	}
+	size := fmt.Sprintf("%d %s", diff, plural(diff, "sample"))
+	if diff%samplesPerSector == 0 {
+		size = fmt.Sprintf("%d %s", diff/samplesPerSector, plural(diff/samplesPerSector, "sector"))
+	}
+	r.add(id, name, StatusError,
+		"the FLAC holds %d samples and the log's table of contents gives %d: %s %s",
+		got, want, size, how)
+}
+
+// plural returns noun, with an "s" unless n is exactly one.
+func plural(n int64, noun string) string {
+	if n == 1 {
+		return noun
+	}
+	return noun + "s"
 }
 
 // checkCueTracks confirms the cue sheet has the same tracks as the log.
@@ -279,11 +384,46 @@ func checkCuePositions(r *Result, l *Log, c *Cue) {
 		r.add(id, name, StatusPass, "all %d tracks start where the log's table of contents puts them", len(l.TOC))
 		return
 	}
+	if before, ok := imageStartsAtFirstTrack(l, byNumber); ok {
+		r.add(id, name, StatusError,
+			"the cue sheet's image starts at track 1, but the log has %s (%d frames) of audio before it: a hidden track or pregap was left out of the image",
+			msf(before), before)
+		return
+	}
 	detail := strings.Join(bad[:min(len(bad), maxListed)], "; ")
 	if len(bad) > maxListed {
 		detail += fmt.Sprintf("; and %d more", len(bad)-maxListed)
 	}
 	r.add(id, name, StatusError, "%s", detail)
+}
+
+// imageStartsAtFirstTrack reports whether every track in the cue sheet is
+// earlier than in the log by exactly the length of the audio before track 1,
+// which is what the cue sheet looks like when the image begins at track 1 and
+// leaves that audio out. It returns that length, in frames.
+//
+// A disc can have audio before its first track: a hidden track in the pregap,
+// or a short silence. EAC's convention, as understood here, is to include it,
+// so the cue sheet gives track 1 an INDEX 00 at 00:00:00 and an INDEX 01 at the
+// log's start sector, and every position is measured from the first sector of
+// the disc. A cue sheet whose positions are all that much smaller is what an
+// image without it would have.
+//
+// NOTE: This is written from how EAC is understood to work, and has not been
+// checked against a real rip of a disc with audio before track 1. The rips this
+// was built from all start at sector 0.
+func imageStartsAtFirstTrack(l *Log, byNumber map[int]CueTrack) (before int, ok bool) {
+	before = l.TOC[0].Start
+	if before <= 0 {
+		return 0, false
+	}
+	for _, tt := range l.TOC {
+		got, has := byNumber[tt.Number].Index(1)
+		if !has || got != tt.Start-before {
+			return 0, false
+		}
+	}
+	return before, true
 }
 
 // checkCueDiscID compares the freedb disc ID in the cue sheet with the one the

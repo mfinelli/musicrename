@@ -54,7 +54,9 @@ Also checked:
   - no normalization, matching test and copy CRCs, and no reported errors
   - AccurateRip and CUETools DB results (a disc they do not know is a warning)
   - the cue sheet (same name, .cue): same tracks as the log, every INDEX 01 at
-    the log's start sector, a matching disc ID, and a FLAC image that exists
+    the log's start sector, and a matching disc ID
+  - the FLAC image the cue sheet names: that it is CD audio, and that it holds
+    exactly as many samples as the log's table of contents says the disc has
   - that the log ends with its checksum (present and well formed, not verified)
 
 A required setting the log does not state is an error, not a pass.

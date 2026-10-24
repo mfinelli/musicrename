@@ -1080,10 +1080,15 @@ reads the audio file the cue sheet names. It checks that:
 - the cue sheet is there and can be read. EAC writes cue sheets in the system's
   ANSI code page unless told otherwise, so one with an accent in a title is not
   valid UTF-8; text that is not is read as Windows-1252;
-- it names exactly one file, which is a `.flac` in the same directory, is not
-  empty, and begins with the FLAC signature. The file's name is also compared
-  with the image the log says was ripped; a difference is only a warning, since
-  the files may have been renamed;
+- it names exactly one file, which is a `.flac` in the same directory and is a
+  well-formed FLAC file. The file's name is also compared with the image the log
+  says was ripped; a difference is only a warning, since the files may have been
+  renamed;
+- the image is CD audio: 44.1 kHz, 16-bit, stereo;
+- the image holds exactly the audio the disc has, which is (the last track's end
+  sector + 1) × 588 samples, 588 being the samples in each channel of a sector
+  (44,100 a second over 75 sectors a second). That catches an image cut short or
+  padded, which still decodes and so passes any check on its contents;
 - it has the same tracks as the log, numbered the same, all of them audio;
 - every track's `INDEX 01` is exactly where the log's table of contents puts the
   track: the log's start sector, written as minutes, seconds and frames;
@@ -1091,6 +1096,20 @@ reads the audio file the cue sheet names. It checks that:
   contents. EAC computes the one in the cue sheet from that same table, so a cue
   sheet from another disc cannot pass this even if its tracks happen to line up;
 - any `INDEX 00` lines make sense: each lies inside the track before it.
+
+The format and the length are read from the FLAC's STREAMINFO block: the first
+42 bytes of every FLAC file hold its sample rate, channel count, bit depth and
+exact sample count.
+
+A disc can have audio before its first track: a hidden track in the pregap, or a
+short silence. The cue sheet then gives track 1 an `INDEX 00` at `00:00:00` and
+an `INDEX 01` at the log's start sector for it, so every position is measured
+from the first sector of the disc and is checked like any other. If that audio
+was left out of the image, the cue sheet's positions are all smaller than the
+log's by exactly its length, which is reported as such (the image starts at
+track 1, leaving out the hidden track or pregap) instead of as a list of
+unrelated mismatches. The image's expected length follows the cue sheet in
+either case, since its `00:00:00` is where the image begins.
 
 `INDEX 00` marks where a track's pregap begins and is what EAC's Detect Gaps
 leaves in the cue sheet. The checks can confirm that what is recorded is

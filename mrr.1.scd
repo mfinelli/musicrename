@@ -243,7 +243,8 @@ copy passes agree, any reported errors, and what AccurateRip and the CUETools
 database made of it. The encoder must also be FLAC with verification on, and the
 log must carry its checksum, which is not verified. A fourth group is the files
 that go with the log: the cue sheet of the same name must agree with the log's
-table of contents, and the FLAC image it names must be there. A required setting that the
+table of contents, and the FLAC image it names must be CD audio of exactly the
+length the disc has. A required setting that the
 log does not state is an error. *mrr riplog --help* lists the settings and the
 values they must have.
 

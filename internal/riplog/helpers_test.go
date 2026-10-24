@@ -43,8 +43,9 @@ var allFixtures = []string{fixtureBlack, fixtureBday, fixtureCentral}
 // The cue sheets that go with two of the logs, as EAC wrote them. The B'day one
 // is in Windows-1252, not UTF-8, because of the accent in "Beyoncé".
 const (
-	fixtureBlackCue = "back-in-black.cue"
-	fixtureBdayCue  = "bday.cue"
+	fixtureBlackCue   = "back-in-black.cue"
+	fixtureBdayCue    = "bday.cue"
+	fixtureCentralCue = "central-park-disc-1.cue" // no INDEX 00 lines: no pregaps
 )
 
 // fixture returns a fixture's raw bytes.
@@ -139,9 +140,42 @@ func cueText(t *testing.T, name string) string {
 	return decodeLegacy(fixture(t, name))
 }
 
-// flacBytes is enough of a FLAC file for the checks that look at one: its
-// signature, then padding.
-var flacBytes = append([]byte("fLaC"), make([]byte, 64)...)
+// flacHeader returns the start of a FLAC file: its signature and STREAMINFO
+// block, which is all the checks read, with the given properties. It packs the
+// fields as the FLAC format does (see readStreamInfo). Real encoder output is
+// what the packing is checked against, in flac_test.go.
+func flacHeader(rate, channels, bits int, total uint64) []byte {
+	b := make([]byte, 8+streamInfoLen)
+	copy(b, "fLaC")
+	b[4] = 0x80 // the last metadata block, of type STREAMINFO
+	b[7] = streamInfoLen
+
+	p := b[8+10:]
+	p[0] = byte(rate >> 12)
+	p[1] = byte(rate >> 4)
+	p[2] = byte(rate&0x0F)<<4 | byte(channels-1)<<1 | byte((bits-1)>>4)
+	p[3] = byte((bits-1)&0x0F)<<4 | byte(total>>32)
+	p[4] = byte(total >> 24)
+	p[5] = byte(total >> 16)
+	p[6] = byte(total >> 8)
+	p[7] = byte(total)
+	return b
+}
+
+// cdFLAC returns a FLAC header for CD-format audio of the given length.
+func cdFLAC(total uint64) []byte { return flacHeader(44100, 2, 16, total) }
+
+// imageFLAC returns the FLAC header an image of the disc in log should have,
+// beginning at the given sector of the disc (0 for the whole disc).
+func imageFLAC(t *testing.T, log []byte, start int) []byte {
+	t.Helper()
+	l, err := ParseLog(log)
+	require.NoError(t, err)
+	if len(l.TOC) == 0 {
+		return cdFLAC(0)
+	}
+	return cdFLAC(uint64(expectedImageSamples(l, start)))
+}
 
 // rip is the files of one rip in a temporary directory.
 type rip struct {
@@ -156,13 +190,14 @@ func (r rip) logPath() string { return r.path(".log") }
 
 // buildRip writes a complete rip into a new temporary directory: the log, the
 // cue sheet (as UTF-8 text, which ParseCue accepts), and a FLAC image named as
-// the cue sheet names it. Tests then break it by changing or removing files.
+// the cue sheet names it, with the length the log implies. Tests then break it
+// by changing or removing files.
 func buildRip(t *testing.T, stem string, log []byte, cue string) rip {
 	t.Helper()
 	r := rip{dir: t.TempDir(), stem: stem}
 	require.NoError(t, os.WriteFile(r.path(".log"), log, 0o644))
 	require.NoError(t, os.WriteFile(r.path(".cue"), []byte(cue), 0o644))
-	require.NoError(t, os.WriteFile(r.path(".flac"), flacBytes, 0o644))
+	require.NoError(t, os.WriteFile(r.path(".flac"), imageFLAC(t, log, 0), 0o644))
 	return r
 }
 
@@ -175,6 +210,13 @@ func blackRip(t *testing.T) rip {
 func bdayRip(t *testing.T) rip {
 	t.Helper()
 	return buildRip(t, "B'day", fixture(t, fixtureBday), cueText(t, fixtureBdayCue))
+}
+
+// centralRip builds disc 1 of a multi-disc release, whose names have "(disc 1)"
+// in them and whose cue sheet records no pregaps.
+func centralRip(t *testing.T) rip {
+	t.Helper()
+	return buildRip(t, "The Central Park Concert (disc 1)", fixture(t, fixtureCentral), cueText(t, fixtureCentralCue))
 }
 
 // rewriteCue changes the rip's cue sheet by replacing old with new (which must

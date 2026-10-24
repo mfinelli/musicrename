@@ -13,9 +13,9 @@ my own reference.
   and CUETools database results, and FLAC verification, so a wrong option is
   noticed right after the rip. It also checks that the cue sheet and FLAC image
   beside the log match it: the same tracks, each `INDEX 01` at the log's start
-  sector, and the same disc ID. Image rips from English-language EAC 1.x only.
-  Exits non-zero on errors, and on warnings with `--strict`; `-v` shows every
-  check.
+  sector, the same disc ID, and an image of CD audio exactly as long as the
+  disc. Image rips from English-language EAC 1.x only. Exits non-zero on errors,
+  and on warnings with `--strict`; `-v` shows every check.
 - Add `spectrum`, which checks whether a FLAC (or ALAC) track or album is really
   lossless or a lossy encode (MP3, AAC, etc.) that was converted afterwards. It
   measures the file's frequency spectrum and looks for the sharp cutoff lossy
