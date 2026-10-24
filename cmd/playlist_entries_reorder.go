@@ -31,12 +31,14 @@ import (
 	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
+// The reorder screen's cursor and grabbed row are the shared pointer and
+// warning looks, in bold.
 var (
-	reorderCursorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)  // blue
-	reorderGrabbedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true) // bright yellow
-	reorderGrabbedLine  = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	reorderCursorStyle  = style.Pointer.Bold(true)
+	reorderGrabbedStyle = style.Warn.Bold(true)
 )
 
 // reorderChromeLines is how many lines of the terminal View() spends on
@@ -111,7 +113,7 @@ func runPlaylistEntriesReorder(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if warning != "" {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "Saved new order for %d entries\n", len(result.entries))
 	return nil
@@ -381,7 +383,7 @@ func (m *reorderModel) ensureVisible() {
 func (m *reorderModel) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString(renameHeaderStyle.Render(fmt.Sprintf("Reorder %s", filepath.Base(m.path))))
+	b.WriteString(style.Header.Render(fmt.Sprintf("Reorder %s", filepath.Base(m.path))))
 	b.WriteString("\n\n")
 
 	end := min(m.scrollTop+m.height, len(m.entries))
@@ -391,7 +393,7 @@ func (m *reorderModel) View() tea.View {
 
 		label := e.label
 		if e.missing {
-			label = renameWarningStyle.Render("⚠  " + label)
+			label = style.Warn.Render("⚠  " + label)
 		}
 
 		marker := "  "
@@ -404,7 +406,7 @@ func (m *reorderModel) View() tea.View {
 
 		line := marker + label
 		if i == m.cursor && m.grabbed {
-			line = reorderGrabbedLine.Render(line)
+			line = style.Warn.Render(line)
 		}
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -415,7 +417,7 @@ func (m *reorderModel) View() tea.View {
 	if m.grabbed {
 		help = "↑/↓ move entry · space release · enter save · esc cancel"
 	}
-	b.WriteString(renameSourceStyle.Render(help))
+	b.WriteString(style.Faint.Render(help))
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true

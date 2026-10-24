@@ -32,6 +32,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/spectrum"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var spectrumCmd = &cobra.Command{
@@ -128,11 +129,11 @@ func runSpectrum(cmd *cobra.Command, args []string) error {
 	}
 
 	if isAlbum {
-		lipgloss.Fprintln(out, renameHeaderStyle.Render("Analyzing album..."))
+		lipgloss.Fprintln(out, style.Header.Render("Analyzing album..."))
 		fmt.Fprintln(out)
-		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(filepath.Base(absPath)))
+		lipgloss.Fprintln(out, "  "+style.Name.Render(filepath.Base(absPath)))
 	} else {
-		lipgloss.Fprintln(out, renameHeaderStyle.Render("Analyzing track..."))
+		lipgloss.Fprintln(out, style.Header.Render("Analyzing track..."))
 		fmt.Fprintln(out)
 	}
 
@@ -153,7 +154,7 @@ func runSpectrum(cmd *cobra.Command, args []string) error {
 					name, notLossless.Codec)
 			}
 			skipped++
-			lipgloss.Fprintln(out, "  "+checkFaintStyle.Render(
+			lipgloss.Fprintln(out, "  "+style.Faint.Render(
 				fmt.Sprintf("%s  skipped: %s is lossy", name, notLossless.Codec)))
 			continue
 
@@ -163,7 +164,7 @@ func runSpectrum(cmd *cobra.Command, args []string) error {
 			}
 			failed++
 			lipgloss.Fprintln(out, "  "+name)
-			lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ could not analyze: "+err.Error()))
+			lipgloss.Fprintln(out, "    "+style.Error.Render("✗ could not analyze: "+err.Error()))
 			continue
 		}
 
@@ -181,7 +182,7 @@ func runSpectrum(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out)
 	checkPrintSummary(out, analyzed, "track", flagged, time.Since(start))
 	if skipped > 0 {
-		lipgloss.Fprintln(out, checkFaintStyle.Render(
+		lipgloss.Fprintln(out, style.Faint.Render(
 			fmt.Sprintf("%d lossy %s skipped", skipped, pluralFiles(skipped))))
 	}
 
@@ -241,18 +242,18 @@ func spectrumTracks(path string) (tracks []string, isAlbum bool, err error) {
 // spectrumPrintTrack prints one track's result: its name and format, a verdict
 // line, any further findings, and (with verbose) the detail behind them.
 func spectrumPrintTrack(out io.Writer, name string, res *spectrum.Result, verbose bool) {
-	lipgloss.Fprintln(out, "  "+name+"  "+checkFaintStyle.Render(res.Info.Describe()))
+	lipgloss.Fprintln(out, "  "+name+"  "+style.Faint.Render(res.Info.Describe()))
 
 	var verdict string
 	switch res.Verdict {
 	case spectrum.VerdictOK:
-		verdict = checkOKStyle.Render("✓ " + res.Verdict.String())
+		verdict = style.OK.Render("✓ " + res.Verdict.String())
 	case spectrum.VerdictSuspect:
-		verdict = checkFindingStyle.Render("⚠ " + res.Verdict.String())
+		verdict = style.Warn.Render("⚠ " + res.Verdict.String())
 	case spectrum.VerdictLikelyFake:
-		verdict = checkErrorStyle.Render("✗ " + res.Verdict.String())
+		verdict = style.Error.Render("✗ " + res.Verdict.String())
 	default:
-		verdict = checkFaintStyle.Render("– " + res.Verdict.String())
+		verdict = style.Faint.Render("– " + res.Verdict.String())
 	}
 	lipgloss.Fprintln(out, "    "+verdict+" — "+res.Summary())
 
@@ -262,7 +263,7 @@ func spectrumPrintTrack(out io.Writer, name string, res *spectrum.Result, verbos
 
 	if verbose {
 		for _, line := range res.Verbose() {
-			lipgloss.Fprintln(out, "      "+checkFaintStyle.Render(line))
+			lipgloss.Fprintln(out, "      "+style.Faint.Render(line))
 		}
 	}
 }
@@ -283,8 +284,8 @@ func spectrumWritePNG(ctx context.Context, out io.Writer, track, dir string, ann
 		err = spectrum.WriteSpectrogram(ctx, track, dst)
 	}
 	if err != nil {
-		lipgloss.Fprintln(out, "    "+checkFindingStyle.Render("⚠ could not write spectrogram: "+err.Error()))
+		lipgloss.Fprintln(out, "    "+style.Warn.Render("⚠ could not write spectrogram: "+err.Error()))
 		return
 	}
-	lipgloss.Fprintln(out, "    "+checkFaintStyle.Render("↳ spectrogram: "+dst))
+	lipgloss.Fprintln(out, "    "+style.Faint.Render("↳ spectrogram: "+dst))
 }

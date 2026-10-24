@@ -28,6 +28,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/style"
 	"github.com/mfinelli/musicrename/internal/video"
 )
 
@@ -99,7 +100,7 @@ func runVideoCheck(cmd *cobra.Command, args []string) error {
 // runVideoCheckSingle checks a single video directory. Path-conformance is
 // skipped because no video-root is available from the command line.
 func runVideoCheckSingle(out io.Writer, dir string, start time.Time) error {
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking video..."))
+	lipgloss.Fprintln(out, style.Header.Render("Checking video..."))
 	fmt.Fprintln(out)
 
 	result, err := video.Check(dir, "")
@@ -122,7 +123,7 @@ func runVideoCheckSingle(out io.Writer, dir string, start time.Time) error {
 // runVideoCheckRoot runs the full check suite on every video directory
 // found under root, including path-conformance.
 func runVideoCheckRoot(out io.Writer, root string, start time.Time) error {
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking video library..."))
+	lipgloss.Fprintln(out, style.Header.Render("Checking video library..."))
 	fmt.Fprintln(out)
 
 	result, err := video.CheckAll(root)
@@ -147,7 +148,7 @@ func runVideoCheckRoot(out io.Writer, root string, start time.Time) error {
 // is directory-sorted order. Returns the total finding count.
 func videoCheckPrintFindings(out io.Writer, result *video.CheckResult, displayRoot string) int {
 	if len(result.Warnings) == 0 {
-		lipgloss.Fprintln(out, "  "+checkOKStyle.Render("✓  No issues found."))
+		lipgloss.Fprintln(out, "  "+style.OK.Render("✓  No issues found."))
 		fmt.Fprintln(out)
 		return 0
 	}
@@ -166,10 +167,10 @@ func videoCheckPrintFindings(out io.Writer, result *video.CheckResult, displayRo
 		if err != nil || strings.HasPrefix(relPath, "..") {
 			relPath = path
 		}
-		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
+		lipgloss.Fprintln(out, "  "+style.Name.Render(relPath))
 
 		for _, w := range grouped[path] {
-			lipgloss.Fprintln(out, "    "+checkFindingStyle.Render("⚠  "+w.Message))
+			lipgloss.Fprintln(out, "    "+style.Warn.Render("⚠  "+w.Message))
 		}
 		fmt.Fprintln(out)
 	}

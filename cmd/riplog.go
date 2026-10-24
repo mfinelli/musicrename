@@ -31,6 +31,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/musicbrainz"
 	"github.com/mfinelli/musicrename/internal/riplog"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 // riplogLongTemplate is the command's help text. The %s is the table of
@@ -140,9 +141,9 @@ func runRiplog(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(logs) == 1 {
-		lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking rip log..."))
+		lipgloss.Fprintln(out, style.Header.Render("Checking rip log..."))
 	} else {
-		lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking rip logs..."))
+		lipgloss.Fprintln(out, style.Header.Render("Checking rip logs..."))
 	}
 	fmt.Fprintln(out)
 
@@ -204,11 +205,11 @@ func riplogCheckOne(ctx context.Context, out io.Writer, logPath string, mb riplo
 	l, res, err := riplog.CheckFile(ctx, logPath, mb)
 	if err != nil {
 		lipgloss.Fprintln(out, "  "+name)
-		lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ "+err.Error()))
+		lipgloss.Fprintln(out, "    "+style.Error.Render("✗ "+err.Error()))
 		return 1, true
 	}
 
-	lipgloss.Fprintln(out, "  "+name+"  "+checkFaintStyle.Render(l.Describe()))
+	lipgloss.Fprintln(out, "  "+name+"  "+style.Faint.Render(l.Describe()))
 	for _, c := range res.Checks {
 		if c.Status == riplog.StatusPass && !verbose {
 			continue
@@ -216,7 +217,7 @@ func riplogCheckOne(ctx context.Context, out io.Writer, logPath string, mb riplo
 		lipgloss.Fprintln(out, "    "+riplogCheckLine(c))
 	}
 	if !verbose {
-		lipgloss.Fprintln(out, "    "+checkOKStyle.Render("✓")+" "+res.PassSummary())
+		lipgloss.Fprintln(out, "    "+style.OK.Render("✓")+" "+res.PassSummary())
 	}
 
 	return res.Count(riplog.StatusWarning) + res.Count(riplog.StatusError), res.Fails(strict)
@@ -227,18 +228,18 @@ func riplogCheckLine(c riplog.Check) string {
 	var sigil string
 	switch c.Status {
 	case riplog.StatusPass:
-		sigil = checkOKStyle.Render("✓")
+		sigil = style.OK.Render("✓")
 	case riplog.StatusWarning:
-		sigil = checkFindingStyle.Render("⚠")
+		sigil = style.Warn.Render("⚠")
 	case riplog.StatusError:
-		sigil = checkErrorStyle.Render("✗")
+		sigil = style.Error.Render("✗")
 	default:
-		sigil = checkFaintStyle.Render("·")
+		sigil = style.Faint.Render("·")
 	}
 
 	detail := c.Detail
 	if c.Status == riplog.StatusPass || c.Status == riplog.StatusInfo {
-		detail = checkFaintStyle.Render(detail)
+		detail = style.Faint.Render(detail)
 	}
 	return sigil + " " + c.Name + ": " + detail
 }

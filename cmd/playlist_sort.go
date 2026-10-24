@@ -29,6 +29,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var playlistSortCmd = &cobra.Command{
@@ -153,7 +154,7 @@ func runPlaylistSort(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  "+r)
 	}
 	if warning != "" {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+warning))
 	}
 	if removedDupes > 0 {
 		fmt.Fprintf(out, "Removed %d duplicate entries\n", removedDupes)

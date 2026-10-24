@@ -33,15 +33,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/lyrics"
 	"github.com/mfinelli/musicrename/internal/metadata"
-)
-
-// Lipgloss styles for lyrics output. Header, album, rule, bold, and warning
-// styles are reused from rename.go; they are in the same package.
-var (
-	lyricsEmbeddedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
-	lyricsSkippedStyle  = lipgloss.NewStyle().Faint(true)                     // dim
-	lyricsNotFoundStyle = lipgloss.NewStyle().Faint(true)                     // dim
-	lyricsFailedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("9")) // red
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var lyricsCmd = &cobra.Command{
@@ -157,12 +149,12 @@ func lyricsIsAlbumRoot(dir string) (bool, error) {
 
 // runLyricsTrack handles track mode: a single audio file.
 func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool, start time.Time) error {
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
 	tracks, warnings := buildTrackInfos([]string{path})
 	for _, w := range warnings {
-		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠  "+w))
+		lipgloss.Fprintln(out, "  "+style.Warn.Render("⚠  "+w))
 	}
 
 	summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "  "))
@@ -179,7 +171,7 @@ func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool,
 // file paired with a specific LRCLIB track ID, bypassing the usual
 // title/artist/album/duration matching strategy entirely.
 func runLyricsTrackByID(ctx context.Context, out io.Writer, path string, id int, force bool, start time.Time) error {
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
 	status, err := lyrics.FetchByID(ctx, path, id, force)
@@ -220,12 +212,12 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool, 
 	}
 	sort.Strings(paths)
 
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
 	tracks, warnings := buildTrackInfos(paths)
 	for _, w := range warnings {
-		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠  "+w))
+		lipgloss.Fprintln(out, "  "+style.Warn.Render("⚠  "+w))
 	}
 
 	summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "  "))
@@ -249,7 +241,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 		return albums[i].RootPath < albums[j].RootPath
 	})
 
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Fetching lyrics..."))
+	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
 	if len(albums) == 0 {
@@ -264,7 +256,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 		if err != nil {
 			relPath = album.RootPath
 		}
-		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
+		lipgloss.Fprintln(out, "  "+style.Name.Render(relPath))
 
 		paths := make([]string, 0, len(album.Tracks))
 		for _, t := range album.Tracks {
@@ -274,7 +266,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 
 		tracks, warnings := buildTrackInfos(paths)
 		for _, w := range warnings {
-			lipgloss.Fprintln(out, "    "+renameWarningStyle.Render("⚠  "+w))
+			lipgloss.Fprintln(out, "    "+style.Warn.Render("⚠  "+w))
 		}
 
 		summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "    "))
@@ -302,13 +294,13 @@ func lyricsProgressCallback(out io.Writer, indent string) func(string, lyrics.Ly
 		var line string
 		switch status {
 		case lyrics.StatusEmbedded:
-			line = lyricsEmbeddedStyle.Render("✓  " + name)
+			line = style.OK.Render("✓  " + name)
 		case lyrics.StatusSkipped:
-			line = lyricsSkippedStyle.Render("—  " + name + "  (already has lyrics)")
+			line = style.Faint.Render("—  " + name + "  (already has lyrics)")
 		case lyrics.StatusNotFound:
-			line = lyricsNotFoundStyle.Render("✗  " + name + "  (not found)")
+			line = style.Faint.Render("✗  " + name + "  (not found)")
 		case lyrics.StatusFailed:
-			line = lyricsFailedStyle.Render("!  " + name + "  (failed)")
+			line = style.Error.Render("!  " + name + "  (failed)")
 		}
 		fmt.Fprintln(out, indent+line)
 	}
@@ -322,8 +314,8 @@ func printLyricsSummaryLine(out io.Writer, s lyrics.Summary, elapsed time.Durati
 		"%d tracks · %d embedded · %d skipped · %d not found · %d failed · %s",
 		total, s.Embedded, s.Skipped, s.NotFound, s.Failed, elapsed.Round(10*time.Millisecond),
 	)
-	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, style.Rule.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, style.Bold.Render(summaryText))
 }
 
 // buildTrackInfos opens each audio file with go-taglib to read both tags and

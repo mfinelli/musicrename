@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/sanitize"
+	"github.com/mfinelli/musicrename/internal/style"
 	"github.com/mfinelli/musicrename/internal/video"
 )
 
@@ -86,15 +87,15 @@ func runVideoInspect(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Inspecting..."))
+	lipgloss.Fprintln(out, style.Header.Render("Inspecting..."))
 	fmt.Fprintln(out)
 
 	formatLabel := strings.ToUpper(strings.TrimPrefix(ext, "."))
 	fmt.Fprintln(out,
 		"  "+
-			inspectFilenameStyle.Render(filepath.Base(path))+
+			style.Name.Render(filepath.Base(path))+
 			"  "+
-			inspectFaintStyle.Render(formatLabel),
+			style.Faint.Render(formatLabel),
 	)
 	fmt.Fprintln(out)
 

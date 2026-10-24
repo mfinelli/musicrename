@@ -27,6 +27,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var playlistRenameCmd = &cobra.Command{
@@ -74,16 +75,16 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	if dryRun {
-		lipgloss.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be renamed."))
+		lipgloss.Fprintln(out, style.Header.Render("Dry run: no files will be renamed."))
 	} else {
-		lipgloss.Fprintln(out, renameHeaderStyle.Render("Renaming playlists..."))
+		lipgloss.Fprintln(out, style.Header.Render("Renaming playlists..."))
 	}
 	fmt.Fprintln(out)
 
 	if len(skipped) > 0 {
-		lipgloss.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d skipped", len(skipped))))
+		lipgloss.Fprintln(out, style.Warn.Render(fmt.Sprintf("⚠  %d skipped", len(skipped))))
 		for _, s := range skipped {
-			lipgloss.Fprintln(out, "   "+renameWarningStyle.Render(relPlaylistPath(absRoot, s.Path)+": "+s.Message))
+			lipgloss.Fprintln(out, "   "+style.Warn.Render(relPlaylistPath(absRoot, s.Path)+": "+s.Message))
 		}
 		fmt.Fprintln(out)
 	}
@@ -94,10 +95,10 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, op := range ops {
-		arrow := renameArrowStyle.Render("→")
+		arrow := style.Pointer.Render("→")
 		line := fmt.Sprintf("  %s  %s  %s",
 			relPlaylistPath(absRoot, op.OldPath), arrow,
-			renameNewPathStyle.Render(relPlaylistPath(absRoot, op.NewPath)),
+			style.Bold.Render(relPlaylistPath(absRoot, op.NewPath)),
 		)
 		fmt.Fprintln(out, line)
 	}
@@ -110,7 +111,7 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("executing renames: %w", err)
 		}
 		for _, w := range execWarnings {
-			lipgloss.Fprintln(out, renameWarningStyle.Render("⚠  "+w))
+			lipgloss.Fprintln(out, style.Warn.Render("⚠  "+w))
 		}
 		if len(execWarnings) > 0 {
 			fmt.Fprintln(out)
@@ -121,8 +122,8 @@ func runPlaylistRename(cmd *cobra.Command, args []string) error {
 		"%d renames · %d skipped · %d warnings · %s",
 		len(ops), len(skipped), len(execWarnings), time.Since(start).Round(10*time.Millisecond),
 	)
-	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, style.Rule.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, style.Bold.Render(summaryText))
 
 	return nil
 }

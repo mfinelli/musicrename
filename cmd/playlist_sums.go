@@ -28,6 +28,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var playlistSumsCmd = &cobra.Command{
@@ -81,7 +82,7 @@ func runPlaylistSums(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s already exists; use --force to regenerate", sumsPath)
 	}
 
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
+	lipgloss.Fprintln(out, style.Header.Render("Hashing files..."))
 	fmt.Fprintln(out)
 
 	var count int
@@ -103,7 +104,7 @@ func runPlaylistSums(cmd *cobra.Command, args []string) error {
 		fmt.Fprint(out, "\r\033[K")
 	}
 
-	lipgloss.Fprintln(out, sumsCheckStyle.Render(
+	lipgloss.Fprintln(out, style.OK.Render(
 		fmt.Sprintf("✓  sums.md5 written — %d %s", count, pluralFiles(count)),
 	))
 	return nil

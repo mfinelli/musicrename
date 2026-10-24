@@ -30,6 +30,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/navidrome"
 	"github.com/mfinelli/musicrename/internal/navidromesync"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var syncNavidromeDeleteCmd = &cobra.Command{
@@ -120,7 +121,7 @@ func runSyncNavidromeDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if warning != "" {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+warning))
 	}
 
 	fmt.Fprintf(out, "Deleted %s.\n", args[0])

@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/metadata"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var musicbrainzCheckCmd = &cobra.Command{
@@ -117,7 +118,7 @@ func printMusicbrainzCheckResult(out io.Writer, displayRoot string, matched []st
 	if hasID {
 		label = "have"
 	}
-	lipgloss.Fprintln(out, renameBoldStyle.Render(fmt.Sprintf(
+	lipgloss.Fprintln(out, style.Bold.Render(fmt.Sprintf(
 		"%d of %d albums %s MUSICBRAINZ_ALBUMID · %s",
 		len(matched), total, label, elapsed.Round(10*time.Millisecond),
 	)))

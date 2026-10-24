@@ -32,6 +32,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 	"github.com/mfinelli/musicrename/internal/target"
 )
 
@@ -144,7 +145,7 @@ func runPlaylistSelect(cmd *cobra.Command, args []string) error {
 		if existingSet[n] {
 			rows = append(rows, row{
 				filename: n,
-				label: renameWarningStyle.Render(
+				label: style.Warn.Render(
 					"⚠  " + n + "  (missing — no matching track found)",
 				),
 			})
@@ -207,11 +208,11 @@ func runPlaylistSelect(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(final) == 0 {
-		lipgloss.Fprintln(out, sumsCheckStyle.Render(
+		lipgloss.Fprintln(out, style.OK.Render(
 			fmt.Sprintf("✓  %s removed (no tracks selected)", manifestName),
 		))
 	} else {
-		lipgloss.Fprintln(out, sumsCheckStyle.Render(
+		lipgloss.Fprintln(out, style.OK.Render(
 			fmt.Sprintf("✓  %s written — %d %s selected", manifestName, len(final), pluralTracks(len(final))),
 		))
 	}

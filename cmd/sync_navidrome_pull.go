@@ -32,6 +32,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/navidrome"
 	"github.com/mfinelli/musicrename/internal/navidromesync"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var syncNavidromePullCmd = &cobra.Command{
@@ -88,7 +89,7 @@ func runSyncNavidromePull(cmd *cobra.Command, args []string) error {
 	}
 
 	if !skipScan {
-		lipgloss.Fprintln(out, renameHeaderStyle.Render("Checking library is up to date..."))
+		lipgloss.Fprintln(out, style.Header.Render("Checking library is up to date..."))
 		if err := navidrome.Scan(client, navidrome.DefaultScanPollInterval, scanProgressPrinter(out)); err != nil {
 			return fmt.Errorf("scanning library: %w", err)
 		}
@@ -178,17 +179,17 @@ func printPullResult(out io.Writer, root string, result *navidromesync.PullResul
 	}
 
 	for _, p := range result.Created {
-		lipgloss.Fprintln(out, "  "+sumsCheckStyle.Render("+ "+label(p))+" ("+verb(true)+")")
+		lipgloss.Fprintln(out, "  "+style.OK.Render("+ "+label(p))+" ("+verb(true)+")")
 	}
 	for _, p := range result.Updated {
-		lipgloss.Fprintln(out, "  "+checkFindingStyle.Render("~ "+label(p))+" ("+verb(false)+")")
+		lipgloss.Fprintln(out, "  "+style.Warn.Render("~ "+label(p))+" ("+verb(false)+")")
 	}
 	for _, p := range result.Deleted {
 		removedVerb := "removed"
 		if dryRun {
 			removedVerb = "would remove"
 		}
-		lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("- "+label(p))+" ("+removedVerb+")")
+		lipgloss.Fprintln(out, "  "+style.Warn.Render("- "+label(p))+" ("+removedVerb+")")
 	}
 
 	fmt.Fprintln(out)
@@ -200,7 +201,7 @@ func printPullResult(out io.Writer, root string, result *navidromesync.PullResul
 		fmt.Fprintln(out)
 		fmt.Fprintf(out, "%d warning(s):\n", len(result.Warnings))
 		for _, w := range result.Warnings {
-			lipgloss.Fprintln(out, "  "+renameWarningStyle.Render("⚠ "+w))
+			lipgloss.Fprintln(out, "  "+style.Warn.Render("⚠ "+w))
 		}
 	}
 }

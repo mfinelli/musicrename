@@ -32,14 +32,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
-)
-
-// Lipgloss styles for sums output. renameHeaderStyle, renameAlbumStyle,
-// renameRuleStyle, and renameBoldStyle are reused from rename.go; they are in
-// the same package and carry the same visual meaning here.
-var (
-	sumsCheckStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
-	sumsSkipStyle  = lipgloss.NewStyle().Faint(true)
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var sumsCmd = &cobra.Command{
@@ -125,7 +118,7 @@ func runSumsAlbum(out io.Writer, dir string, force, isTTY bool, start time.Time)
 		)
 	}
 
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Hashing files..."))
+	lipgloss.Fprintln(out, style.Header.Render("Hashing files..."))
 	fmt.Fprintln(out)
 
 	var count int
@@ -147,7 +140,7 @@ func runSumsAlbum(out io.Writer, dir string, force, isTTY bool, start time.Time)
 		fmt.Fprint(out, "\r\033[K")
 	}
 
-	lipgloss.Fprintln(out, sumsCheckStyle.Render(
+	lipgloss.Fprintln(out, style.OK.Render(
 		fmt.Sprintf("✓  sums.md5 written — %d %s · %s", count, pluralFiles(count),
 			time.Since(start).Round(10*time.Millisecond)),
 	))
@@ -167,7 +160,7 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool, start time.Tim
 		return albums[i].RootPath < albums[j].RootPath
 	})
 
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Generating checksums..."))
+	lipgloss.Fprintln(out, style.Header.Render("Generating checksums..."))
 	fmt.Fprintln(out)
 
 	if len(albums) == 0 {
@@ -185,11 +178,11 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool, start time.Tim
 
 		// Print the album path before processing so the user can see
 		// which album is active while hashing runs below it.
-		lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(relPath))
+		lipgloss.Fprintln(out, "  "+style.Name.Render(relPath))
 
 		sumsPath := filepath.Join(album.RootPath, hasher.SumsFilename)
 		if _, err := os.Stat(sumsPath); err == nil && !force {
-			lipgloss.Fprintln(out, "    "+sumsSkipStyle.Render("— skipped"))
+			lipgloss.Fprintln(out, "    "+style.Faint.Render("— skipped"))
 			skipped++
 			continue
 		}
@@ -215,7 +208,7 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool, start time.Tim
 			fmt.Fprint(out, "\r\033[K")
 		}
 
-		lipgloss.Fprintln(out, "    "+sumsCheckStyle.Render(
+		lipgloss.Fprintln(out, "    "+style.OK.Render(
 			fmt.Sprintf("✓  %d %s", count, pluralFiles(count)),
 		))
 		generated++
@@ -226,8 +219,8 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool, start time.Tim
 		"%d albums · %d generated · %d skipped · %s",
 		len(albums), generated, skipped, time.Since(start).Round(10*time.Millisecond),
 	)
-	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, style.Rule.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, style.Bold.Render(summaryText))
 	return nil
 }
 
