@@ -1,0 +1,3 @@
+# Rip logs used as test fixtures must not be line-ending converted or diffed as
+# text; they are UTF-16.
+internal/riplog/testdata/*.log binary

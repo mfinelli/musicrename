@@ -15,3 +15,12 @@ indent_style = space
 [justfile]
 indent_size = 4
 indent_style = space
+
+# The rip logs used as test fixtures are byte-for-byte what Exact Audio Copy
+# wrote: UTF-16LE with CRLF line endings. Saving them with the settings above
+# would silently change them.
+[internal/riplog/testdata/*.log]
+charset = utf-16le
+end_of_line = crlf
+insert_final_newline = unset
+trim_trailing_whitespace = unset
