@@ -29,21 +29,23 @@ Homepage: <https://www.exactaudiocopy.de/>
   `mrr riplog` checks them against the rip log (see
   [Staging the rip](#staging-the-rip)). The names are as they appear in the log:
 
-  | Setting (as named in the log)               | Required value                           |
-  | ------------------------------------------- | ---------------------------------------- |
-  | Read mode                                   | Secure                                   |
-  | Utilize accurate stream                     | Yes                                      |
-  | Defeat audio cache                          | Yes                                      |
-  | Make use of C2 pointers                     | No                                       |
-  | Read offset correction                      | The drive's AccurateRip-confirmed offset |
-  | Fill up missing offset samples with silence | Yes                                      |
-  | Delete leading and trailing silent blocks   | No                                       |
-  | Null samples used in CRC calculations       | Yes                                      |
-  | Add ID3 tag                                 | No                                       |
-  | Command line compressor                     | `FLAC.EXE`                               |
-  | Additional command line options             | Includes `-V` (verify the encode)        |
+  | Setting (as named in the log)               | Required value                                |
+  | ------------------------------------------- | --------------------------------------------- |
+  | Read mode                                   | Secure                                        |
+  | Utilize accurate stream                     | Yes                                           |
+  | Defeat audio cache                          | Yes                                           |
+  | Make use of C2 pointers                     | No                                            |
+  | Read offset correction                      | The drive's AccurateRip-confirmed offset      |
+  | Overread into Lead-In and Lead-Out          | Whether the drive supports it (currently: No) |
+  | Fill up missing offset samples with silence | Yes                                           |
+  | Delete leading and trailing silent blocks   | No                                            |
+  | Null samples used in CRC calculations       | Yes                                           |
+  | Add ID3 tag                                 | No                                            |
+  | Command line compressor                     | `FLAC.EXE`                                    |
+  | Additional command line options             | Includes `-V` (verify the encode)             |
 
   **TODO:** document where in EAC each of these is set.
+
 - **TODO:** document the EAC settings to configure after the wizard.
 
 ### foobar2000

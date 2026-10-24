@@ -32,7 +32,7 @@ var allCheckIDs = []string{
 	"version", "rip-type",
 	"read-mode", "accurate-stream", "defeat-cache", "c2",
 	"fill-silence", "silent-blocks", "null-samples", "id3",
-	"normalize", "encoder", "encoder-verify", "offset",
+	"normalize", "encoder", "encoder-verify", "offset", "overread",
 	"test-copy", "errors", "accuraterip", "whole-disc", "ctdb", "checksum",
 }
 
@@ -301,6 +301,118 @@ func asNotInAccurateRip(t *testing.T, text string) string {
 	t.Helper()
 	require.True(t, reARAccurate.MatchString(text))
 	return reARAccurate.ReplaceAllString(text, "$1  not present in database")
+}
+
+// withKnownDrive adds a drive to the table of known drives for one test.
+func withKnownDrive(t *testing.T, name string, p driveProfile) {
+	t.Helper()
+	old, had := knownDrives[name]
+	knownDrives[name] = p
+	t.Cleanup(func() {
+		if had {
+			knownDrives[name] = old
+		} else {
+			delete(knownDrives, name)
+		}
+	})
+}
+
+func TestVerifyOverread(t *testing.T) {
+	good := fixtureText(t, fixtureBlack)
+	const unknownDrive = "Fictional  FX-1  Adapter: 1  ID: 0"
+
+	t.Run("the known drive, as recorded", func(t *testing.T) {
+		c := want(t, verify(t, good), "overread", StatusPass)
+		assert.Contains(t, c.Detail, "No for asus sdrw-08v1m-u")
+	})
+
+	t.Run("turned on for a drive recorded as not overreading", func(t *testing.T) {
+		r := verify(t, withSetting(t, good, overreadLabel, "Yes"))
+
+		c := want(t, r, "overread", StatusError)
+		assert.Contains(t, c.Detail, "not overreading")
+		assert.Contains(t, c.Detail, "update the drive table")
+		assert.True(t, r.Failed())
+	})
+
+	t.Run("off for a drive that can overread", func(t *testing.T) {
+		withKnownDrive(t, "asus sdrw-08v1m-u", driveProfile{Offset: 6, Overread: true})
+
+		r := verify(t, good) // the log says No
+
+		c := want(t, r, "overread", StatusError)
+		assert.Contains(t, c.Detail, "can overread")
+		assert.Contains(t, c.Detail, "filled with silence")
+	})
+
+	t.Run("on for a drive that can overread", func(t *testing.T) {
+		withKnownDrive(t, "asus sdrw-08v1m-u", driveProfile{Offset: 6, Overread: true})
+
+		r := verify(t, withSetting(t, good, overreadLabel, "Yes"))
+
+		want(t, r, "overread", StatusPass)
+	})
+
+	t.Run("the value's case does not matter", func(t *testing.T) {
+		r := verify(t, withSetting(t, good, overreadLabel, "no"))
+
+		want(t, r, "overread", StatusPass)
+	})
+
+	t.Run("a missing line for a known drive is an error, never a pass", func(t *testing.T) {
+		r := verify(t, withoutLine(t, good, "Overread into"))
+
+		c := want(t, r, "overread", StatusError)
+		assert.Contains(t, c.Detail, "not found")
+	})
+
+	t.Run("a value that is neither yes nor no", func(t *testing.T) {
+		r := verify(t, withSetting(t, good, overreadLabel, "Maybe"))
+
+		c := want(t, r, "overread", StatusError)
+		assert.Contains(t, c.Detail, "neither Yes nor No")
+	})
+
+	t.Run("an unknown drive has nothing to be compared with", func(t *testing.T) {
+		for _, value := range []string{"Yes", "No"} {
+			r := verify(t, withSetting(t, withSetting(t, good, "Used drive", unknownDrive), overreadLabel, value))
+
+			c := want(t, r, "overread", StatusInfo)
+			assert.Contains(t, c.Detail, "not verified")
+		}
+	})
+
+	t.Run("an unknown drive does not need the line at all", func(t *testing.T) {
+		text := withoutLine(t, withSetting(t, good, "Used drive", unknownDrive), "Overread into")
+
+		want(t, verify(t, text), "overread", StatusInfo)
+	})
+}
+
+func TestRequirements(t *testing.T) {
+	reqs := Requirements()
+
+	t.Run("matches the rules the checks use", func(t *testing.T) {
+		require.Len(t, reqs, len(settingRules))
+		for i, rule := range settingRules {
+			assert.Equal(t, Requirement{Label: rule.label, Want: rule.want, Why: rule.why}, reqs[i])
+		}
+	})
+
+	t.Run("names settings the real logs contain", func(t *testing.T) {
+		l := parse(t, fixtureText(t, fixtureBlack))
+		for _, req := range reqs {
+			got, ok := l.Setting(req.Label)
+			assert.True(t, ok, req.Label)
+			assert.Equal(t, strings.ToLower(req.Want), strings.ToLower(got), req.Label)
+		}
+	})
+
+	t.Run("changing the result does not change the profile", func(t *testing.T) {
+		reqs[0].Want = "Burst"
+
+		assert.Equal(t, "Secure", Requirements()[0].Want)
+	})
 }
 
 func TestVerifyTestCopy(t *testing.T) {

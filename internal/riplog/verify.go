@@ -152,6 +152,26 @@ var settingRules = []settingRule{
 		"ID3 tags do not belong in FLAC files, which use Vorbis comments"},
 }
 
+// Requirement is one setting the profile requires of every log: the label the
+// log uses for it, the value it must have, and what goes wrong otherwise.
+type Requirement struct {
+	Label string
+	Want  string
+	Why   string
+}
+
+// Requirements returns the settings every log must have, in the order they are
+// checked. The drive-dependent settings (read offset and overread) are not
+// here, since their values are per drive, nor are the checks on the outcome of
+// the rip.
+func Requirements() []Requirement {
+	out := make([]Requirement, len(settingRules))
+	for i, rule := range settingRules {
+		out[i] = Requirement{Label: rule.label, Want: rule.want, Why: rule.why}
+	}
+	return out
+}
+
 // Verify checks a parsed log against the profile.
 func Verify(l *Log) *Result {
 	r := &Result{}
@@ -164,6 +184,7 @@ func Verify(l *Log) *Result {
 	checkNormalization(r, l)
 	checkEncoder(r, l)
 	checkOffset(r, l)
+	checkOverread(r, l)
 	checkTestCopy(r, l)
 	checkErrors(r, l)
 	checkAccurateRip(r, l)
@@ -295,19 +316,66 @@ func checkOffset(r *Result, l *Log) {
 	}
 
 	drive := normalizeDrive(l.Drive)
-	want, known := knownDrives[drive]
+	prof, known := knownDrives[drive]
 	switch {
-	case known && got == want:
+	case known && got == prof.Offset:
 		r.add("offset", "Read offset", StatusPass, "%+d for %s", got, drive)
 	case known:
 		r.add("offset", "Read offset", StatusError,
-			"%+d for %s, expected %+d: every track is shifted by the difference", got, drive, want)
+			"%+d for %s, expected %+d: every track is shifted by the difference", got, drive, prof.Offset)
 	case arConfirmsAll(l):
 		r.add("offset", "Read offset", StatusInfo,
 			"%q is not a known drive, but AccurateRip confirms offset %+d: add it to the drive table", drive, got)
 	default:
 		r.add("offset", "Read offset", StatusWarning,
 			"%q is not a known drive and AccurateRip did not confirm the offset (%+d), so it cannot be verified", drive, got)
+	}
+}
+
+// overreadLabel is how the log names the overread setting.
+const overreadLabel = "Overread into Lead-In and Lead-Out"
+
+// checkOverread confirms the overread setting is what is known for the drive.
+// Whether it should be on depends on the drive, so for a drive that is not in
+// the table there is nothing to compare it with.
+func checkOverread(r *Result, l *Log) {
+	drive := normalizeDrive(l.Drive)
+	prof, known := knownDrives[drive]
+	if !known {
+		r.add("overread", "Overread", StatusInfo,
+			"%q is not a known drive, so whether overread should be on is not verified", drive)
+		return
+	}
+
+	raw, ok := l.Setting(overreadLabel)
+	if !ok {
+		r.add("overread", "Overread", StatusError,
+			"%q not found in the log, so it cannot be verified", overreadLabel)
+		return
+	}
+
+	var got bool
+	switch {
+	case strings.EqualFold(raw, "Yes"):
+		got = true
+	case strings.EqualFold(raw, "No"):
+		got = false
+	default:
+		r.add("overread", "Overread", StatusError, "%q is neither Yes nor No", raw)
+		return
+	}
+
+	switch {
+	case got == prof.Overread:
+		r.add("overread", "Overread", StatusPass, "%s for %s", raw, drive)
+	case prof.Overread:
+		r.add("overread", "Overread", StatusError,
+			"%s, but %s can overread: without it the samples the offset needs from beyond the ends of the disc are filled with silence instead of read",
+			raw, drive)
+	default:
+		r.add("overread", "Overread", StatusError,
+			"%s, but %s is recorded as not overreading: if it was turned on deliberately, update the drive table",
+			raw, drive)
 	}
 }
 

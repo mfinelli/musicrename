@@ -957,10 +957,10 @@ one sample rate and only roughly across rates.
 ## 13. Rip Log Verification
 
 `musicrename riplog` checks an Exact Audio Copy (EAC) rip log against the
-settings a rip should have been made with. A wrong setting does not stop a rip
-from completing and often gives a file that sounds fine, so the log, which
-records every setting that affects accuracy, is the one place the mistake can be
-caught afterwards.
+settings a rip should have been made with. A rip made with a wrong setting still
+completes, and the result usually sounds fine, so the mistake is easy to make
+and hard to notice. The log records every setting that affects accuracy, which
+makes it possible to check them after the fact.
 
 ### 13.1 Scope
 
@@ -1015,7 +1015,8 @@ Besides these settings it checks that:
 - no normalization is recorded;
 - the encoder is `flac.exe` and its command line includes `-V`, so the encode is
   verified to decode back to the same audio;
-- the read offset is the one known for the drive (13.5);
+- the read offset and the overread setting are the ones known for the drive
+  (13.5);
 - both the test and the copy pass were made and their CRCs agree, and the log
   says the copy is OK;
 - no errors were reported;
@@ -1028,16 +1029,18 @@ Besides these settings it checks that:
   is a warning, since it comes from a plugin that may not be installed;
 - the log carries its checksum (13.6).
 
-Overreading into the lead-in and lead-out is not checked, because whether it is
-possible depends on the drive.
+Settings outside the profile, such as the interface EAC used or the encoder's
+bitrate and quality, are not looked at, whether the log states them or not.
 
 ### 13.4 Unverifiable is not verified
 
 A setting the log is expected to state but does not is an error ("not found in
 the log, so it cannot be verified"). A check never passes because the
-information it needs is missing.
+information it needs is missing. "Expected" means part of the profile: a log
+with `Read mode` deleted fails, while one with a line deleted that the profile
+does not look at is unchanged.
 
-### 13.5 Drive offsets
+### 13.5 Drive offset and overread
 
 The read offset is a property of the drive: how far its reading is shifted from
 where the audio really is. A wrong one shifts every track. The offsets of the
@@ -1045,13 +1048,26 @@ drives actually used are a small table in code (`internal/riplog/drives.go`),
 each one a value AccurateRip has confirmed for that drive. A known drive must
 match its offset; a mismatch is an error.
 
+Overread (`Overread into Lead-In and Lead-Out`) is also a property of the drive
+and is recorded in the same table. To correct for a drive's offset, EAC needs a
+few samples from beyond the edge of the audio: past the end of the last track
+for a positive offset, before the start of the first track for a negative one. A
+drive that can read into the lead-in and lead-out supplies them; for one that
+cannot, EAC fills them in with silence, which is why
+`Fill up missing offset samples with silence` is required to be on. The log
+cannot say which kind of drive it is, and turning overread on for a drive that
+cannot do it can cause read errors, so the table records the setting as
+determined for each drive (EAC can test for it), and a known drive's log must
+match. The difference is a handful of samples at the very ends of the disc.
+
 The log's drive line carries its adapter and ID, which vary, so it is normalized
 before lookup (lower-cased, adapter and revision removed). For an unknown drive
-the result depends on whether AccurateRip confirmed every track at the offset
-used: if so, it is a note that the drive and offset can be added to the table;
-if not, a warning that the offset cannot be verified. When a drive is added or
+the offset result depends on whether AccurateRip confirmed every track at the
+offset used: if so, it is a note that the drive and offset can be added to the
+table; if not, a warning that the offset cannot be verified. Overread is only
+noted, since there is nothing to compare it with. When a drive is added or
 replaced, run EAC's AccurateRip configuration, rip a disc AccurateRip knows, and
-add the drive to the table.
+add the drive to the table, with its overread setting.
 
 ### 13.6 Log checksum
 

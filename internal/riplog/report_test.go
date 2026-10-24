@@ -136,8 +136,8 @@ func TestPassSummary(t *testing.T) {
 	assert.Equal(t, "no checks passed", build().PassSummary())
 
 	t.Run("on real logs", func(t *testing.T) {
-		assert.Equal(t, "all 20 checks passed", verify(t, fixtureText(t, fixtureBlack)).PassSummary())
-		assert.Equal(t, "19 other checks passed", verify(t, fixtureText(t, fixtureBday)).PassSummary())
+		assert.Equal(t, "all 21 checks passed", verify(t, fixtureText(t, fixtureBlack)).PassSummary())
+		assert.Equal(t, "20 other checks passed", verify(t, fixtureText(t, fixtureBday)).PassSummary())
 	})
 }
 

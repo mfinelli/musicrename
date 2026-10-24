@@ -43,7 +43,7 @@ func TestNormalizeDrive(t *testing.T) {
 }
 
 func TestKnownDrives(t *testing.T) {
-	assert.Equal(t, 6, knownDrives["asus sdrw-08v1m-u"])
+	assert.Equal(t, driveProfile{Offset: 6, Overread: false}, knownDrives["asus sdrw-08v1m-u"])
 
 	for name := range knownDrives {
 		assert.Equal(t, name, normalizeDrive(name), "table keys must already be normalized or they can never match")

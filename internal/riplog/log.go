@@ -20,9 +20,10 @@
 //
 // An EAC log records, besides the result of the rip, every setting that
 // affects its accuracy: the read mode, whether the audio cache was defeated,
-// the drive's offset correction, and so on. A wrong setting does not stop the
-// rip from completing, and often produces a file that sounds fine, so the log
-// is the one place such a mistake can be caught afterwards.
+// the drive's offset correction, and so on. EAC will go ahead with a wrong
+// setting and the audio often sounds fine, so nothing at the time points to the
+// mistake; what the log offers is a record of how the rip was really made, to
+// check against how it should have been.
 //
 // The package reads the log (ParseLog) and runs it against a fixed profile
 // (Verify), producing a list of checks, each of which passed or did not. It is

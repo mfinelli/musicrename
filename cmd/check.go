@@ -32,9 +32,13 @@ import (
 	"github.com/mfinelli/musicrename/internal/metadata"
 )
 
+// Styles shared by the commands that report on something and exit non-zero
+// when it is wrong: check, spectrum and riplog.
 var (
 	checkOKStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))  // green
 	checkFindingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // bright yellow, matches renameWarningStyle
+	checkErrorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // bright red
+	checkFaintStyle   = lipgloss.NewStyle().Faint(true)
 )
 
 var checkCmd = &cobra.Command{

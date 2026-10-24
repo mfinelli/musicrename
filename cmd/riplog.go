@@ -32,51 +32,72 @@ import (
 	"github.com/mfinelli/musicrename/internal/riplog"
 )
 
-// Lipgloss styles for riplog output. The pass and warning colors are shared
-// with check (checkOKStyle, checkFindingStyle); only the colors unique to this
-// command are defined here.
-var (
-	riplogErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")) // bright red
-	riplogFaintStyle = lipgloss.NewStyle().Faint(true)
-)
+// riplogLongTemplate is the command's help text. The %s is the table of
+// required settings, which is built from the profile itself (see
+// riplogRequirements) so that the help cannot disagree with what is checked.
+const riplogLongTemplate = `Reads the settings an Exact Audio Copy rip was made with back out of its log and
+checks them. EAC goes ahead with a wrong setting without complaint, and the
+audio usually still sounds fine, so this is how a mistake gets noticed.
+
+path is a .log file, or a directory whose .log files are all checked (a
+multi-disc rip has one per disc). Run it on the original rip, before the files
+are checksummed and the image is split. It defaults to the current directory.
+
+These settings must have the values shown. The names are the ones EAC uses in
+the log:
+
+%s
+
+Also checked:
+  - the drive's read offset and overread setting, against what is known for it
+  - FLAC.EXE as the encoder, with -V among its options
+  - no normalization, matching test and copy CRCs, and no reported errors
+  - AccurateRip and CUETools DB results (a disc they do not know is a warning)
+  - that the log ends with its checksum (present and well formed, not verified)
+
+A required setting the log does not state is an error, not a pass.
+
+Only image rips (one disc, one file, with a cue sheet) from English-language EAC
+1.x are supported. Any other log is reported as unsupported, which counts as an
+error because it cannot be verified.
+
+Each check ends up as ok, a note, a warning, or an error. Only the checks that
+did not pass are listed unless -v is given. The exit status is non-zero when any
+log has an error, and with --strict when any has a warning.`
 
 var riplogCmd = &cobra.Command{
 	Use:   "riplog [path]",
 	Short: "Check an EAC rip log for the correct settings",
-	Long: `Checks an Exact Audio Copy rip log against the settings a rip should have been
-made with. A wrong setting does not stop a rip from completing, and often gives
-a file that sounds fine, so the log is the one place such a mistake can be
-caught afterwards.
-
-If path is a .log file, that log is checked. If path is a directory, every .log
-file directly inside it is checked (a multi-disc rip has one per disc). Run it
-on the original rip, before the files are checksummed and the image is split.
-If path is omitted it defaults to the current directory.
-
-It checks that the rip was made in secure mode with accurate stream and the
-audio cache defeated, without C2 pointers, normalization, or removal of silent
-blocks; that the drive's read offset is the one known for it; that the test and
-copy passes were both made and agree; that no errors were reported; that
-AccurateRip and the CUETools database (if present) confirmed the rip; and that
-the audio was encoded with FLAC with verification on.
-
-Each check is shown as ok, a note, a warning, or an error. By default only the
-checks that did not pass are listed; use -v to see them all.
-
-Only image rips (one disc, one file, with a cue sheet) from English-language
-EAC 1.x are supported. A log of any other kind is reported as unsupported, which
-counts as an error, since it cannot be verified.
-
-Exits with a non-zero status when any log has an error, enabling use in scripts.
-Warnings (such as a disc that AccurateRip does not know) do not by themselves
-fail the run; with --strict they do.`,
-	Args: cobra.MaximumNArgs(1),
+	Long:  riplogLong(),
+	Args:  cobra.MaximumNArgs(1),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		// Either a log file or a directory is valid here, so fall back to
 		// normal completion.
 		return nil, cobra.ShellCompDirectiveDefault
 	},
 	RunE: runRiplog,
+}
+
+// riplogLong returns the help text with the required settings filled in.
+func riplogLong() string {
+	return fmt.Sprintf(riplogLongTemplate, riplogRequirements())
+}
+
+// riplogRequirements formats the profile's required settings as an indented
+// two-column table: the setting's name and its required value.
+func riplogRequirements() string {
+	reqs := riplog.Requirements()
+
+	width := 0
+	for _, r := range reqs {
+		width = max(width, len(r.Label))
+	}
+
+	lines := make([]string, len(reqs))
+	for i, r := range reqs {
+		lines[i] = fmt.Sprintf("  %-*s  %s", width, r.Label, r.Want)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func init() {
@@ -165,7 +186,7 @@ func riplogCheckOne(out io.Writer, logPath string, strict, verbose bool) (findin
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		lipgloss.Fprintln(out, "  "+name)
-		lipgloss.Fprintln(out, "    "+riplogErrorStyle.Render("✗ could not read: "+err.Error()))
+		lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ could not read: "+err.Error()))
 		return 1, true
 	}
 
@@ -174,16 +195,16 @@ func riplogCheckOne(out io.Writer, logPath string, strict, verbose bool) (findin
 		lipgloss.Fprintln(out, "  "+name)
 		var unsupported *riplog.UnsupportedError
 		if errors.As(err, &unsupported) {
-			lipgloss.Fprintln(out, "    "+riplogErrorStyle.Render("✗ "+err.Error()))
+			lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ "+err.Error()))
 		} else {
-			lipgloss.Fprintln(out, "    "+riplogErrorStyle.Render("✗ could not read the log: "+err.Error()))
+			lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ could not read the log: "+err.Error()))
 		}
 		return 1, true
 	}
 
 	res := riplog.Verify(l)
 
-	lipgloss.Fprintln(out, "  "+name+"  "+riplogFaintStyle.Render(l.Describe()))
+	lipgloss.Fprintln(out, "  "+name+"  "+checkFaintStyle.Render(l.Describe()))
 	for _, c := range res.Checks {
 		if c.Status == riplog.StatusPass && !verbose {
 			continue
@@ -206,14 +227,14 @@ func riplogCheckLine(c riplog.Check) string {
 	case riplog.StatusWarning:
 		sigil = checkFindingStyle.Render("⚠")
 	case riplog.StatusError:
-		sigil = riplogErrorStyle.Render("✗")
+		sigil = checkErrorStyle.Render("✗")
 	default:
-		sigil = riplogFaintStyle.Render("·")
+		sigil = checkFaintStyle.Render("·")
 	}
 
 	detail := c.Detail
 	if c.Status == riplog.StatusPass || c.Status == riplog.StatusInfo {
-		detail = riplogFaintStyle.Render(detail)
+		detail = checkFaintStyle.Render(detail)
 	}
 	return sigil + " " + c.Name + ": " + detail
 }

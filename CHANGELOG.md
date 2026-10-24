@@ -8,11 +8,12 @@ my own reference.
 
 - Add `riplog`, which checks an Exact Audio Copy rip log for the correct
   settings: secure mode, accurate stream, audio cache defeated, no C2 pointers,
-  normalization, or removal of silent blocks, the drive's known read offset,
-  matching test and copy CRCs, no reported errors, AccurateRip and CUETools
-  database results, and FLAC verification. A wrong option is then caught after
-  the rip instead of never. Image rips from English-language EAC 1.x only. Exits
-  non-zero on errors, and on warnings with `--strict`; `-v` shows every check.
+  normalization, or removal of silent blocks, the drive's known read offset and
+  overread setting, matching test and copy CRCs, no reported errors, AccurateRip
+  and CUETools database results, and FLAC verification, so a wrong option is
+  noticed right after the rip. Image rips from English-language EAC 1.x only.
+  Exits non-zero on errors, and on warnings with `--strict`; `-v` shows every
+  check.
 - Add `spectrum`, which checks whether a FLAC (or ALAC) track or album is really
   lossless or a lossy encode (MP3, AAC, etc.) that was converted afterwards. It
   measures the file's frequency spectrum and looks for the sharp cutoff lossy
