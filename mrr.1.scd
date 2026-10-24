@@ -229,7 +229,8 @@ and the result usually sounds fine, so nothing at the time says anything is
 wrong.
 
 _path_ is a *.log* file, which is checked, or a directory, in which every *.log*
-file directly inside it is checked (a multi-disc rip has one per disc). Run it
+file directly inside it is checked (a multi-disc rip has one per disc). A log
+named _Album_.log is expected to have _Album_.cue beside it. Run it
 on the original rip, before the files are checksummed and the image is split.
 Defaults to the current directory.
 
@@ -240,7 +241,9 @@ silent blocks, and the handling of the drive's read offset and of the samples at
 the ends of the disc. The third is how the rip turned out: whether the test and
 copy passes agree, any reported errors, and what AccurateRip and the CUETools
 database made of it. The encoder must also be FLAC with verification on, and the
-log must carry its checksum, which is not verified. A required setting that the
+log must carry its checksum, which is not verified. A fourth group is the files
+that go with the log: the cue sheet of the same name must agree with the log's
+table of contents, and the FLAC image it names must be there. A required setting that the
 log does not state is an error. *mrr riplog --help* lists the settings and the
 values they must have.
 

@@ -18,7 +18,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -40,8 +39,9 @@ checks them. EAC goes ahead with a wrong setting without complaint, and the
 audio usually still sounds fine, so this is how a mistake gets noticed.
 
 path is a .log file, or a directory whose .log files are all checked (a
-multi-disc rip has one per disc). Run it on the original rip, before the files
-are checksummed and the image is split. It defaults to the current directory.
+multi-disc rip has one per disc). Each log is expected to have its cue sheet and
+FLAC image beside it. Run it on the original rip, before the files are
+checksummed and the image is split. It defaults to the current directory.
 
 These settings must have the values shown. The names are the ones EAC uses in
 the log:
@@ -53,6 +53,8 @@ Also checked:
   - FLAC.EXE as the encoder, with -V among its options
   - no normalization, matching test and copy CRCs, and no reported errors
   - AccurateRip and CUETools DB results (a disc they do not know is a warning)
+  - the cue sheet (same name, .cue): same tracks as the log, every INDEX 01 at
+    the log's start sector, a matching disc ID, and a FLAC image that exists
   - that the log ends with its checksum (present and well formed, not verified)
 
 A required setting the log does not state is an error, not a pass.
@@ -183,26 +185,12 @@ func riplogTargets(path string) ([]string, error) {
 func riplogCheckOne(out io.Writer, logPath string, strict, verbose bool) (findings int, fails bool) {
 	name := filepath.Base(logPath)
 
-	data, err := os.ReadFile(logPath)
+	l, res, err := riplog.CheckFile(logPath)
 	if err != nil {
 		lipgloss.Fprintln(out, "  "+name)
-		lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ could not read: "+err.Error()))
+		lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ "+err.Error()))
 		return 1, true
 	}
-
-	l, err := riplog.ParseLog(data)
-	if err != nil {
-		lipgloss.Fprintln(out, "  "+name)
-		var unsupported *riplog.UnsupportedError
-		if errors.As(err, &unsupported) {
-			lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ "+err.Error()))
-		} else {
-			lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ could not read the log: "+err.Error()))
-		}
-		return 1, true
-	}
-
-	res := riplog.Verify(l)
 
 	lipgloss.Fprintln(out, "  "+name+"  "+checkFaintStyle.Render(l.Describe()))
 	for _, c := range res.Checks {

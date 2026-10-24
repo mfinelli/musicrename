@@ -11,7 +11,9 @@ my own reference.
   normalization, or removal of silent blocks, the drive's known read offset and
   overread setting, matching test and copy CRCs, no reported errors, AccurateRip
   and CUETools database results, and FLAC verification, so a wrong option is
-  noticed right after the rip. Image rips from English-language EAC 1.x only.
+  noticed right after the rip. It also checks that the cue sheet and FLAC image
+  beside the log match it: the same tracks, each `INDEX 01` at the log's start
+  sector, and the same disc ID. Image rips from English-language EAC 1.x only.
   Exits non-zero on errors, and on warnings with `--strict`; `-v` shows every
   check.
 - Add `spectrum`, which checks whether a FLAC (or ALAC) track or album is really

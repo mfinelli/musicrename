@@ -40,6 +40,13 @@ const (
 
 var allFixtures = []string{fixtureBlack, fixtureBday, fixtureCentral}
 
+// The cue sheets that go with two of the logs, as EAC wrote them. The B'day one
+// is in Windows-1252, not UTF-8, because of the accent in "Beyoncé".
+const (
+	fixtureBlackCue = "back-in-black.cue"
+	fixtureBdayCue  = "bday.cue"
+)
+
 // fixture returns a fixture's raw bytes.
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
@@ -124,4 +131,66 @@ func encodeUTF16(text string, bigEndian, bom bool) []byte {
 		put(v)
 	}
 	return out
+}
+
+// cueText returns a cue fixture decoded to text, ready to be edited.
+func cueText(t *testing.T, name string) string {
+	t.Helper()
+	return decodeLegacy(fixture(t, name))
+}
+
+// flacBytes is enough of a FLAC file for the checks that look at one: its
+// signature, then padding.
+var flacBytes = append([]byte("fLaC"), make([]byte, 64)...)
+
+// rip is the files of one rip in a temporary directory.
+type rip struct {
+	dir  string
+	stem string
+}
+
+func (r rip) path(ext string) string { return filepath.Join(r.dir, r.stem+ext) }
+
+// logPath returns the path of the rip's log.
+func (r rip) logPath() string { return r.path(".log") }
+
+// buildRip writes a complete rip into a new temporary directory: the log, the
+// cue sheet (as UTF-8 text, which ParseCue accepts), and a FLAC image named as
+// the cue sheet names it. Tests then break it by changing or removing files.
+func buildRip(t *testing.T, stem string, log []byte, cue string) rip {
+	t.Helper()
+	r := rip{dir: t.TempDir(), stem: stem}
+	require.NoError(t, os.WriteFile(r.path(".log"), log, 0o644))
+	require.NoError(t, os.WriteFile(r.path(".cue"), []byte(cue), 0o644))
+	require.NoError(t, os.WriteFile(r.path(".flac"), flacBytes, 0o644))
+	return r
+}
+
+// blackRip and bdayRip build the two rips that have real cue sheets.
+func blackRip(t *testing.T) rip {
+	t.Helper()
+	return buildRip(t, "Back in Black", fixture(t, fixtureBlack), cueText(t, fixtureBlackCue))
+}
+
+func bdayRip(t *testing.T) rip {
+	t.Helper()
+	return buildRip(t, "B'day", fixture(t, fixtureBday), cueText(t, fixtureBdayCue))
+}
+
+// rewriteCue changes the rip's cue sheet by replacing old with new (which must
+// be there) in its text.
+func rewriteCue(t *testing.T, r rip, old, new string) {
+	t.Helper()
+	b, err := os.ReadFile(r.path(".cue"))
+	require.NoError(t, err)
+	text := replaced(t, string(b), old, new)
+	require.NoError(t, os.WriteFile(r.path(".cue"), []byte(text), 0o644))
+}
+
+// check runs CheckFile on the rip and fails the test if it returns an error.
+func (r rip) check(t *testing.T) *Result {
+	t.Helper()
+	_, res, err := CheckFile(r.logPath())
+	require.NoError(t, err)
+	return res
 }

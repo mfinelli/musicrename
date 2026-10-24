@@ -24,3 +24,12 @@ charset = utf-16le
 end_of_line = crlf
 insert_final_newline = unset
 trim_trailing_whitespace = unset
+
+# EAC writes cue sheets in the system's ANSI code page, so a title with an accent
+# in it (as in bday.cue) is one byte that is not valid UTF-8. The test fixtures
+# must stay exactly as EAC wrote them.
+[internal/riplog/testdata/*.cue]
+charset = latin1
+end_of_line = crlf
+insert_final_newline = unset
+trim_trailing_whitespace = unset

@@ -175,8 +175,11 @@ For releases that also include a video DVD:
 4. Check the rip log with `mrr riplog` (from inside that directory, or pass its
    path). It reports any EAC setting that was wrong when the disc was ripped, a
    test and copy that disagree, errors, and discs AccurateRip couldn't confirm.
-   An error means the rip should be redone with the correct settings; a warning
-   is for you to judge.
+   It also checks that the cue sheet and FLAC image beside the log match it. It
+   notes whether the cue sheet records any pregaps, but can't tell whether the
+   disc has none or gaps weren't detected (step 3 of ripping), so that one is
+   still on you. An error means the rip should be redone with the correct
+   settings; a warning is for you to judge.
 
 ## Scanning album art (gscan2pdf)
 

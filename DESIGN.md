@@ -1027,7 +1027,8 @@ Besides these settings it checks that:
   evidence of a bad rip;
 - the CUETools database result, when present, confirms every track. Its absence
   is a warning, since it comes from a plugin that may not be installed;
-- the log carries its checksum (13.6).
+- the cue sheet and FLAC image that go with the log agree with it (13.6);
+- the log carries its checksum (13.7).
 
 Settings outside the profile, such as the interface EAC used or the encoder's
 bitrate and quality, are not looked at, whether the log states them or not.
@@ -1069,7 +1070,36 @@ noted, since there is nothing to compare it with. When a drive is added or
 replaced, run EAC's AccurateRip configuration, rip a disc AccurateRip knows, and
 add the drive to the table, with its overread setting.
 
-### 13.6 Log checksum
+### 13.6 Cue sheet and image
+
+An image rip is a log, a cue sheet, and one FLAC file holding the whole disc,
+and the three have to belong together. For a log `Album.log`, `riplog` expects
+`Album.cue` beside it (the name EAC gives them, and so also for `(disc N)`) and
+reads the audio file the cue sheet names. It checks that:
+
+- the cue sheet is there and can be read. EAC writes cue sheets in the system's
+  ANSI code page unless told otherwise, so one with an accent in a title is not
+  valid UTF-8; text that is not is read as Windows-1252;
+- it names exactly one file, which is a `.flac` in the same directory, is not
+  empty, and begins with the FLAC signature. The file's name is also compared
+  with the image the log says was ripped; a difference is only a warning, since
+  the files may have been renamed;
+- it has the same tracks as the log, numbered the same, all of them audio;
+- every track's `INDEX 01` is exactly where the log's table of contents puts the
+  track: the log's start sector, written as minutes, seconds and frames;
+- its `REM DISCID` equals the freedb disc ID computed from the log's table of
+  contents. EAC computes the one in the cue sheet from that same table, so a cue
+  sheet from another disc cannot pass this even if its tracks happen to line up;
+- any `INDEX 00` lines make sense: each lies inside the track before it.
+
+`INDEX 00` marks where a track's pregap begins and is what EAC's Detect Gaps
+leaves in the cue sheet. The checks can confirm that what is recorded is
+consistent, but not that nothing is missing: a disc with no pregaps and a rip
+made without detecting them produce the same cue sheet. A cue sheet with none is
+therefore a note rather than a failure, and seeing that gaps were detected is
+left to the workflow (`WORKFLOW.md`).
+
+### 13.7 Log checksum
 
 EAC signs its logs with a checksum. `riplog` checks that the checksum is present
 and well formed, and does not verify it. Verifying it would show that a log has
@@ -1077,7 +1107,7 @@ not been edited since EAC wrote it, which matters for a log received from
 someone else and not for one's own rip. A log with no checksum, or a malformed
 one, was edited, cut short, or written by an old EAC, and is an error.
 
-### 13.7 Output and exit status
+### 13.8 Output and exit status
 
 By default each log is shown with the checks that did not pass, followed by a
 count of those that did, so a good rip is a single line. `--verbose` lists every

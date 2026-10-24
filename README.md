@@ -154,9 +154,11 @@ log and verifies that the rip was made in secure mode with accurate stream and
 the audio cache defeated, without C2 pointers, normalization, or removal of
 silent blocks; that the drive's read offset and overread setting are the ones
 known for it; that the test and copy passes agree and no errors were reported;
-that AccurateRip and the CUETools database confirmed the rip; and that FLAC
-verification was on. Operates on a `.log` file or on the `.log` files in a
-directory, and is meant to be run on the original rip before it is checksummed.
+that the cue sheet and FLAC image beside the log match it (the same tracks, each
+starting where the log says, a matching disc ID); that AccurateRip and the
+CUETools database confirmed the rip; and that FLAC verification was on. Operates
+on a `.log` file or on the `.log` files in a directory, and is meant to be run
+on the original rip before it is checksummed.
 
 Only image rips from English-language EAC 1.x are supported; any other log is
 reported as unsupported, which counts as an error. The command exits non-zero if
