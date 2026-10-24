@@ -160,7 +160,7 @@ Checks include:
 
 Read-only; makes no filesystem changes.
 
-## mrr spectrum [_path_] [*--png* _dir_] [*-v*]
+## mrr spectrum [_path_] [*--png* _dir_ [*--annotated*]] [*-v*]
 
 Checks whether audio stored in a lossless container (FLAC, or ALAC in an
 *.m4a*) is really lossless, or is a lossy encode (MP3, AAC, ...) that was
@@ -201,9 +201,14 @@ Read-only with respect to the library. Exits non-zero if any track is *suspect*
 or *likely fake*, or if a track cannot be decoded.
 
 *--png* _dir_
-	Write a spectrogram image of each track, rendered by *ffmpeg*, into _dir_
-	(created if needed), named after the track. A failure to write an image is
-	a warning and does not affect the exit status.
+	Write a spectrogram image of each track into _dir_ (created if needed),
+	named after the track. By default the image is rendered by *ffmpeg*. A
+	failure to write an image is a warning and does not affect the exit status.
+
+*--annotated*
+	Draw each image from the analysis itself instead of with *ffmpeg*: the
+	detected cutoff is marked on it, and for hi-res files the top of CD
+	bandwidth. Requires *--png*.
 
 *-v*, *--verbose*
 	Show the technical detail behind each verdict: the analysis window, the

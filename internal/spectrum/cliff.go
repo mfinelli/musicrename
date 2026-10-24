@@ -41,7 +41,7 @@ func (c Curve) Freq(i int) float64 {
 // newCurve condenses an average power spectrum (n/2+1 linear-power bins from
 // a window of n samples at sampleRate) into bands bandHz wide. Levels are
 // averaged in dB within a band, which keeps a single loud bin from dominating
-// its neighbours.
+// its neighbors.
 func newCurve(power []float64, sampleRate, window int, bandHz float64) Curve {
 	binHz := float64(sampleRate) / float64(window)
 	per := int(math.Round(bandHz / binHz))

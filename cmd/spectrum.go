@@ -68,8 +68,11 @@ This is a heuristic, not a proof. A high-bitrate lossy encode can pass, and a
 lossless file with an unusually sharp lowpass can be flagged.
 
 With --png, a spectrogram image of each track is written into the given
-directory, for a final judgment by eye. Nothing is ever written to the album
-itself unless you point --png there.
+directory, for a final judgment by eye. By default ffmpeg draws it. With
+--annotated the image is drawn from the same measurements as the verdict, with
+the detected cutoff marked on it (and, for hi-res files, the top of CD
+bandwidth). Nothing is ever written to the album itself unless you point --png
+there.
 
 Exits with a non-zero status when any track is suspect or likely fake, enabling
 use in scripts. If path is omitted it defaults to the current directory.`,
@@ -84,6 +87,7 @@ use in scripts. If path is omitted it defaults to the current directory.`,
 
 func init() {
 	spectrumCmd.Flags().String("png", "", "Write a spectrogram PNG for each track into `dir`")
+	spectrumCmd.Flags().Bool("annotated", false, "Draw the spectrogram from the analysis, with the detected cutoff marked (requires --png)")
 	spectrumCmd.Flags().BoolP("verbose", "v", false, "Show the technical detail behind each verdict")
 	spectrumCmd.RegisterFlagCompletionFunc("png", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveFilterDirs
@@ -105,8 +109,13 @@ func runSpectrum(cmd *cobra.Command, args []string) error {
 	}
 
 	pngDir, _ := cmd.Flags().GetString("png")
+	annotated, _ := cmd.Flags().GetBool("annotated")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	out := cmd.OutOrStdout()
+
+	if annotated && pngDir == "" {
+		return fmt.Errorf("--annotated requires --png")
+	}
 
 	tracks, isAlbum, err := spectrumTracks(absPath)
 	if err != nil {
@@ -166,7 +175,7 @@ func runSpectrum(cmd *cobra.Command, args []string) error {
 		spectrumPrintTrack(out, name, res, verbose)
 
 		if pngDir != "" {
-			spectrumWritePNG(ctx, out, track, pngDir)
+			spectrumWritePNG(ctx, out, track, pngDir, annotated, res, th)
 		}
 	}
 
@@ -259,14 +268,21 @@ func spectrumPrintTrack(out io.Writer, name string, res *spectrum.Result, verbos
 	}
 }
 
-// spectrumWritePNG writes track's spectrogram into dir, named after the track.
-// A failure is only a warning: the analysis it illustrates has already
-// succeeded and been reported.
-func spectrumWritePNG(ctx context.Context, out io.Writer, track, dir string) {
+// spectrumWritePNG writes track's spectrogram into dir, named after the track:
+// ffmpeg's picture by default, or, if annotated, one drawn from res with the
+// detected cutoff marked. A failure is only a warning: the analysis it
+// illustrates has already succeeded and been reported.
+func spectrumWritePNG(ctx context.Context, out io.Writer, track, dir string, annotated bool, res *spectrum.Result, th spectrum.Thresholds) {
 	base := filepath.Base(track)
 	dst := filepath.Join(dir, strings.TrimSuffix(base, filepath.Ext(base))+".png")
 
-	if err := spectrum.WriteSpectrogram(ctx, track, dst); err != nil {
+	var err error
+	if annotated {
+		err = spectrum.WriteAnnotatedSpectrogram(ctx, track, dst, res, th)
+	} else {
+		err = spectrum.WriteSpectrogram(ctx, track, dst)
+	}
+	if err != nil {
 		lipgloss.Fprintln(out, "    "+checkFindingStyle.Render("⚠ could not write spectrogram: "+err.Error()))
 		return
 	}

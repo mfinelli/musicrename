@@ -921,9 +921,19 @@ and also exits non-zero. `inconclusive` is not a finding and does not affect the
 exit status.
 
 With `--png`, a spectrogram of each track is written for the curator to judge by
-eye. It is rendered by `ffmpeg` independently of the tool's own measurement. A
-failure to write one is only a warning because the analysis it illustrates has
-already succeeded and been reported.
+eye. By default it is rendered by `ffmpeg` independently of the tool's own
+measurement. A failure to write one is only a warning because the analysis it
+illustrates has already succeeded and been reported.
+
+With `--annotated` (which requires `--png`), the tool draws the picture itself,
+with the detected cutoff marked on it and, for hi-res files, the top of CD
+bandwidth. This is a second pass over the audio, made only on request: the
+analysis keeps only the time-averaged spectrum, and retaining the full
+time-by-frequency grid on every run would cost memory and complexity for an
+output that is rarely wanted. The second pass uses the channel, window and
+silence handling of the analysis, so the picture shows what the analysis saw,
+and its memory is bounded however long the track is, because neighboring time
+columns are merged as the audio grows.
 
 ### 12.6 Non-goals
 

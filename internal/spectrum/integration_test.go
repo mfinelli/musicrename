@@ -19,6 +19,8 @@ package spectrum
 
 import (
 	"context"
+	"image"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -128,4 +130,55 @@ func TestAnalyzeStopsWhenCancelled(t *testing.T) {
 	_, err := Analyze(ctx, path, DefaultThresholds())
 
 	assert.Error(t, err)
+}
+
+func TestWriteAnnotatedSpectrogramRealFiles(t *testing.T) {
+	ctx := context.Background()
+	th := DefaultThresholds()
+	dir := t.TempDir()
+
+	genuine := testutil.MakeNoiseFlac(t, dir, "genuine.flac", 44100, 8)
+
+	render := func(t *testing.T, src string) (*Result, *image.RGBA) {
+		t.Helper()
+		res, err := Analyze(ctx, src, th)
+		require.NoError(t, err)
+
+		dst := filepath.Join(dir, filepath.Base(src)+".png")
+		require.NoError(t, WriteAnnotatedSpectrogram(ctx, src, dst, res, th))
+		return res, decodePNG(t, dst)
+	}
+
+	t.Run("the cutoff marker sits on the edge of the content in a transcode", func(t *testing.T) {
+		src := testutil.MakeLossyTranscodeFlac(t, genuine, dir, "from-mp3.flac", ".mp3",
+			"-c:a", "libmp3lame", "-b:a", "128k")
+
+		res, img := render(t, src)
+
+		require.NotNil(t, res.Cliff)
+		y := freqY(res.Cliff.CutoffHz, 22050)
+		x := marginL + plotW/2
+		assert.Equal(t, colCutoff, img.RGBAAt(x, y))
+		// Loud just below the marker and quiet just above it: the line is
+		// where the picture's content actually ends, not merely where the
+		// code says it is.
+		below, above := luma(img.RGBAAt(x, y+10)), luma(img.RGBAAt(x, y-10))
+		assert.Greater(t, below, above+40)
+	})
+
+	t.Run("a genuine file has no marker", func(t *testing.T) {
+		_, img := render(t, genuine)
+
+		assert.Equal(t, 0, count(img, plotRect, colCutoff))
+	})
+
+	t.Run("an upsampled file shows the CD bandwidth marker", func(t *testing.T) {
+		src := testutil.MakeHiResFlac(t, genuine, dir, "upsampled.flac", 96000)
+
+		res, img := render(t, src)
+
+		assert.Equal(t, 96000, res.Info.SampleRate)
+		assert.Greater(t, count(img, plotRect, colCDBand), 300)
+		assert.Greater(t, count(img, plotRect, colCutoff), 2*plotW-1)
+	})
 }

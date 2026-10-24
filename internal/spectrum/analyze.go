@@ -36,11 +36,8 @@ package spectrum
 
 import (
 	"context"
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
-	"math"
 )
 
 // Reasons a channel was left out of the analysis.
@@ -133,41 +130,16 @@ func AnalyzeStream(r io.Reader, info StreamInfo, th Thresholds) (*Result, error)
 	w := newWelch(window, info.Channels, th.SilenceDB)
 	bt := newBitTracker(info.BitsPerSample)
 
-	const chunkFrames = 8192
-	frameBytes := 4 * info.Channels
-	buf := make([]byte, chunkFrames*frameBytes)
-	chans := make([][]float64, info.Channels)
-	for c := range chans {
-		chans[c] = make([]float64, 0, chunkFrames)
-	}
-
-	for {
-		n, err := io.ReadFull(r, buf)
-
-		frames := n / frameBytes
-		if frames > 0 {
-			for c := range chans {
-				chans[c] = chans[c][:0]
+	err := readPCM(r, info.Channels, func(chans [][]float64) {
+		for c, samples := range chans {
+			for _, v := range samples {
+				bt.observe(v)
 			}
-			for f := range frames {
-				for c := range info.Channels {
-					bitsVal := binary.LittleEndian.Uint32(buf[(f*info.Channels+c)*4:])
-					v := float64(math.Float32frombits(bitsVal))
-					chans[c] = append(chans[c], v)
-					bt.observe(v)
-				}
-			}
-			for c := range chans {
-				w.feed(c, chans[c])
-			}
+			w.feed(c, samples)
 		}
-
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("reading decoded audio: %w", err)
-		}
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	res := &Result{

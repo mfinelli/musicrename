@@ -39,10 +39,19 @@ type welch struct {
 	norm       float64 // scales |X|² so a full-scale sine reads as 1.0 (0 dB)
 	silenceRMS float64 // frames with a lower RMS are ignored
 	re, im     []float64
+	pow        []float64 // the latest frame's normalized power, n/2+1 bins
 	ch         []*chanState
+
+	// hook, if set, is called once per frame with the channel index and that
+	// frame's power spectrum (n/2+1 bins, linear power), or with nil for a
+	// frame skipped as silent. The slice is only valid during the call. The
+	// annotated spectrogram uses it to see individual frames; the analysis
+	// itself only needs the average and leaves it unset.
+	hook func(ch int, power []float64)
 }
 
 type chanState struct {
+	idx     int       // channel index
 	pending []float64 // samples not yet consumed by a complete frame
 	power   []float64 // running sum of per-frame power, n/2+1 bins
 	frames  int       // frames included in power
@@ -68,10 +77,11 @@ func newWelch(n, channels int, silenceDB float64) *welch {
 		silenceRMS: math.Pow(10, silenceDB/20),
 		re:         make([]float64, n),
 		im:         make([]float64, n),
+		pow:        make([]float64, n/2+1),
 		ch:         make([]*chanState, channels),
 	}
 	for i := range w.ch {
-		w.ch[i] = &chanState{power: make([]float64, n/2+1)}
+		w.ch[i] = &chanState{idx: i, power: make([]float64, n/2+1)}
 	}
 	return w
 }
@@ -99,6 +109,9 @@ func (w *welch) frame(st *chanState, x []float64) {
 	}
 	if math.Sqrt(ss/float64(w.n)) < w.silenceRMS {
 		st.silent++
+		if w.hook != nil {
+			w.hook(st.idx, nil)
+		}
 		return
 	}
 
@@ -109,9 +122,15 @@ func (w *welch) frame(st *chanState, x []float64) {
 	w.plan.transform(w.re, w.im)
 
 	for k := 0; k <= w.n/2; k++ {
-		st.power[k] += (w.re[k]*w.re[k] + w.im[k]*w.im[k]) / w.norm
+		p := (w.re[k]*w.re[k] + w.im[k]*w.im[k]) / w.norm
+		w.pow[k] = p
+		st.power[k] += p
 	}
 	st.frames++
+
+	if w.hook != nil {
+		w.hook(st.idx, w.pow)
+	}
 }
 
 // average returns the mean power spectrum of channel ch (n/2+1 bins, linear

@@ -12,9 +12,10 @@ my own reference.
   encoders leave, and also reports hi-res files with nothing above CD bandwidth
   and 24-bit files that only use 16 bits. Each track is `ok`, `suspect`,
   `likely fake`, or `inconclusive`; the command exits non-zero on `suspect` or
-  worse. `--png` writes a spectrogram of each track for judging by eye and `-v`
-  shows the numbers behind each verdict. Works on one track or one album at a
-  time. See `SPECTRUM.md`.
+  worse. `--png` writes a spectrogram of each track for judging by eye
+  (`--annotated` draws it from the analysis itself, with the detected cutoff
+  marked on it) and `-v` shows the numbers behind each verdict. Works on one
+  track or one album at a time. See `SPECTRUM.md`.
 
 ## v4.5.0 — 2026-09-27
 

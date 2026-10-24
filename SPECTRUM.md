@@ -31,6 +31,7 @@ want to use the command, the next section is all you need.
 mrr spectrum album/                  # every track in one album
 mrr spectrum "01 track.flac"         # one track
 mrr spectrum album/ --png out/       # also write a spectrogram image per track
+mrr spectrum album/ --png out/ --annotated   # ...with the cutoff marked on it
 mrr spectrum album/ -v               # show the numbers behind each verdict
 ```
 
@@ -199,8 +200,9 @@ wide.
 
 The classic fast version needs N to be a power of two (1024, 2048, 4096, ...),
 which is one reason window sizes below are always powers of two. The FFT in this
-tool is a short, self-contained Go implementation, checked in the tests against
-a slow, obviously-correct definition.
+tool is a short, self-contained Go implementation, checked in the tests
+(`TestFFT`, "matches a naive DFT") against a direct, slow implementation of the
+textbook definition.
 
 ### 4. The window, and why it matters so much
 
@@ -290,9 +292,9 @@ The result is one number per bin: the long-term average power at that frequency.
 
 ### 7. Condense into bands
 
-Looking at individual bins would be noisy: neighbouring bins jitter by several
+Looking at individual bins would be noisy: neighboring bins jitter by several
 dB. So the spectrum is condensed into **bands** about 100 Hz wide (nine
-neighbouring bins at 44.1 kHz), averaging the level in dB within each band. A
+neighboring bins at 44.1 kHz), averaging the level in dB within each band. A
 44.1 kHz file becomes a curve of about 220 points from 0 to 22 kHz. This curve
 is what everything after this point works on.
 
@@ -310,8 +312,8 @@ Where the first is much higher than the second, there is a drop. Rules:
    that.)
 2. A drop of **at least 15 dB** counts as an edge. Real music's spectrum does
    not fall that fast over 1 kHz without a reason.
-3. If several neighbouring positions all qualify, they are one edge; the
-   steepest position locates it.
+3. If several neighboring positions all qualify, they are one edge; the steepest
+   position locates it.
 4. The edge reported is the **lowest-frequency** one. What matters is where the
    audio first ends, not the biggest step somewhere above it.
 5. The **cutoff** is the frequency where the curve crosses halfway between the
@@ -448,7 +450,7 @@ _changes_ during a file (some encoders cut lower on difficult passages) shows up
 as a slope, not a wall.
 
 **Mean level in dB, not mean power (within a band).** Averaging dB values keeps
-one loud bin in a band from dominating its neighbours.
+one loud bin in a band from dominating its neighbors.
 
 **The lowest wall.** Described above.
 
@@ -465,11 +467,22 @@ certainty is wrong some of the time; one that admits uncertainty is useful. The
 split between `suspect` and `likely fake` is intentionally cautious, so that
 `likely fake` can be trusted.
 
-**ffmpeg draws the spectrograms.** It adds almost no code, handles every sample
-rate and channel count, and produces the familiar picture with labelled axes,
-which is the one people already know how to read. The picture is independent of
-the tool's measurement; they should agree, and when they do not that is
-interesting in itself.
+**Two ways to draw the spectrogram.** By default ffmpeg draws it. That adds
+almost no code, handles every sample rate and channel count, and produces the
+familiar picture with labelled axes, which is the one people already know how to
+read. The picture is independent of the tool's measurement; they should agree,
+and when they do not that is interesting in itself.
+
+With `--annotated` the tool draws its own instead, from the same measurements as
+the verdict, with the detected cutoff marked on it. The analysis keeps only the
+time-averaged spectrum (that is all it needs), and a picture needs the full grid
+of frequency against time. Rather than keep that grid during every analysis,
+drawing it is a second pass over the audio, made only on request. Its cost is
+about that of the analysis itself, and its memory is bounded however long the
+track is: as the audio grows, neighboring time columns are merged, so at most
+about a thousand columns of 512 frequency rows are ever held. The second pass
+uses the same channel, window and silence handling as the analysis, so the
+picture shows what the analysis saw.
 
 **Thresholds are compiled in and are not configurable at runtime.** They are all
 in one place (`spectrum.Thresholds`) with documentation on each, and are not
@@ -577,21 +590,21 @@ the ones to try:
 number of frames, which is the information needed to choose a value.
 
 **Speed.** The analysis takes about a second for a three-and-a-half minute
-stereo track (measured on a 2.8 GHz server CPU), plus ffmpeg's decoding time and
-about a second for the spectrogram image.
+stereo track (measured on a 2.8 GHz server CPU), plus ffmpeg's decoding time. A
+spectrogram image, either kind, adds up to about a second more.
 
 ---
 
 ## Reading a spectrogram by eye
 
-A spectrogram plots **time** across, **frequency** up, and **loudness** as
-colour (bright is loud, dark is quiet). The axis on the right gives the colours'
-dB values.
+A spectrogram plots **time** across, **frequency** up, and **loudness** as color
+(bright is loud, dark is quiet). The axis on the right gives the colors' dB
+values.
 
 What to look for:
 
 - **A flat ceiling.** A genuine recording fades out toward the top. A lossy
-  transcode has a straight horizontal line, with colour below it and solid black
+  transcode has a straight horizontal line, with color below it and solid black
   above it, running the whole length of the track. This is the thing the tool is
   measuring.
 - **Where the ceiling is, against the sample rate.** 16 kHz in a CD file is a
@@ -603,9 +616,32 @@ What to look for:
 - **Dither or a single noise floor.** A pale uniform haze above the ceiling is
   usually just dither or rounding noise. It does not change the verdict.
 
-The picture is drawn by ffmpeg independently of the measurement, so if the
-verdict and the picture disagree, trust the picture, and treat the disagreement
-as something worth investigating.
+By default the picture is drawn by ffmpeg independently of the measurement, so
+if the verdict and the picture disagree, trust the picture, and treat the
+disagreement as something worth investigating.
+
+### The annotated spectrogram
+
+With `--annotated` the picture is drawn by the tool itself, from the same data
+as the verdict, and marks what the tool concluded:
+
+- **A cyan line** at the detected cutoff, labelled with its frequency and the
+  size of the drop. In a transcode it should sit right on the upper edge of the
+  colored area. If it does not match where your eye puts the edge, either the
+  measurement is off or the file is unusual.
+- **A dashed white line at 22.05 kHz, on hi-res files only**, labelled "CD
+  bandwidth". Content stopping at or not far above it is what an upsampled CD
+  looks like.
+- **No cyan line** means no cutoff was found, as in a genuine file.
+- **The header** gives the file, its format, the channel drawn (the one the
+  verdict was based on) and the verdict in color: green for `ok`, yellow for
+  `suspect`, red for `likely fake`.
+
+The color scale is set from the audio itself: the top is the loudness reached by
+all but the loudest 0.1% of the picture, and the scale runs 110 dB down from
+there. The values are therefore relative to this file, not to a fixed reference,
+and are comparable between pictures only roughly. The footer gives the window
+size and the scale actually used.
 
 ---
 
@@ -613,7 +649,7 @@ as something worth investigating.
 
 **Bin.** One of the evenly spaced frequency slots an FFT reports.
 
-**Band.** A group of neighbouring bins averaged together (here about 100 Hz).
+**Band.** A group of neighboring bins averaged together (here about 100 Hz).
 
 **Cliff / wall / edge.** A place where the spectrum drops a long way, fast.
 
