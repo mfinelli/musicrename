@@ -305,10 +305,7 @@ func (c canvas) drawPlot(g *grid, lo, hi float64) {
 
 	for x := range plotW {
 		frame := int((float64(x) + 0.5) / float64(plotW) * float64(n))
-		ci := sort.Search(len(starts), func(i int) bool { return starts[i] > frame }) - 1
-		if ci < 0 {
-			ci = 0
-		}
+		ci := max(sort.Search(len(starts), func(i int) bool { return starts[i] > frame })-1, 0)
 
 		for y := range plotH {
 			level, ok := g.levelDB(ci, plotH-1-y)

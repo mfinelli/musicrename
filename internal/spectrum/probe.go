@@ -76,7 +76,7 @@ var ffmpegTag = regexp.MustCompile(`^\[[^\]]*@ 0x[0-9a-f]+\]\s*`)
 // is the one that says what went wrong, and a report listing many tracks needs
 // each failure to fit on a line.
 func firstLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			return ffmpegTag.ReplaceAllString(line, "")
 		}

@@ -44,10 +44,7 @@ func (c Curve) Freq(i int) float64 {
 // its neighbors.
 func newCurve(power []float64, sampleRate, window int, bandHz float64) Curve {
 	binHz := float64(sampleRate) / float64(window)
-	per := int(math.Round(bandHz / binHz))
-	if per < 1 {
-		per = 1
-	}
+	per := max(int(math.Round(bandHz/binHz)), 1)
 
 	// The last bin sits exactly at Nyquist; drop any partial trailing band.
 	usable := len(power) - 1
@@ -89,10 +86,7 @@ type Cliff struct {
 // smaller steps in the noise floor above the real edge, and the largest of
 // those is not the one that matters.
 func findCliff(c Curve, th Thresholds) (Cliff, bool) {
-	w := int(math.Round(th.CompareWindowHz / c.BandHz))
-	if w < 2 {
-		w = 2
-	}
+	w := max(int(math.Round(th.CompareWindowHz/c.BandHz)), 2)
 	nb := len(c.DB)
 	if nb < 2*w {
 		return Cliff{}, false
