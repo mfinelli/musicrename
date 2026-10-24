@@ -18,6 +18,7 @@
 package riplog
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,6 +28,8 @@ import (
 	"unicode/utf16"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/mfinelli/musicrename/internal/musicbrainz"
 )
 
 // The three fixture logs are real EAC 1.8 image-rip logs, byte for byte as EAC
@@ -206,6 +209,7 @@ func buildRip(t *testing.T, stem string, log []byte, cue string) rip {
 	require.NoError(t, os.WriteFile(r.path(".log"), log, 0o644))
 	require.NoError(t, os.WriteFile(r.path(".cue"), []byte(cue), 0o644))
 	require.NoError(t, os.WriteFile(r.path(".flac"), imageFLAC(t, log, 0), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(r.dir, releaseFile), []byte(testReleaseURL+"\n"), 0o644))
 	return r
 }
 
@@ -281,10 +285,70 @@ func rewriteCue(t *testing.T, r rip, old, new string) {
 	require.NoError(t, os.WriteFile(r.path(".cue"), []byte(text), 0o644))
 }
 
-// check runs CheckFile on the rip and fails the test if it returns an error.
+// testReleaseID and testReleaseURL are the release in the musicbrainz.txt of a
+// rip built by buildRip: the one Back in Black's own file holds.
+const (
+	testReleaseID  = "d1d196ec-bb2b-4636-81a0-b8f5c5774514"
+	testReleaseURL = "https://musicbrainz.org/release/" + testReleaseID
+)
+
+// fakeLookup is a MusicBrainz that knows only what a test tells it.
+type fakeLookup struct {
+	releases   map[string]*musicbrainz.ReleaseDiscs
+	releaseErr error
+	discs      map[string][]musicbrainz.ReleaseRef
+	discErr    error
+
+	releaseCalls, discCalls []string
+}
+
+func (f *fakeLookup) ReleaseDiscs(_ context.Context, id string) (*musicbrainz.ReleaseDiscs, error) {
+	f.releaseCalls = append(f.releaseCalls, id)
+	if f.releaseErr != nil {
+		return nil, f.releaseErr
+	}
+	r, ok := f.releases[id]
+	if !ok {
+		return nil, musicbrainz.ErrNotFound
+	}
+	return r, nil
+}
+
+func (f *fakeLookup) DiscReleases(_ context.Context, id string) ([]musicbrainz.ReleaseRef, error) {
+	f.discCalls = append(f.discCalls, id)
+	return f.discs[id], f.discErr
+}
+
+// knowing returns a fake MusicBrainz in which the release in testReleaseURL
+// has, as its only medium's disc ID, the given one.
+func knowing(discID string) *fakeLookup {
+	return &fakeLookup{releases: map[string]*musicbrainz.ReleaseDiscs{
+		testReleaseID: {Media: 1, Discs: []musicbrainz.Disc{{ID: discID, Medium: 1}}},
+	}}
+}
+
+// check runs CheckFile on the rip against a MusicBrainz that has the rip's disc
+// attached to its release, as it would for a rip tagged with the right release,
+// and fails the test if it returns an error.
 func (r rip) check(t *testing.T) *Result {
 	t.Helper()
-	_, res, err := CheckFile(r.logPath())
+	l, err := ParseLog(mustRead(t, r.logPath()))
+	require.NoError(t, err)
+	return r.checkWith(t, knowing(l.DiscID()))
+}
+
+// checkWith runs CheckFile on the rip against the given MusicBrainz (nil for
+// none) and fails the test if it returns an error.
+func (r rip) checkWith(t *testing.T, mb Lookup) *Result {
+	t.Helper()
+	_, res, err := CheckFile(context.Background(), r.logPath(), mb)
 	require.NoError(t, err)
 	return res
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return b
 }

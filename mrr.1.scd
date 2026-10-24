@@ -221,7 +221,7 @@ or *likely fake*, or if a track cannot be decoded.
 	Show the technical detail behind each verdict: the analysis window, the
 	bit depth, and each channel's cutoff and drop.
 
-## mrr riplog [_path_] [*--strict*] [*-v*]
+## mrr riplog [_path_] [*--strict*] [*--offline*] [*-v*]
 
 Checks the settings recorded in an Exact Audio Copy rip log against the ones a
 rip should have been made with. EAC does not refuse to rip with a wrong setting,
@@ -244,7 +244,8 @@ database made of it. The encoder must also be FLAC with verification on, and the
 log must carry its checksum, which is not verified. A fourth group is the files
 that go with the log: the cue sheet of the same name must agree with the log's
 table of contents, and the FLAC image it names must be CD audio of exactly the
-length the disc has. A required setting that the
+length the disc has. The last check is that the disc is one the MusicBrainz
+release saved in _musicbrainz.txt_ has, which needs a network connection. A required setting that the
 log does not state is an error. *mrr riplog --help* lists the settings and the
 values they must have.
 
@@ -260,6 +261,10 @@ AccurateRip does not know, do not by themselves fail the run.
 
 *--strict*
 	Treat warnings as failures for the exit status.
+
+*--offline*
+	Do not look the disc up on MusicBrainz. Its disc ID is still computed and
+	shown, but not compared with the release.
 
 *-v*, *--verbose*
 	List every check, not only those that did not pass.

@@ -178,7 +178,10 @@ For releases that also include a video DVD:
    It also checks that the cue sheet and FLAC image beside the log match it,
    including that the image is exactly as long as the disc. If the disc has a
    hidden track before track 1, this is where it shows up if gaps weren't
-   detected: the image then starts at track 1 and leaves it out. It notes
+   detected: the image then starts at track 1 and leaves it out. Last, it looks
+   the disc up on MusicBrainz and checks that it is one the release in
+   `musicbrainz.txt` has, which catches tagging a different pressing than the
+   one ripped; this needs a network connection (`--offline` skips it). It notes
    whether the cue sheet records any pregaps, but can't tell whether the disc
    has none or gaps weren't detected (step 3 of ripping), so that one is still
    on you. An error means the rip should be redone with the correct settings; a

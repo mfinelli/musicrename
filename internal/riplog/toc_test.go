@@ -18,6 +18,7 @@
 package riplog
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,5 +102,81 @@ func TestFreeDBID(t *testing.T) {
 
 		assert.NotEqual(t, a.FreeDBID(), b.FreeDBID())
 		assert.Len(t, a.FreeDBID(), 8)
+	})
+}
+
+func TestDiscID(t *testing.T) {
+	t.Run("the real discs", func(t *testing.T) {
+		// Each of these was opened on MusicBrainz and was the release ripped,
+		// except Central Park, whose ID was computed independently and not
+		// looked up.
+		tests := []struct {
+			fixture string
+			want    string
+		}{
+			{fixtureBlack, "NdW5DdItgg6nqzd5d6Ade54jPKA-"},
+			{fixtureBday, "m_Hx4aO9Zo.DVd9OnSa0YGvodeo-"},
+			{fixtureCentral, "1RenVg1qGKl3xwjJ9D0vL2g6VBo-"},
+			{fixtureTransistor, "FUQaFCauuRGo0EzScvPFCWWr1vc-"}, // audio before track 1
+		}
+		for _, tc := range tests {
+			t.Run(tc.fixture, func(t *testing.T) {
+				l, err := ParseLog(fixture(t, tc.fixture))
+				require.NoError(t, err)
+
+				assert.Equal(t, tc.want, l.DiscID())
+			})
+		}
+	})
+
+	t.Run("the vector MusicBrainz's libraries are tested with", func(t *testing.T) {
+		// The TOC string 4+96+2D2B+6256+B327+D84A in the cdtoc library's tests:
+		// four tracks at offsets 0x96, 0x2D2B, 0x6256 and 0xB327, with the
+		// lead-out at 0xD84A. EAC counts sectors from 150 less.
+		l := &Log{TOC: []TOCTrack{
+			{1, 0x96 - 150, 0x2D2B - 150 - 1},
+			{2, 0x2D2B - 150, 0x6256 - 150 - 1},
+			{3, 0x6256 - 150, 0xB327 - 150 - 1},
+			{4, 0xB327 - 150, 0xD84A - 150 - 1},
+		}}
+
+		assert.Equal(t, "nljDXdC8B_pDwbdY1vZJvdrAZI4-", l.DiscID())
+	})
+
+	t.Run("a disc whose first track is not track 1", func(t *testing.T) {
+		// The offsets go in the slots of their tracks' numbers; those before
+		// the first track stay zero. Computed with a separate implementation.
+		l := &Log{TOC: []TOCTrack{{3, 0, 19849}, {4, 19850, 39849}}}
+
+		assert.Equal(t, "RGpbpRYp.9w.RgUFOxPTbuN0lHI-", l.DiscID())
+	})
+
+	t.Run("always 28 characters from the alphabet", func(t *testing.T) {
+		for _, name := range allFixtures {
+			l, err := ParseLog(fixture(t, name))
+			require.NoError(t, err)
+
+			id := l.DiscID()
+
+			assert.Len(t, id, 28, name)
+			assert.Regexp(t, `^[A-Za-z0-9._-]{28}$`, id, name)
+			assert.True(t, strings.HasSuffix(id, "-"), "a 20-byte hash always ends in padding: %s", name)
+		}
+	})
+
+	t.Run("the freedb ID is a different thing", func(t *testing.T) {
+		l, err := ParseLog(fixture(t, fixtureBlack))
+		require.NoError(t, err)
+
+		assert.NotEqual(t, l.FreeDBID(), l.DiscID())
+	})
+
+	t.Run("no table of contents", func(t *testing.T) {
+		assert.Equal(t, "", (&Log{}).DiscID())
+	})
+
+	t.Run("a track number a disc cannot have", func(t *testing.T) {
+		assert.Equal(t, "", (&Log{TOC: []TOCTrack{{0, 0, 100}}}).DiscID())
+		assert.Equal(t, "", (&Log{TOC: []TOCTrack{{100, 0, 100}}}).DiscID())
 	})
 }

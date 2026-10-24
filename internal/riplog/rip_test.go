@@ -18,6 +18,7 @@
 package riplog
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -29,11 +30,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// mbCheckIDs is the check CheckFile makes last, on the release in musicbrainz.txt.
+var mbCheckIDs = []string{"musicbrainz"}
+
 // cueCheckIDs are the checks CheckFile adds to Verify's when the cue sheet is
 // there and reads.
 var cueCheckIDs = []string{
 	"cue-sheet", "cue-image", "image-format", "image-length",
 	"cue-tracks", "cue-positions", "cue-disc-id", "cue-pregaps",
+}
+
+// regexpTOCRows matches the rows of a log's table of contents.
+var regexpTOCRows = regexp.MustCompile(`(?m)^\s+\d+\s+\|\s+[\d:.]+\s+\|.*$`)
+
+// concat joins lists of check IDs into a new one.
+func concat(lists ...[]string) []string {
+	var out []string
+	for _, l := range lists {
+		out = append(out, l...)
+	}
+	return out
 }
 
 // ids returns the IDs of a result's checks, in order.
@@ -63,9 +79,9 @@ func TestCheckFileRealRips(t *testing.T) {
 	t.Run("Back in Black passes everything", func(t *testing.T) {
 		r := blackRip(t).check(t)
 
-		assert.Equal(t, append(append([]string{}, allCheckIDs...), cueCheckIDs...), ids(r))
+		assert.Equal(t, concat(allCheckIDs, cueCheckIDs, mbCheckIDs), ids(r))
 		assert.Equal(t, StatusPass, r.Worst())
-		assert.Equal(t, len(allCheckIDs)+len(cueCheckIDs), r.Count(StatusPass))
+		assert.Equal(t, len(allCheckIDs)+len(cueCheckIDs)+len(mbCheckIDs), r.Count(StatusPass))
 		assert.Equal(t, "Back in Black.cue", want(t, r, "cue-sheet", StatusPass).Detail)
 		assert.Equal(t, "Back in Black.flac", want(t, r, "cue-image", StatusPass).Detail)
 		assert.Equal(t, "10 tracks", want(t, r, "cue-tracks", StatusPass).Detail)
@@ -110,7 +126,7 @@ func TestCheckFileRealRips(t *testing.T) {
 	})
 
 	t.Run("the log is returned too", func(t *testing.T) {
-		l, _, err := CheckFile(blackRip(t).logPath())
+		l, _, err := CheckFile(context.Background(), blackRip(t).logPath(), nil)
 
 		require.NoError(t, err)
 		assert.Equal(t, "AC/DC / Back in Black", l.Title)
@@ -119,7 +135,7 @@ func TestCheckFileRealRips(t *testing.T) {
 
 func TestCheckFileErrors(t *testing.T) {
 	t.Run("a log that does not exist", func(t *testing.T) {
-		l, res, err := CheckFile(filepath.Join(t.TempDir(), "missing.log"))
+		l, res, err := CheckFile(context.Background(), filepath.Join(t.TempDir(), "missing.log"), nil)
 
 		assert.Nil(t, l)
 		assert.Nil(t, res)
@@ -131,7 +147,7 @@ func TestCheckFileErrors(t *testing.T) {
 		path := filepath.Join(dir, "x.log")
 		require.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
 
-		_, _, err := CheckFile(path)
+		_, _, err := CheckFile(context.Background(), path, nil)
 
 		var ue *UnsupportedError
 		assert.True(t, errors.As(err, &ue), "got %v", err)
@@ -142,7 +158,7 @@ func TestCheckFileErrors(t *testing.T) {
 		path := filepath.Join(dir, "x.log")
 		require.NoError(t, os.WriteFile(path, []byte{0x80, 0x81, 0x82, 0x83}, 0o644))
 
-		_, _, err := CheckFile(path)
+		_, _, err := CheckFile(context.Background(), path, nil)
 
 		assert.ErrorContains(t, err, "could not read the log")
 	})
@@ -158,7 +174,7 @@ func TestCheckFileCueSheet(t *testing.T) {
 		c := want(t, r, "cue-sheet", StatusError)
 		assert.Contains(t, c.Detail, `"Back in Black.cue"`)
 		assert.True(t, r.Failed())
-		assert.Equal(t, append(append([]string{}, allCheckIDs...), "cue-sheet"), ids(r),
+		assert.Equal(t, concat(allCheckIDs, []string{"cue-sheet"}, mbCheckIDs), ids(r),
 			"the checks that need the cue sheet are not made without it")
 	})
 

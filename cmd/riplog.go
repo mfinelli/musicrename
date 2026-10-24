@@ -18,6 +18,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/mfinelli/musicrename/internal/musicbrainz"
 	"github.com/mfinelli/musicrename/internal/riplog"
 )
 
@@ -39,9 +41,10 @@ checks them. EAC goes ahead with a wrong setting without complaint, and the
 audio usually still sounds fine, so this is how a mistake gets noticed.
 
 path is a .log file, or a directory whose .log files are all checked (a
-multi-disc rip has one per disc). Each log is expected to have its cue sheet and
-FLAC image beside it. Run it on the original rip, before the files are
-checksummed and the image is split. It defaults to the current directory.
+multi-disc rip has one per disc). Each log is expected to have its cue sheet,
+its FLAC image and a musicbrainz.txt beside it. Run it on the original rip,
+before the files are checksummed and the image is split. It defaults to the
+current directory.
 
 These settings must have the values shown. The names are the ones EAC uses in
 the log:
@@ -57,6 +60,8 @@ Also checked:
     the log's start sector, and a matching disc ID
   - the FLAC image the cue sheet names: that it is CD audio, and that it holds
     exactly as many samples as the log's table of contents says the disc has
+  - that the disc is one the MusicBrainz release in musicbrainz.txt has: the
+    disc ID computed from the log is looked up there (--offline skips this)
   - that the log ends with its checksum (present and well formed, not verified)
 
 A required setting the log does not state is an error, not a pass.
@@ -106,6 +111,7 @@ func riplogRequirements() string {
 
 func init() {
 	riplogCmd.Flags().Bool("strict", false, "Treat warnings as failures for the exit status")
+	riplogCmd.Flags().Bool("offline", false, "Do not look the disc up on MusicBrainz")
 	riplogCmd.Flags().BoolP("verbose", "v", false, "Show every check, not only those that did not pass")
 	rootCmd.AddCommand(riplogCmd)
 }
@@ -125,6 +131,7 @@ func runRiplog(cmd *cobra.Command, args []string) error {
 
 	strict, _ := cmd.Flags().GetBool("strict")
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	offline, _ := cmd.Flags().GetBool("offline")
 	out := cmd.OutOrStdout()
 
 	logs, err := riplogTargets(absPath)
@@ -139,10 +146,17 @@ func runRiplog(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintln(out)
 
+	// One lookup serves every log, so a multi-disc rip asks MusicBrainz about
+	// its release once. A nil one is no network.
+	var mb riplog.Lookup
+	if !offline {
+		mb = musicbrainz.NewLookup()
+	}
+
 	var findings int
 	failed := false
 	for _, logPath := range logs {
-		n, fails := riplogCheckOne(out, logPath, strict, verbose)
+		n, fails := riplogCheckOne(cmd.Context(), out, logPath, mb, strict, verbose)
 		findings += n
 		failed = failed || fails
 	}
@@ -184,10 +198,10 @@ func riplogTargets(path string) ([]string, error) {
 // riplogCheckOne checks and reports one log. It returns the number of findings
 // (errors and warnings) it contributes to the summary and whether the log makes
 // the run fail.
-func riplogCheckOne(out io.Writer, logPath string, strict, verbose bool) (findings int, fails bool) {
+func riplogCheckOne(ctx context.Context, out io.Writer, logPath string, mb riplog.Lookup, strict, verbose bool) (findings int, fails bool) {
 	name := filepath.Base(logPath)
 
-	l, res, err := riplog.CheckFile(logPath)
+	l, res, err := riplog.CheckFile(ctx, logPath, mb)
 	if err != nil {
 		lipgloss.Fprintln(out, "  "+name)
 		lipgloss.Fprintln(out, "    "+checkErrorStyle.Render("✗ "+err.Error()))

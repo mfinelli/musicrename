@@ -18,6 +18,7 @@
 package riplog
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -29,13 +30,16 @@ import (
 // CheckFile reads the rip log at logPath and runs every check on it: those that
 // need only the log (Verify), and those that need the files beside it, namely
 // the cue sheet with the same name and the audio image the cue sheet names. For
-// a log named "Album.log" those are "Album.cue" and the file it points to.
+// a log named "Album.log" those are "Album.cue" and the file it points to. A
+// last check compares the disc's MusicBrainz disc ID with the release saved in
+// musicbrainz.txt beside the log, which needs mb to ask MusicBrainz about it; a
+// nil mb means no network, and the ID is computed but not compared.
 //
 // The error is non-nil only when the log itself cannot be read or is not one
 // this package supports (an *UnsupportedError), so there is nothing to check.
 // A missing or wrong cue sheet or image is not an error here but a failed check
 // in the result.
-func CheckFile(logPath string) (*Log, *Result, error) {
+func CheckFile(ctx context.Context, logPath string, mb Lookup) (*Log, *Result, error) {
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not read: %w", err)
@@ -52,6 +56,7 @@ func CheckFile(logPath string) (*Log, *Result, error) {
 
 	r := Verify(l)
 	verifyCue(r, l, logPath)
+	verifyMusicBrainz(ctx, r, l, filepath.Dir(logPath), mb)
 	return l, r, nil
 }
 

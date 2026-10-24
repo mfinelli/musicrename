@@ -18,6 +18,8 @@
 package riplog
 
 import (
+	"crypto/sha1"
+	"encoding/base64"
 	"fmt"
 	"strings"
 )
@@ -63,4 +65,41 @@ func (l *Log) FreeDBID() string {
 	length := leadout/framesPerSecond - (l.TOC[0].Start+leadInFrames)/framesPerSecond
 
 	return strings.ToUpper(fmt.Sprintf("%08x", (sum%255)<<24|length<<8|len(l.TOC)))
+}
+
+// maxTracks is the most tracks a disc can have, and so the number of offsets
+// the disc ID is computed from.
+const maxTracks = 99
+
+// DiscID returns the disc's MusicBrainz disc ID, computed from the log's table
+// of contents as libdiscid does from a disc's: a SHA-1 hash of the first and
+// last track numbers and the offset of the lead-out and of each of 99 track
+// slots (zero for a track the disc does not have), written in upper-case hex,
+// then base64-encoded with "+", "/" and "=" replaced by ".", "_" and "-". Every
+// offset counts from the physical start of the disc's audio, which is 150
+// sectors before the sector 0 EAC counts from. It returns "" if the log has no
+// table of contents, or a track number outside 1 to 99.
+func (l *Log) DiscID() string {
+	if len(l.TOC) == 0 {
+		return ""
+	}
+
+	var offsets [maxTracks + 1]int // offsets[0] is the lead-out
+	offsets[0] = l.TOC[len(l.TOC)-1].End + 1 + leadInFrames
+	for _, t := range l.TOC {
+		if t.Number < 1 || t.Number > maxTracks {
+			return ""
+		}
+		offsets[t.Number] = t.Start + leadInFrames
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%02X%02X", l.TOC[0].Number, l.TOC[len(l.TOC)-1].Number)
+	for _, o := range offsets {
+		fmt.Fprintf(&b, "%08X", o)
+	}
+
+	sum := sha1.Sum([]byte(b.String()))
+	return strings.NewReplacer("+", ".", "/", "_", "=", "-").
+		Replace(base64.StdEncoding.EncodeToString(sum[:]))
 }

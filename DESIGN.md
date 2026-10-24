@@ -1028,7 +1028,8 @@ Besides these settings it checks that:
 - the CUETools database result, when present, confirms every track. Its absence
   is a warning, since it comes from a plugin that may not be installed;
 - the cue sheet and FLAC image that go with the log agree with it (13.6);
-- the log carries its checksum (13.7).
+- the disc is one the MusicBrainz release in `musicbrainz.txt` has (13.7);
+- the log carries its checksum (13.8).
 
 Settings outside the profile, such as the interface EAC used or the encoder's
 bitrate and quality, are not looked at, whether the log states them or not.
@@ -1118,7 +1119,46 @@ made without detecting them produce the same cue sheet. A cue sheet with none is
 therefore a note rather than a failure, and seeing that gaps were detected is
 left to the workflow (`WORKFLOW.md`).
 
-### 13.7 Log checksum
+### 13.7 MusicBrainz release
+
+The same album is often several releases on MusicBrainz, one per pressing, and
+ripping one while tagging another is easy to do and not obvious afterwards. The
+disc's MusicBrainz disc ID identifies its track layout, so it can be compared
+with the release saved in `musicbrainz.txt` beside the log (see `WORKFLOW.md`),
+which holds that release's URL and nothing else.
+
+The disc ID is computed from the log's table of contents the way MusicBrainz's
+libdiscid computes it from a disc's: a SHA-1 hash of the first and last track
+numbers and the offsets of the lead-out and of each of 99 track slots (zero for
+a track the disc does not have), written in hex and base64 encoded with a
+URL-safe alphabet. Every offset counts from the physical start of the disc's
+audio, 150 sectors before the sector 0 that EAC counts from. The computation
+reproduces the test vector MusicBrainz's libraries are tested with, and gives
+IDs that resolve to the right release for real discs, including one with audio
+before track 1, where the first offset is not the usual 150.
+
+One request asks MusicBrainz for the release's disc IDs, and the result is:
+
+- **listed on the release** — ok, saying which medium of a multi-disc release it
+  is;
+- **the release has disc IDs, but not this one** — a warning, since it is
+  probably a different pressing. One more request finds the releases that do
+  have this disc ID and names them, which is usually the answer;
+- **the release has no disc IDs yet** — a note: there is nothing to compare;
+- **MusicBrainz has no such release** — an error: `musicbrainz.txt` names one
+  that does not exist;
+- **no `musicbrainz.txt`** — a warning, and a file that is not a release URL (a
+  release group's, say) is an error;
+- **MusicBrainz cannot be reached** — a warning. Being offline says nothing
+  about the rip.
+
+`--offline` makes no request: the disc ID is still computed and shown, and noted
+as not compared. The requests follow the rules of the `musicbrainz` package: one
+release is asked about once per run, however many discs of it are checked,
+within MusicBrainz's rate limit, on demand for one album, and time-limited so
+that a machine with no network is told so rather than kept waiting.
+
+### 13.8 Log checksum
 
 EAC signs its logs with a checksum. `riplog` checks that the checksum is present
 and well formed, and does not verify it. Verifying it would show that a log has
@@ -1126,7 +1166,7 @@ not been edited since EAC wrote it, which matters for a log received from
 someone else and not for one's own rip. A log with no checksum, or a malformed
 one, was edited, cut short, or written by an old EAC, and is an error.
 
-### 13.8 Output and exit status
+### 13.9 Output and exit status
 
 By default each log is shown with the checks that did not pass, followed by a
 count of those that did, so a good rip is a single line. `--verbose` lists every
