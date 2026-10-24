@@ -954,7 +954,126 @@ one sample rate and only roughly across rates.
 
 ---
 
-## 13. Architectural Principles
+## 13. Rip Log Verification
+
+`musicrename riplog` checks an Exact Audio Copy (EAC) rip log against the
+settings a rip should have been made with. A wrong setting does not stop a rip
+from completing and often gives a file that sounds fine, so the log, which
+records every setting that affects accuracy, is the one place the mistake can be
+caught afterwards.
+
+### 13.1 Scope
+
+The command operates on a single `.log` file or on the `.log` files directly
+inside one directory (a multi-disc rip has one per disc). It is meant to be run
+on the original rip as archived, before the files are checksummed and before the
+image is split for the library.
+
+Only **image rips** from **English-language EAC 1.x** are supported: one disc
+ripped as one range, with a cue sheet. This is how the library's CDs are ripped
+(see `WORKFLOW.md`). Anything else (a per-track log, a log in another language,
+a log from EAC before 1.0) is reported as unsupported rather than judged against
+rules written for something else. An unsupported log counts as an error, because
+it cannot be verified. Supporting more is possible but unneeded, and would
+multiply the number of log layouts the parser has to know.
+
+### 13.2 Policy, not a score
+
+Some other tools attempt to grade a log with a score, deducting points for each
+departure from some setting, but that model is a poor fit here.
+
+`riplog` instead runs a fixed list of checks and reports each as one of:
+
+- **ok** — the check holds.
+- **note** — informational; needs no action.
+- **warning** — something could not be confirmed or looks unusual, but nothing
+  is known to be wrong.
+- **error** — a setting is wrong, the log shows a problem with the rip, or the
+  log cannot be verified as it should be.
+
+### 13.3 The profile
+
+The required settings are the author's own and are hardcoded in the package
+(`settingRules` in `internal/riplog/verify.go`), not configurable, for the same
+reason device targets are: a short, personally-curated list lives in code rather
+than behind a configuration system. A rip with any of them wrong should be
+redone, because the mistake is in the audio and not only in the log.
+
+| Setting                                     | Required | Why                                                                      |
+| ------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| Read mode                                   | Secure   | Only secure mode re-reads sectors until they agree.                      |
+| Utilize accurate stream                     | Yes      | Otherwise the drive's reading can drift unnoticed.                       |
+| Defeat audio cache                          | Yes      | Otherwise re-reads may come from the drive's cache and hide errors.      |
+| Make use of C2 pointers                     | No       | A drive's own error report can be wrong, and trusting it skips re-reads. |
+| Fill up missing offset samples with silence | Yes      | Otherwise audio is shifted rather than padded at the ends.               |
+| Delete leading and trailing silent blocks   | No       | It removes audio, so the result no longer matches the disc.              |
+| Null samples used in CRC calculations       | Yes      | Otherwise CRCs differ from those AccurateRip and other rippers compute.  |
+| Add ID3 tag                                 | No       | ID3 tags do not belong in FLAC files, which use Vorbis comments.         |
+
+Besides these settings it checks that:
+
+- no normalization is recorded;
+- the encoder is `flac.exe` and its command line includes `-V`, so the encode is
+  verified to decode back to the same audio;
+- the read offset is the one known for the drive (13.5);
+- both the test and the copy pass were made and their CRCs agree, and the log
+  says the copy is OK;
+- no errors were reported;
+- the log's table of contents has tracks, and AccurateRip results cover all of
+  them;
+- AccurateRip confirmed every track. A disc that AccurateRip does not know, or a
+  pressing that differs, is a warning rather than an error, since neither is
+  evidence of a bad rip;
+- the CUETools database result, when present, confirms every track. Its absence
+  is a warning, since it comes from a plugin that may not be installed;
+- the log carries its checksum (13.6).
+
+Overreading into the lead-in and lead-out is not checked, because whether it is
+possible depends on the drive.
+
+### 13.4 Unverifiable is not verified
+
+A setting the log is expected to state but does not is an error ("not found in
+the log, so it cannot be verified"). A check never passes because the
+information it needs is missing.
+
+### 13.5 Drive offsets
+
+The read offset is a property of the drive: how far its reading is shifted from
+where the audio really is. A wrong one shifts every track. The offsets of the
+drives actually used are a small table in code (`internal/riplog/drives.go`),
+each one a value AccurateRip has confirmed for that drive. A known drive must
+match its offset; a mismatch is an error.
+
+The log's drive line carries its adapter and ID, which vary, so it is normalized
+before lookup (lower-cased, adapter and revision removed). For an unknown drive
+the result depends on whether AccurateRip confirmed every track at the offset
+used: if so, it is a note that the drive and offset can be added to the table;
+if not, a warning that the offset cannot be verified. When a drive is added or
+replaced, run EAC's AccurateRip configuration, rip a disc AccurateRip knows, and
+add the drive to the table.
+
+### 13.6 Log checksum
+
+EAC signs its logs with a checksum. `riplog` checks that the checksum is present
+and well formed, and does not verify it. Verifying it would show that a log has
+not been edited since EAC wrote it, which matters for a log received from
+someone else and not for one's own rip. A log with no checksum, or a malformed
+one, was edited, cut short, or written by an old EAC, and is an error.
+
+### 13.7 Output and exit status
+
+By default each log is shown with the checks that did not pass, followed by a
+count of those that did, so a good rip is a single line. `--verbose` lists every
+check with what was found.
+
+The exit status is non-zero when any log has an error. Warnings and notes do not
+fail the run, so a disc AccurateRip does not know does not stop a script; with
+`--strict`, warnings fail it too. The command only reads the logs.
+
+---
+
+## 14. Architectural Principles
 
 Several principles govern the design:
 
@@ -1008,3 +1127,9 @@ competing naming conventions.
 A heuristic check reports what it measured and how strongly that points to a
 conclusion. It separates ambiguous results from conclusive ones, does not claim
 more certainty than it has, and never acts on its own conclusions.
+
+### Unverifiable is not verified
+
+A check that cannot be performed because the information it needs is missing is
+reported as such. It is never passed silently, and a verifier does not treat the
+absence of evidence of a problem as evidence that there is none.

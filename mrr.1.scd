@@ -221,6 +221,42 @@ or *likely fake*, or if a track cannot be decoded.
 	Show the technical detail behind each verdict: the analysis window, the
 	bit depth, and each channel's cutoff and drop.
 
+## mrr riplog [_path_] [*--strict*] [*-v*]
+
+Checks an Exact Audio Copy rip log against the settings a rip should have been
+made with. A wrong setting does not stop a rip from completing, and often gives
+a file that sounds fine, so the log is the one place such a mistake can be
+caught afterwards.
+
+_path_ is a *.log* file, which is checked, or a directory, in which every *.log*
+file directly inside it is checked (a multi-disc rip has one per disc). Run it
+on the original rip, before the files are checksummed and the image is split.
+Defaults to the current directory.
+
+The checks are that the rip was made in secure mode with accurate stream and
+the audio cache defeated, without C2 pointers, normalization, or removal of
+silent blocks; that the drive's read offset is the one known for it; that the
+test and copy passes were both made and agree; that no errors were reported;
+that AccurateRip and the CUETools database (if present) confirmed the rip; that
+the audio was encoded with FLAC with verification on; and that the log carries
+its checksum (which is not verified).
+
+Each check is reported as ok, a note, a warning, or an error. By default only
+the checks that did not pass are listed.
+
+Only image rips (one disc, one file, with a cue sheet) from English-language
+EAC 1.x are supported. A log of any other kind is reported as unsupported, which
+counts as an error, since it cannot be verified.
+
+Read-only. Exits non-zero if any log has an error. Warnings, such as a disc that
+AccurateRip does not know, do not by themselves fail the run.
+
+*--strict*
+	Treat warnings as failures for the exit status.
+
+*-v*, *--verbose*
+	List every check, not only those that did not pass.
+
 ## mrr sums [_path_]
 
 Computes MD5 checksums for all files in an album and writes a *sums.md5* file

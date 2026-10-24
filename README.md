@@ -145,6 +145,31 @@ mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
 mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love --png /tmp/spectra --annotated --fixed-scale
 ```
 
+### `riplog`
+
+Checks an Exact Audio Copy rip log for the correct settings. A wrong setting
+doesn't stop a rip from completing and often gives a file that sounds fine, so
+the log is the one place to catch it afterwards. `riplog` verifies that the rip
+was made in secure mode with accurate stream and the audio cache defeated,
+without C2 pointers, normalization, or removal of silent blocks; that the
+drive's read offset is the one known for it; that the test and copy passes agree
+and no errors were reported; that AccurateRip and the CUETools database
+confirmed the rip; and that FLAC verification was on. Operates on a `.log` file
+or on the `.log` files in a directory, and is meant to be run on the original
+rip before it is checksummed.
+
+Only image rips from English-language EAC 1.x are supported; any other log is
+reported as unsupported, which counts as an error. The command exits non-zero if
+any log has an error; warnings (such as a disc AccurateRip doesn't know) only
+fail the run with `--strict`. By default only the checks that didn't pass are
+listed, and `-v` shows them all. The settings checked are hardcoded; see
+[DESIGN.md](DESIGN.md) for what they are and why.
+
+```sh
+mrr riplog ~/Music/RIP/2003\ Dangerously\ in\ Love
+mrr riplog "Dangerously in Love.log" -v
+```
+
 ### `sums`
 
 Computes MD5 checksums for all files in an album and writes `sums.md5`,
