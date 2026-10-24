@@ -295,7 +295,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 }
 
 // lyricsProgressCallback returns a progress function that prints each track's
-// outcome to out with a distinct sigil and colour for each status.
+// outcome to out with a distinct sigil and color for each status.
 func lyricsProgressCallback(out io.Writer, indent string) func(string, lyrics.LyricStatus) {
 	return func(path string, status lyrics.LyricStatus) {
 		name := filepath.Base(path)
