@@ -160,6 +160,67 @@ Checks include:
 
 Read-only; makes no filesystem changes.
 
+## mrr spectrum [_path_] [*--png* _dir_ [*--annotated* [*--fixed-scale*]]] [*-v*]
+
+Checks whether audio stored in a lossless container (FLAC, or ALAC in an
+*.m4a*) is really lossless, or is a lossy encode (MP3, AAC, ...) that was
+converted afterwards. Lossy encoders discard everything above a cutoff
+frequency, and converting the result to FLAC does not bring it back, so the
+cutoff stays visible as a sharp edge in the file's frequency spectrum. The
+command measures that spectrum and looks for the edge.
+
+_path_ is an audio file, which is analyzed as a single track, or a directory that
+directly contains audio files, in which every track is analyzed. A library root
+is not accepted; the command examines one track or one album at a time. Lossy
+files in an album are skipped. Defaults to the current directory.
+
+Each track is reported as one of:
+
+*ok*
+	Nothing suggests it is anything but what it claims to be. This is not
+	proof; a high-bitrate lossy encode can pass.
+
+*suspect*
+	It shows a feature lossy encoding causes, but a genuine lossless source
+	can show it too. Inspect the spectrogram.
+
+*likely fake*
+	Strong evidence of a lossy transcode or an upsample.
+
+*inconclusive*
+	Too little non-silent audio to judge.
+
+Besides a lossy cutoff, the command reports hi-res files (88.2 kHz and above)
+with no content beyond CD bandwidth (upsampled), and files stored in a wider
+bit depth than they actually use, such as 16-bit audio padded to 24 bits.
+
+This is a heuristic. See *SPECTRUM.md* in the source distribution for how it
+works and what it cannot detect.
+
+Read-only with respect to the library. Exits non-zero if any track is *suspect*
+or *likely fake*, or if a track cannot be decoded.
+
+*--png* _dir_
+	Write a spectrogram image of each track into _dir_ (created if needed),
+	named after the track. By default the image is rendered by *ffmpeg*. A
+	failure to write an image is a warning and does not affect the exit status.
+
+*--annotated*
+	Draw each image from the analysis itself instead of with *ffmpeg*: the
+	detected cutoff is marked on it, and for hi-res files the top of CD
+	bandwidth. Requires *--png*.
+
+*--fixed-scale*
+	With *--annotated*, use the same color scale (-140 dB to -20 dB) for every
+	image, so that a color always means the same level and images of different
+	tracks can be compared. Without this option each image's scale is set
+	from its own loudness, which shows each file's shape clearly but makes
+	the same audio at different volumes look identical. Requires *--annotated*.
+
+*-v*, *--verbose*
+	Show the technical detail behind each verdict: the analysis window, the
+	bit depth, and each channel's cutoff and drop.
+
 ## mrr sums [_path_]
 
 Computes MD5 checksums for all files in an album and writes a *sums.md5* file

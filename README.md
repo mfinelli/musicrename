@@ -119,6 +119,32 @@ mrr check ~/music
 echo $?   # non-zero if findings
 ```
 
+### `spectrum`
+
+Checks whether audio stored in a lossless container (FLAC, or ALAC in an `.m4a`)
+is really lossless, or is a lossy encode (MP3, AAC, etc.) that was converted
+afterwards. Lossy encoders discard everything above a cutoff frequency and
+converting the result to FLAC doesn't bring it back, so `spectrum` measures the
+file's frequency spectrum and looks for that cutoff. It also flags hi-res files
+with nothing above CD bandwidth (upsampled) and wide files that only use 16
+bits. Operates on a single audio file or a single album directory (lossy files
+in an album are skipped).
+
+Each track is reported as `ok`, `suspect`, `likely fake`, or `inconclusive`, and
+the command exits non-zero if any track is `suspect` or `likely fake`. This is a
+heuristic: `ok` is not proof, and a high-bitrate lossy encode can pass. With
+`--png dir`, a spectrogram image of each track is written to `dir` for judging
+by eye (add `--annotated` to have the tool draw it with the detected cutoff
+marked, and `--fixed-scale` to use the same color scale for every image so
+tracks can be compared); `-v` shows the numbers behind each verdict. See
+[SPECTRUM.md](SPECTRUM.md) for how it works, how it was calibrated, and what it
+can't detect.
+
+```sh
+mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
+mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love --png /tmp/spectra --annotated --fixed-scale
+```
+
 ### `sums`
 
 Computes MD5 checksums for all files in an album and writes `sums.md5`,
