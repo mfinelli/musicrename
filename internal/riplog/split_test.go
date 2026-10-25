@@ -119,7 +119,7 @@ func honestTracks(t *testing.T, rip rip) *fakeTracks {
 // checkSplit runs CheckSplit on the rip's log against the tracks in dir.
 func checkSplit(t *testing.T, rip rip, dir string, dec TrackDecoder) *Result {
 	t.Helper()
-	_, res, err := CheckSplit(context.Background(), rip.logPath(), dir, dec)
+	_, res, err := CheckSplit(context.Background(), rip.logPath(), dir, dec, SplitOptions{})
 	require.NoError(t, err)
 	return res
 }
@@ -1212,7 +1212,7 @@ func TestCheckSplitCueAndLog(t *testing.T) {
 	})
 
 	t.Run("a log that cannot be read", func(t *testing.T) {
-		_, _, err := CheckSplit(context.Background(), filepath.Join(t.TempDir(), "missing.log"), t.TempDir(), nil)
+		_, _, err := CheckSplit(context.Background(), filepath.Join(t.TempDir(), "missing.log"), t.TempDir(), nil, SplitOptions{})
 
 		assert.ErrorContains(t, err, "could not read")
 	})
@@ -1221,7 +1221,7 @@ func TestCheckSplitCueAndLog(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "x.log")
 		require.NoError(t, os.WriteFile(path, []byte("not a log"), 0o644))
 
-		_, _, err := CheckSplit(context.Background(), path, t.TempDir(), nil)
+		_, _, err := CheckSplit(context.Background(), path, t.TempDir(), nil, SplitOptions{})
 
 		var unsupported *UnsupportedError
 		assert.ErrorAs(t, err, &unsupported)
@@ -1230,7 +1230,7 @@ func TestCheckSplitCueAndLog(t *testing.T) {
 	t.Run("it returns the log for the caller to describe", func(t *testing.T) {
 		rip := blackRip(t)
 
-		l, _, err := CheckSplit(context.Background(), rip.logPath(), dir(t), nil)
+		l, _, err := CheckSplit(context.Background(), rip.logPath(), dir(t), nil, SplitOptions{})
 
 		require.NoError(t, err)
 		assert.Equal(t, "AC/DC / Back in Black", l.Title)
@@ -1569,7 +1569,7 @@ func TestCheckSplitWithFFmpeg(t *testing.T) {
 
 	run := func(t *testing.T, d tinyDisc, dir string) *Result {
 		t.Helper()
-		_, r, err := CheckSplit(ctx, d.rip.logPath(), dir, pcm.Decoder{})
+		_, r, err := CheckSplit(ctx, d.rip.logPath(), dir, pcm.Decoder{}, SplitOptions{})
 		require.NoError(t, err)
 		return r
 	}
@@ -1608,9 +1608,10 @@ func TestCheckSplitWithFFmpeg(t *testing.T) {
 	})
 
 	t.Run("audio before track 1 in a file of its own", func(t *testing.T) {
-		d := newTinyDisc(t, 300)
+		// Long enough to be a hidden track and not a pregap.
+		d := newTinyDisc(t, 450)
 
-		r := run(t, d, d.split(t, true, []int{300 * s, 1300 * s, 2300 * s}))
+		r := run(t, d, d.split(t, true, []int{450 * s, 1450 * s, 2450 * s}))
 
 		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
 		assert.Equal(t, "4 tracks, 00 and 01 to 03", want(t, r, "split-tracks", StatusPass).Detail)
@@ -1923,7 +1924,7 @@ func TestCheckSplitWhereTheyDifferWithFFmpeg(t *testing.T) {
 
 	run := func(t *testing.T, other tinyDisc, hidden bool, b []int) *Result {
 		t.Helper()
-		_, r, err := CheckSplit(ctx, d.rip.logPath(), other.split(t, hidden, b), pcm.Decoder{})
+		_, r, err := CheckSplit(ctx, d.rip.logPath(), other.split(t, hidden, b), pcm.Decoder{}, SplitOptions{})
 		require.NoError(t, err)
 		return r
 	}
@@ -1965,13 +1966,13 @@ func TestCheckSplitWhereTheyDifferWithFFmpeg(t *testing.T) {
 	})
 
 	t.Run("the audio before track 1, in a track of its own", func(t *testing.T) {
-		hidden := newTinyDisc(t, 300)
+		hidden := newTinyDisc(t, 450)
 		testutil.MakePCMFlac(t, hidden.rip.dir, "Back in Black.flac", hidden.pcm)
 		other := hidden
 		other.pcm = withSampleChanged(hidden.pcm, 123)
-		hb := []int{300 * s, 1300 * s, 2300 * s}
+		hb := []int{450 * s, 1450 * s, 2450 * s}
 
-		_, r, err := CheckSplit(ctx, hidden.rip.logPath(), other.split(t, true, hb), pcm.Decoder{})
+		_, r, err := CheckSplit(ctx, hidden.rip.logPath(), other.split(t, true, hb), pcm.Decoder{}, SplitOptions{})
 		require.NoError(t, err)
 
 		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail, "is in track 00, 00:00:00 into it (sample 123)")
@@ -1980,6 +1981,208 @@ func TestCheckSplitWhereTheyDifferWithFFmpeg(t *testing.T) {
 	t.Run("a split that is right says nothing of any of this", func(t *testing.T) {
 		r := run(t, d, false, bounds)
 
+		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
+	})
+}
+
+func TestHiddenTrackRule(t *testing.T) {
+	t.Run("what the option says", func(t *testing.T) {
+		for raw, want := range map[string]HiddenTrack{"auto": HiddenAuto, "": HiddenAuto, "AUTO": HiddenAuto, "yes": HiddenYes, "Yes": HiddenYes, " no ": HiddenNo} {
+			got, err := ParseHiddenTrack(raw)
+			require.NoError(t, err, raw)
+			assert.Equal(t, want, got, raw)
+		}
+		_, err := ParseHiddenTrack("maybe")
+		assert.EqualError(t, err, `"maybe" is not auto, yes or no`)
+	})
+
+	t.Run("what is a track of its own", func(t *testing.T) {
+		const limit = MaxMergedPregap * 75
+		assert.Equal(t, 375, limit)
+
+		for name, tc := range map[string]struct {
+			mode   HiddenTrack
+			frames int
+			want   bool
+		}{
+			"auto, nothing":                  {HiddenAuto, 0, false},
+			"auto, a fraction of a second":   {HiddenAuto, 33, false},
+			"auto, the standard two seconds": {HiddenAuto, 150, false},
+			"auto, as long as is a pregap":   {HiddenAuto, limit, false},
+			"auto, a frame longer":           {HiddenAuto, limit + 1, true},
+			"auto, a hidden track":           {HiddenAuto, 12000, true},
+			"yes, nothing":                   {HiddenYes, 0, false},
+			"yes, one frame":                 {HiddenYes, 1, true},
+			"yes, a few":                     {HiddenYes, 33, true},
+			"no, a hidden track":             {HiddenNo, 12000, false},
+			"no, nothing":                    {HiddenNo, 0, false},
+		} {
+			assert.Equal(t, tc.want, tc.mode.Separate(tc.frames), name)
+		}
+	})
+}
+
+func TestCheckSplitTracksAudioBeforeTrackOne(t *testing.T) {
+	// checkTracks checks the files of a split of the disc, with or without a track 00.
+	checkTracks := func(t *testing.T, log []byte, cue string, withFile bool, mode HiddenTrack) (*Result, bool) {
+		t.Helper()
+		specs := splitSpecs(t, log, cue, 0, withFile, false)
+		dir := makeTracks(t, specs)
+		l, err := ParseLog(log)
+		require.NoError(t, err)
+		c, err := ParseCue([]byte(cue))
+		require.NoError(t, err)
+		r := &Result{}
+		_, ok := checkSplitTracks(r, l, c, dir, 0, mode)
+		return r, ok
+	}
+	merged := func(t *testing.T, r *Result, pre string, why string) {
+		t.Helper()
+		assert.Equal(t, fmt.Sprintf("the %s before track 1 is kept in track 1%s", pre, why),
+			want(t, r, "split-pregap", StatusInfo).Detail)
+	}
+	const whyAuto = ", as it is no longer than 5 seconds (--hidden-track=yes makes it a file of its own)"
+	const whyNo = ", as --hidden-track=no says"
+
+	for pre, label := range map[int]string{33: "00:00:33", 150: "00:02:00", 375: "00:05:00"} {
+		d := newTinyDisc(t, pre)
+		log, err := os.ReadFile(d.rip.logPath())
+		require.NoError(t, err)
+
+		t.Run(fmt.Sprintf("%s before track 1 is a pregap", label), func(t *testing.T) {
+			r, ok := checkTracks(t, log, d.cue, false, HiddenAuto)
+			assert.True(t, ok)
+			want(t, r, "split-tracks", StatusPass)
+			merged(t, r, label, whyAuto)
+			assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError))
+
+			r, _ = checkTracks(t, log, d.cue, true, HiddenAuto)
+			assert.Contains(t, want(t, r, "split-tracks", StatusWarning).Detail,
+				"there is a 00 file for the "+label+" before track 1, which is no longer than 5 seconds and is normally part of track 1")
+
+			r, _ = checkTracks(t, log, d.cue, false, HiddenYes)
+			assert.Contains(t, want(t, r, "split-tracks", StatusError).Detail, "which should be a file of its own")
+
+			r, _ = checkTracks(t, log, d.cue, true, HiddenYes)
+			want(t, r, "split-tracks", StatusPass)
+			_, has := r.Check("split-pregap")
+			assert.False(t, has)
+
+			r, _ = checkTracks(t, log, d.cue, false, HiddenNo)
+			want(t, r, "split-tracks", StatusPass)
+			merged(t, r, label, whyNo)
+
+			r, ok = checkTracks(t, log, d.cue, true, HiddenNo)
+			assert.False(t, ok)
+			assert.Contains(t, want(t, r, "split-tracks", StatusError).Detail,
+				"there is a file for track 00, but the "+label+" before track 1 is to be kept in track 1 (--hidden-track=no)")
+		})
+	}
+
+	t.Run("a frame past what is a pregap is a hidden track", func(t *testing.T) {
+		d := newTinyDisc(t, 376)
+		log, err := os.ReadFile(d.rip.logPath())
+		require.NoError(t, err)
+
+		r, _ := checkTracks(t, log, d.cue, false, HiddenAuto)
+		assert.Contains(t, want(t, r, "split-tracks", StatusWarning).Detail,
+			"there is no 00 file, but there is 00:05:01 of audio before track 1, which should be a file of its own")
+
+		r, _ = checkTracks(t, log, d.cue, true, HiddenAuto)
+		want(t, r, "split-tracks", StatusPass)
+	})
+
+	t.Run("a hidden track as long as a track", func(t *testing.T) {
+		log, cue := fixture(t, fixtureTransistor), cueText(t, fixtureTransistorCue)
+
+		r, _ := checkTracks(t, log, cue, false, HiddenAuto)
+		assert.Equal(t, StatusWarning, want(t, r, "split-tracks", StatusWarning).Status, "as it was before there was a rule")
+		r, _ = checkTracks(t, log, cue, true, HiddenAuto)
+		want(t, r, "split-tracks", StatusPass)
+		r, _ = checkTracks(t, log, cue, false, HiddenYes)
+		want(t, r, "split-tracks", StatusError)
+		r, _ = checkTracks(t, log, cue, true, HiddenYes)
+		want(t, r, "split-tracks", StatusPass)
+		r, _ = checkTracks(t, log, cue, false, HiddenNo)
+		want(t, r, "split-tracks", StatusPass)
+		r, ok := checkTracks(t, log, cue, true, HiddenNo)
+		assert.False(t, ok)
+		want(t, r, "split-tracks", StatusError)
+	})
+
+	t.Run("no audio before track 1: nothing to decide", func(t *testing.T) {
+		log, cue := fixture(t, fixtureBlack), cueText(t, fixtureBlackCue)
+
+		for _, mode := range []HiddenTrack{HiddenAuto, HiddenYes, HiddenNo} {
+			r, ok := checkTracks(t, log, cue, false, mode)
+			assert.True(t, ok)
+			want(t, r, "split-tracks", StatusPass)
+			_, has := r.Check("split-pregap")
+			assert.False(t, has, "mode %d", mode)
+		}
+
+		specs := splitSpecs(t, log, cue, 0, false, false)
+		specs = append([]fileSpec{{"00 Hidden.flac", 588}}, specs...)
+		l, err := ParseLog(log)
+		require.NoError(t, err)
+		c, err := ParseCue([]byte(cue))
+		require.NoError(t, err)
+		for _, mode := range []HiddenTrack{HiddenAuto, HiddenYes, HiddenNo} {
+			r := &Result{}
+			_, ok := checkSplitTracks(r, l, c, makeTracks(t, specs), 0, mode)
+			assert.False(t, ok)
+			assert.Contains(t, want(t, r, "split-tracks", StatusError).Detail, "the disc has no audio before track 1", "mode %d", mode)
+		}
+	})
+}
+
+func TestCheckSplitAPregapKeptInTrackOneWithFFmpeg(t *testing.T) {
+	// A disc whose track 1 begins 33 frames into the image, as one of yours does.
+	ctx := context.Background()
+	const s = samplesPerSector
+	d := newTinyDisc(t, 33)
+	testutil.MakePCMFlac(t, d.rip.dir, "Back in Black.flac", d.pcm)
+	bounds := []int{(33 + 1000) * s, (33 + 2000) * s}
+
+	run := func(t *testing.T, other tinyDisc, hidden bool, b []int, mode HiddenTrack) *Result {
+		t.Helper()
+		_, r, err := CheckSplit(ctx, d.rip.logPath(), other.split(t, hidden, b), pcm.Decoder{}, SplitOptions{HiddenTrack: mode})
+		require.NoError(t, err)
+		return r
+	}
+
+	t.Run("track 1 holds the pregap, which is a split that is right", func(t *testing.T) {
+		r := run(t, d, false, bounds, HiddenAuto)
+
+		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
+		assert.Equal(t, "the 00:00:33 before track 1 is kept in track 1, as it is no longer than 5 seconds (--hidden-track=yes makes it a file of its own)",
+			want(t, r, "split-pregap", StatusInfo).Detail)
+		want(t, r, "split-audio", StatusPass)
+		want(t, r, "split-lengths", StatusPass)
+	})
+
+	t.Run("track 1 without it, as foobar2000 makes it, is 33 sectors short and has the wrong CRC", func(t *testing.T) {
+		short := d
+		short.pcm = d.pcm[33*s*4:]
+
+		r := run(t, short, false, []int{1000 * s, 2000 * s}, HiddenAuto)
+
+		audio := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, audio.Detail, "not the log's Copy CRC")
+		assert.Contains(t, audio.Detail, "33 sectors shorter than the image")
+		want(t, r, "split-lengths", StatusError)
+		assert.True(t, r.Failed())
+	})
+
+	t.Run("a split that made it a file of its own is checked as it is", func(t *testing.T) {
+		r := run(t, d, true, []int{33 * s, (33 + 1000) * s, (33 + 2000) * s}, HiddenAuto)
+
+		assert.Equal(t, 0, r.Count(StatusError), "%v", r.Findings())
+		assert.Contains(t, want(t, r, "split-tracks", StatusWarning).Detail, "normally part of track 1")
+		want(t, r, "split-audio", StatusPass)
+		want(t, r, "split-lengths", StatusPass)
+
+		r = run(t, d, true, []int{33 * s, (33 + 1000) * s, (33 + 2000) * s}, HiddenYes)
 		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
 	})
 }

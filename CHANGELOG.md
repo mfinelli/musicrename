@@ -12,6 +12,9 @@ my own reference.
   same, where it differs and whether that is only in the first or last few
   samples, or whether one is the other moved along by some number of samples, as
   when two drives' offsets differ, and what is left once that is allowed for.
+- Add `--hidden-track` to `split --check`: audio before track 1 of up to five
+  seconds is expected in track 1 as a pregap, and more as a hidden track in a
+  file of its own (00).
 - Add `split --check`, which checks that the tracks an image rip was split into
   hold exactly what was ripped: a file for every track of the log's table of
   contents (a `00` file for audio before track 1, and `1-01` style names for a

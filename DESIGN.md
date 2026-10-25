@@ -1239,16 +1239,29 @@ disc coming from the log's name (`Album (disc 1).log`); and `00 Title.flac` for
 audio before track 1, such as a hidden track in the pregap (`1-00 Title.flac` on
 a disc of several).
 
+Audio before track 1 is either a pregap, which belongs to track 1, or a hidden
+track, which is a track of its own, and the cue sheet does not say which. Nearly
+always it is a pregap: a fraction of a second, or the two seconds the standard
+allows, of silence; and a hidden track is not as short as five seconds. So up to
+five seconds of it is kept in track 1, which then begins at the start of the
+image, and anything longer is a track 00. Where it is known which it is,
+`--hidden-track=yes` makes any audio before track 1 a track 00, and
+`--hidden-track=no` keeps all of it in track 1. A split that is the other way
+from what is expected is a warning by default, since nothing is lost and the
+lengths and the audio are checked as the files are; if the option says which, it
+is an error, and a `00` file where the option is `no` is not checked further. A
+pregap kept in track 1 is reported as a note, so that a hidden track that is as
+short as that is not missed.
+
 It checks that:
 
 - the log's checksum matches (13.8), since the log is what the tracks are
   compared with, and the cue sheet beside it is there and can be read;
 - there is a file for each track of the log's table of contents, and a `00` file
-  only if the cue sheet puts audio before track 1, with no other file for any of
-  them. Other FLAC files in the directory, such as the other discs of a
-  multi-disc album, are counted and left out. A disc with audio before track 1
-  and no `00` file is a warning, since the audio can be in track 1, and is
-  checked as being, but the workflow gives it a file of its own;
+  only if the audio before track 1 is a hidden track (as above), with no other
+  file for any of them. Other FLAC files in the directory, such as the other
+  discs of a multi-disc album, are counted and left out. What is expected of the
+  audio before track 1 is as above;
 - every track is CD audio, as the image is (13.6);
 - the tracks, decoded in order as one stretch of audio, have the log's Copy CRC,
   so that together they hold the audio EAC ripped. This was confirmed for the

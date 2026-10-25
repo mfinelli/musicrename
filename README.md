@@ -184,7 +184,10 @@ run it from inside the directory the album was split into. It checks that there
 is a file for every track; that the tracks, in order, decode to the CRC the log
 records, and that none is damaged; and that each track is as long as the cue
 sheet says, because a split can be cut a few samples off at every boundary and
-still hold exactly what was ripped.
+still hold exactly what was ripped. Audio before track 1 of up to five seconds
+is taken to be a pregap and expected in track 1, and more to be a hidden track,
+expected in a file of its own named `00`; `--hidden-track=yes` or `no` says
+which it is when that is known.
 
 ```sh
 cd ~/Music/WORKING/Dangerously\ in\ Love

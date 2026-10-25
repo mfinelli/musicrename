@@ -79,6 +79,7 @@ there is an error, and with --strict when there is a warning.`,
 
 func init() {
 	splitCmd.Flags().Bool("check", false, "Check an existing split against the rip's log (all this does so far)")
+	splitCmd.Flags().String("hidden-track", "auto", "What audio before track 1 is: auto, yes (a track 00) or no (part of track 1)")
 	splitCmd.Flags().Bool("strict", false, "Treat warnings as failures for the exit status")
 	splitCmd.Flags().BoolP("verbose", "v", false, "Show every check, not only those that did not pass")
 	// Checking is the only thing the command does yet. It is a flag so that the
@@ -114,6 +115,11 @@ func runSplit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%q is not a directory", dir)
 	}
 
+	hiddenFlag, _ := cmd.Flags().GetString("hidden-track")
+	hidden, err := riplog.ParseHiddenTrack(hiddenFlag)
+	if err != nil {
+		return fmt.Errorf("invalid --hidden-track: %w", err)
+	}
 	strict, _ := cmd.Flags().GetBool("strict")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	out := cmd.OutOrStdout()
@@ -121,7 +127,7 @@ func runSplit(cmd *cobra.Command, args []string) error {
 	lipgloss.Fprintln(out, style.Header.Render("Checking split tracks..."))
 	fmt.Fprintln(out)
 
-	l, res, err := riplog.CheckSplit(cmd.Context(), logPath, absDir, pcm.Decoder{})
+	l, res, err := riplog.CheckSplit(cmd.Context(), logPath, absDir, pcm.Decoder{}, riplog.SplitOptions{HiddenTrack: hidden})
 	if err != nil {
 		lipgloss.Fprintln(out, "  "+filepath.Base(absDir))
 		lipgloss.Fprintln(out, "    "+style.Error.Render("✗ "+err.Error()))

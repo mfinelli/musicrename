@@ -292,12 +292,25 @@ before it (at the start of the track it leads into is a warning), since a split
 can be cut a few samples off at every boundary and still hold exactly the audio
 of the rip.
 
+Audio before track 1 is a pregap, which belongs to track 1, or a hidden track,
+which is a track of its own, and the cue sheet does not say which. Up to five
+seconds of it is taken to be a pregap, which track 1 is expected to hold, and
+more to be a hidden track, expected in a file of its own named _00 Title_.flac.
+A split the other way is a warning, and an error if *--hidden-track* says which
+it is.
+
 Each check is reported as ok, a note, a warning, or an error. By default only the
 checks that did not pass are listed. Read-only. Exits non-zero on an error.
 
 *--check*
 	Check an existing split. It is required, so that the command can split
 	later without changing how it is run to check.
+
+*--hidden-track* _auto_|_yes_|_no_
+	What the audio before track 1 is. _auto_, the default, takes up to five
+	seconds of it to be a pregap in track 1 and more to be a hidden track,
+	which is a file of its own. _yes_ makes any of it a hidden track, and
+	_no_ keeps all of it in track 1.
 
 *--strict*
 	Treat warnings as failures for the exit status.

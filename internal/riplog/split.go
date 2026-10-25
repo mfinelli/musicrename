@@ -43,6 +43,64 @@ type TrackDecoder interface {
 	Diff(ctx context.Context, a, b []string) (pcm.Difference, error)
 }
 
+// HiddenTrack says what is done with the audio before track 1 of an image rip,
+// which no track of the disc claims.
+//
+// Most of the time it is a pregap: a fraction of a second, or the two seconds the
+// standard allows, of silence, that belongs to track 1. Sometimes it is a hidden
+// track, which is a track of its own. The cue sheet does not say which, but how
+// long it is does, nearly always, so by default up to MaxMergedPregap of it stays in
+// track 1, and more is a track 00. When it is known which, it can be said.
+type HiddenTrack int
+
+const (
+	// HiddenAuto keeps up to MaxMergedPregap in track 1, and makes more a track 00.
+	HiddenAuto HiddenTrack = iota
+	// HiddenYes makes any audio before track 1 a track 00.
+	HiddenYes
+	// HiddenNo keeps all of it in track 1.
+	HiddenNo
+)
+
+// MaxMergedPregap is the most audio before track 1, in seconds, that is taken to be
+// a pregap and stays in track 1, unless it is said what it is. The standard
+// pregap is two seconds, and a hidden track is not as short as five.
+const MaxMergedPregap = 5
+
+// maxMergedFrames is MaxMergedPregap in the cue sheet's frames.
+const maxMergedFrames = MaxMergedPregap * 75
+
+// ParseHiddenTrack reads the value of a command line option: auto, yes or no.
+func ParseHiddenTrack(s string) (HiddenTrack, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "auto", "":
+		return HiddenAuto, nil
+	case "yes":
+		return HiddenYes, nil
+	case "no":
+		return HiddenNo, nil
+	}
+	return HiddenAuto, fmt.Errorf("%q is not auto, yes or no", s)
+}
+
+// Separate reports whether audio before track 1 that is the given number of
+// frames long is a track 00 of its own.
+func (h HiddenTrack) Separate(frames int) bool {
+	switch h {
+	case HiddenYes:
+		return frames > 0
+	case HiddenNo:
+		return false
+	}
+	return frames > maxMergedFrames
+}
+
+// SplitOptions are how a split is made, and so what a check of one expects.
+type SplitOptions struct {
+	// HiddenTrack is what is done with audio before track 1.
+	HiddenTrack HiddenTrack
+}
+
 // A split album is a directory of FLAC files, one per track, named as the
 // workflow names them (see WORKFLOW.md):
 //
@@ -129,7 +187,7 @@ func findTrackFiles(dir string, disc int) (byNumber map[int][]string, others int
 //
 // dec decodes the tracks; nil leaves their audio unchecked. It returns the
 // log, which describes the disc, and the findings.
-func CheckSplit(ctx context.Context, logPath, dir string, dec TrackDecoder) (*Log, *Result, error) {
+func CheckSplit(ctx context.Context, logPath, dir string, dec TrackDecoder, opts SplitOptions) (*Log, *Result, error) {
 	l, err := readLog(logPath)
 	if err != nil {
 		return nil, nil, err
@@ -146,7 +204,7 @@ func CheckSplit(ctx context.Context, logPath, dir string, dec TrackDecoder) (*Lo
 	}
 
 	disc := discNumber(logPath)
-	tracks, ok := checkSplitTracks(r, l, c, dir, disc)
+	tracks, ok := checkSplitTracks(r, l, c, dir, disc, opts.HiddenTrack)
 	if !ok {
 		return l, r, nil
 	}
@@ -220,7 +278,7 @@ func preAudioFrames(l *Log, c *Cue) (frames int, ok bool) {
 // for track 00 if there is audio before track 1. It returns the files in the
 // order of the disc, track 00 first, and whether they are right, which the
 // rest cannot be checked without.
-func checkSplitTracks(r *Result, l *Log, c *Cue, dir string, disc int) ([]splitTrack, bool) {
+func checkSplitTracks(r *Result, l *Log, c *Cue, dir string, disc int, hidden HiddenTrack) ([]splitTrack, bool) {
 	const id, name = "split-tracks", "Track files"
 
 	byNumber, others, err := findTrackFiles(dir, disc)
@@ -261,6 +319,8 @@ func checkSplitTracks(r *Result, l *Log, c *Cue, dir string, disc int) ([]splitT
 				len(files), trackLabel(disc, n), filepath.Base(files[0]), filepath.Base(files[1])))
 		case n == 0 && pre == 0:
 			problems = append(problems, fmt.Sprintf("there is a file for track %s, but the disc has no audio before track 1", trackLabel(disc, 0)))
+		case n == 0 && hidden == HiddenNo:
+			problems = append(problems, fmt.Sprintf("there is a file for track %s, but the %s before track 1 is to be kept in track 1 (--hidden-track=no)", trackLabel(disc, 0), msf(pre)))
 		case n != 0 && !onDisc[n]:
 			unexpected = append(unexpected, trackLabel(disc, n))
 		}
@@ -299,16 +359,42 @@ func checkSplitTracks(r *Result, l *Log, c *Cue, dir string, disc int) ([]splitT
 		detail = fmt.Sprintf("%d tracks, %s and %s to %s", len(tracks), trackLabel(disc, 0), trackLabel(disc, first), trackLabel(disc, last))
 	}
 
-	if pre > 0 && tracks[0].Number != 0 {
+	hasFile := tracks[0].Number == 0
+	switch {
+	case pre > 0 && hidden.Separate(pre) && !hasFile:
 		// The audio is not lost, since the lengths and the audio are checked
-		// after this, but the workflow keeps it in a file of its own.
-		r.add(id, name, StatusWarning,
+		// after this, but the workflow keeps it in a file of its own. If it was said to
+		// be one, the split is not what was asked for.
+		status := StatusWarning
+		if hidden == HiddenYes {
+			status = StatusError
+		}
+		r.add(id, name, status,
 			"%s; there is no %s file, but there is %s of audio before track 1, which should be a file of its own",
 			detail, trackLabel(disc, 0), msf(pre))
 		return tracks, true
+	case pre > 0 && !hidden.Separate(pre) && hasFile:
+		// Then it is a pregap that was made a file, which is not wrong, since the lengths
+		// and the audio are checked as it is.
+		r.add(id, name, StatusWarning,
+			"%s; there is a %s file for the %s before track 1, which is no longer than %d seconds and is normally part of track 1",
+			detail, trackLabel(disc, 0), msf(pre), MaxMergedPregap)
+		return tracks, true
+	case pre > 0 && !hasFile:
+		r.add("split-pregap", "Audio before track 1", StatusInfo,
+			"the %s before track 1 is kept in track 1%s", msf(pre), whyMerged(hidden))
 	}
 	r.add(id, name, StatusPass, "%s", detail)
 	return tracks, true
+}
+
+// whyMerged says why audio before track 1 is not a file of its own, as it is not
+// obvious that a pregap and a hidden track are told apart by their length.
+func whyMerged(h HiddenTrack) string {
+	if h == HiddenNo {
+		return ", as --hidden-track=no says"
+	}
+	return fmt.Sprintf(", as it is no longer than %d seconds (--hidden-track=yes makes it a file of its own)", MaxMergedPregap)
 }
 
 func isAre(n int) string {
