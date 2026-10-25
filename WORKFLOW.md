@@ -171,7 +171,9 @@ For releases that also include a video DVD:
    `YEAR Name of album`, e.g. `2003 Dangerously in Love`.
 2. Copy the ripped files into that directory.
 3. Find the release on MusicBrainz (creating it if it doesn't already exist) and
-   save its URL in a file named `musicbrainz.txt` inside that directory.
+   save its URL in a file named `musicbrainz.txt` inside that directory. The
+   split tags the tracks with this release later, and `mrr riplog` checks the
+   disc against it.
 4. Check the rip log with `mrr riplog` (from inside that directory, or pass its
    path). It reports any EAC setting that was wrong when the disc was ripped, a
    test and copy that disagree, errors, and other mismatches between the rip log
@@ -238,22 +240,29 @@ differs from a physical CD rip:
   than `Album name.md5` used for rips).
 - Copy everything to Dropbox and the NAS, same as the physical rip flow.
 
-## Converting (foobar2000)
+## Splitting (`mrr`)
 
-Note: if the source isn't lossless FLAC to begin with, skip the convert steps
+Note: if the source isn't lossless FLAC to begin with, skip the splitting steps
 entirely (e.g. an MP3 downloaded from SoundCloud or an artist's website that
 only offers lossy files).
 
-1. Once the rip has been archived, load the `.cue` file into foobar2000. It
-   automatically shows the file split into the tracks defined in the cue sheet.
-2. Select all of the tracks (the whole album), right-click, and choose
-   "Convert", using the "single-disc" or "multi-disc" preset as appropriate.
-3. The destination directory is the `WORKING` directory in the home `Music`
+1. Once the rip has been archived, run `mrr split` from inside its directory in
+   `RIP`, passing the directory for the tracks: a new directory for the album in
+   the `WORKING` directory in the home `Music` directory, e.g.
+   `mrr split ~/Music/WORKING/2003\ Dangerously\ in\ Love`. The directory is
+   created as needed, and the tracks are written directly into it. A multi-disc
+   rip has a log for each disc, and they are all split in turn into that one
    directory.
-4. Check the split with `mrr split --check`, from inside the album's directory
-   there, passing the log of the archived rip. It confirms that the tracks hold
-   exactly what was ripped, and that each starts and ends where the cue sheet
-   says.
+2. It then checks what it wrote and reports anything wrong. Anything other than
+   a clean report needs looking at before going on. (The same check can be run
+   again later with `mrr split --check`, from inside the album's directory,
+   passing the log of the archived rip.)
+3. Audio before track 1 is either a pregap, which stays in track 1, or a hidden
+   track, which is a file of its own named `00` (`1-00` on a disc of several).
+   Up to five seconds of it is taken to be a pregap, and the report notes that
+   it was kept in track 1; more than that is taken to be a hidden track. If
+   that's wrong for the disc, delete the new directory and run it again with
+   `--hidden-track=yes` or `--hidden-track=no`.
 
 Note: this is the point where the "rip from CD" and "purchase album online"
 workflows unify, since purchased albums ship with tracks already split. For the
@@ -262,22 +271,40 @@ purchase workflow, extract the album into that same `WORKING` directory instead
 
 ## Tagging (MusicBrainz Picard)
 
-1. Open Picard and add the recently converted/extracted files. They appear under
-   "Unclustered Files".
-2. Select them and click "Cluster".
-3. Right-click the cluster and select "Lookup in Browser", then navigate to the
-   MusicBrainz URL saved earlier (`musicbrainz.txt`).
-4. On the MusicBrainz release page, click the "tagger" image/button (usually
-   near the top right, by the album art).
-5. The album loads into Picard. Drag the tracks from the cluster over onto the
-   album.
-6. Click Save.
+1. Open Picard and add the files from the album's `WORKING` directory.
+2. Files from `mrr split` carry the MusicBrainz release in their tags, and
+   Picard picks it up: the release loads by itself and the tracks are matched to
+   it. Check that each track went to the right track of the release (the right
+   disc, too, on a multi-disc album), and drag any that didn't onto the right
+   one. Then click Save.
+3. Files that don't carry a release (a purchased album, or a rip that was split
+   without a `musicbrainz.txt`) appear under "Unclustered Files" instead. For
+   those:
+   1. Select them and click "Cluster".
+   2. Right-click the cluster and select "Lookup in Browser", then navigate to
+      the MusicBrainz URL saved earlier (`musicbrainz.txt`).
+   3. On the MusicBrainz release page, click the "tagger" image/button (usually
+      near the top right, by the album art).
+   4. The album loads into Picard. Drag the tracks from the cluster over onto
+      the album.
+   5. Click Save.
+
+Note: Picard keeps the tags it doesn't set, so whatever `mrr split` wrote that
+the release doesn't replace stays. It writes only the title, artist, album and
+album artist, track and disc numbers, ISRC, and the release.
+
+Note: if there is a track `00` (a hidden track), make sure it ends up tagged
+properly. That depends on what MusicBrainz has for the release, and a hidden
+track is rare enough that it's dealt with by hand when it comes up. If the
+release has the hidden track, make sure Picard matches the file to it. If it
+doesn't, Picard leaves the file with the tags `mrr split` gave it (the title
+"Hidden track", track number 0, and the album and its artist), so tag it by hand
+with the right title and anything else that's missing.
 
 ## Finalizing (foobar2000)
 
 1. Add the freshly tagged tracks back into foobar2000.
-2. This is where any custom edits can be made, e.g. removing the "ExactAudioCopy
-   vX.Y" comment.
+2. This is where any custom edits can be made.
 3. Right-click the tracks and select `Tagging -> Remove all pictures`.
 4. Select all the tracks, right-click, and choose
    `ReplayGain -> Scan as single albums (by tags)`. Occasionally this needs to
