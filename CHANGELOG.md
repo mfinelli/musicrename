@@ -6,52 +6,17 @@ my own reference.
 
 ## Unreleased
 
-- Add `compare`, which compares the audio of two FLAC files, tracks or images,
-  or of the images of two rips of one disc from their logs, accounting for the
-  first or last samples a drive could not read; for files: whether it is the
-  same, where it differs and whether that is only in the first or last few
-  samples, or whether one is the other moved along by some number of samples, as
-  when two drives' offsets differ, and what is left once that is allowed for.
-- Make `split` split: it splits the image of an EAC rip into one FLAC file per
-  track.
-- Add `--hidden-track` to `split --check`: audio before track 1 of up to five
-  seconds is expected in track 1 as a pregap, and more as a hidden track in a
-  file of its own (00).
-- Add `split --check`, which checks that the tracks an image rip was split into
-  hold exactly what was ripped: a file for every track of the log's table of
-  contents (a `00` file for audio before track 1, and `1-01` style names for a
-  disc of a multi-disc album), the tracks decoding in order to the CRC the log
-  records, each track undamaged by what its own FLAC records (and, if the audio
-  is not the rip's, the track and place where it first differs from the rip's
-  image), and each track the length the cue sheet gives, with each pregap at the
-  end of the track before it, since a split can be cut a few samples off at
-  every boundary and still hold exactly the audio of the rip. Run it from inside
-  the directory of the tracks, passing the rip's log.
-- Add `riplog`, which checks an Exact Audio Copy rip log for the correct
-  settings: secure mode, accurate stream, audio cache defeated, no C2 pointers,
-  normalization, or removal of silent blocks, the drive's known read offset and
-  overread setting, matching test and copy CRCs, no reported errors, AccurateRip
-  and CUETools database results, FLAC verification, and the log's checksum, so
-  that a wrong option, or a log that has been edited, is noticed right after the
-  rip. It also checks that the cue sheet and FLAC image beside the log match it:
-  the same tracks, each `INDEX 01` at the log's start sector, the same disc ID,
-  and an image of CD audio exactly as long as the disc, whose decoded audio has
-  the CRC the log records (this needs ffmpeg). It also looks the disc's
-  MusicBrainz disc ID up and checks that it is one the release in
-  `musicbrainz.txt` has, naming the releases that have it if not; `--offline`
-  skips that. Image rips from English-language EAC 1.x only. Exits non-zero on
-  errors, and on warnings with `--strict`; `-v` shows every check.
-- Add `spectrum`, which checks whether a FLAC (or ALAC) track or album is really
-  lossless or a lossy encode (MP3, AAC, etc.) that was converted afterwards. It
-  measures the file's frequency spectrum and looks for the sharp cutoff lossy
-  encoders leave, and also reports hi-res files with nothing above CD bandwidth
-  and 24-bit files that only use 16 bits. Each track is `ok`, `suspect`,
-  `likely fake`, or `inconclusive`; the command exits non-zero on `suspect` or
-  worse. `--png` writes a spectrogram of each track for judging by eye
-  (`--annotated` draws it from the analysis itself, with the detected cutoff
-  marked on it, and `--fixed-scale` uses one color scale for every image so
-  tracks can be compared) and `-v` shows the numbers behind each verdict. Works
-  on one track or one album at a time. See `SPECTRUM.md`.
+- Add `compare` to compare audio between FLAC files, tracks, disc images, or rip
+  logs, accounting for drive read offsets and unreadable samples.
+- Implement `split` to split an EAC disc image into per-track FLAC files.
+- Add `split --check` to verify split tracks against the rip log, including
+  CRCs, lengths, pregaps, and file naming. Support `--hidden-track` for audio
+  before track 1 exceeding five seconds.
+- Add `riplog` to validate EAC rip logs, settings, checksums, cue sheets, FLAC
+  images, and MusicBrainz disc IDs.
+- Add `spectrum` to detect likely lossy sources disguised as lossless audio and
+  flag suspicious hi-res or bit-depth claims. Support spectrogram output with
+  `--png`, `--annotated`, and `--fixed-scale`. See `SPECTRUM.md`.
 
 ## v4.5.0 — 2026-09-27
 
