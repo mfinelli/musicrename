@@ -302,6 +302,22 @@ func arConfirmsAll(l *Log) bool {
 	return true
 }
 
+// parseOffset reads a read offset as the log states it, with or without a plus.
+func parseOffset(raw string) (int, error) {
+	return strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(raw), "+"))
+}
+
+// parseYesNo reads a setting that is Yes or No.
+func parseYesNo(raw string) (value, ok bool) {
+	switch {
+	case strings.EqualFold(raw, "Yes"):
+		return true, true
+	case strings.EqualFold(raw, "No"):
+		return false, true
+	}
+	return false, false
+}
+
 func checkOffset(r *Result, l *Log) {
 	raw, ok := l.Setting("Read offset correction")
 	if !ok {
@@ -309,7 +325,7 @@ func checkOffset(r *Result, l *Log) {
 			"\"Read offset correction\" not found in the log, so it cannot be verified")
 		return
 	}
-	got, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(raw), "+"))
+	got, err := parseOffset(raw)
 	if err != nil {
 		r.add("offset", "Read offset", StatusError, "%q is not a number", raw)
 		return
@@ -354,13 +370,8 @@ func checkOverread(r *Result, l *Log) {
 		return
 	}
 
-	var got bool
-	switch {
-	case strings.EqualFold(raw, "Yes"):
-		got = true
-	case strings.EqualFold(raw, "No"):
-		got = false
-	default:
+	got, isYesNo := parseYesNo(raw)
+	if !isYesNo {
 		r.add("overread", "Overread", StatusError, "%q is neither Yes nor No", raw)
 		return
 	}

@@ -785,3 +785,89 @@ func TestSkipBytes(t *testing.T) {
 		assert.ErrorContains(t, err, "broken")
 	})
 }
+
+func TestDiffSilent(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	base := audio(40000, 81)
+	flac := func(t *testing.T, name string, pcm []byte) string {
+		t.Helper()
+		return testutil.MakePCMFlac(t, dir, name, pcm)
+	}
+	zeroed := func(pcm []byte, from, to int) []byte {
+		out := append([]byte(nil), pcm...)
+		for i := from * bytesPerSample; i < to*bytesPerSample; i++ {
+			out[i] = 0
+		}
+		return out
+	}
+	diff := func(t *testing.T, name string, a, b []byte) Difference {
+		t.Helper()
+		d, err := Decoder{}.Diff(ctx, []string{flac(t, name+"-a.flac", a)}, []string{flac(t, name+"-b.flac", b)})
+		require.NoError(t, err)
+		return d
+	}
+
+	t.Run("the end of one that is silence where the other has sound", func(t *testing.T) {
+		// What two rips of a disc give when the drive of one could not read the end.
+		d := diff(t, "end", base, zeroed(base, 39994, 40000))
+
+		assert.Equal(t, int64(6), d.Differing)
+		assert.Equal(t, int64(6), d.Silent, "every one is silence on a side")
+	})
+
+	t.Run("silence on the first side", func(t *testing.T) {
+		d := diff(t, "first", zeroed(base, 0, 10), base)
+
+		assert.Equal(t, int64(10), d.Differing)
+		assert.Equal(t, int64(10), d.Silent)
+	})
+
+	t.Run("sound that differs from sound is not silence", func(t *testing.T) {
+		d := diff(t, "sound", base, changed(base, 100, 200, 300))
+
+		assert.Equal(t, int64(3), d.Differing)
+		assert.Equal(t, int64(0), d.Silent)
+	})
+
+	t.Run("some of each", func(t *testing.T) {
+		b := changed(zeroed(base, 39990, 40000), 500)
+
+		d := diff(t, "mixed", base, b)
+
+		assert.Equal(t, int64(11), d.Differing)
+		assert.Equal(t, int64(10), d.Silent)
+	})
+
+	t.Run("a sample of which only one channel is silent is not silence", func(t *testing.T) {
+		b := append([]byte(nil), base...)
+		copy(b[1000*bytesPerSample:], []byte{0, 0, 7, 0}) // the left channel zero, the right not
+
+		d := diff(t, "half", zeroed(base, 1000, 1001), b)
+
+		assert.Equal(t, int64(1), d.Differing)
+		assert.Equal(t, int64(1), d.Silent, "the first side's sample is silent")
+
+		e := diff(t, "half2", base, b)
+		assert.Equal(t, int64(1), e.Differing)
+		assert.Equal(t, int64(0), e.Silent, "neither is")
+	})
+
+	t.Run("a shifted comparison counts them too", func(t *testing.T) {
+		later := zeroed(delayed(base, 6), 39990, 40000)
+		fa, fb := flac(t, "sh-a.flac", base), flac(t, "sh-b.flac", later)
+
+		d, err := Decoder{}.DiffShifted(ctx, []string{fa}, []string{fb}, 6)
+
+		require.NoError(t, err)
+		assert.Equal(t, d.Differing, d.Silent)
+		assert.Greater(t, d.Differing, int64(0))
+	})
+
+	t.Run("silent", func(t *testing.T) {
+		assert.True(t, silent([]byte{0, 0, 0, 0}))
+		assert.False(t, silent([]byte{0, 0, 0, 1}))
+		assert.False(t, silent([]byte{1, 0, 0, 0}))
+		assert.True(t, silent(nil))
+	})
+}

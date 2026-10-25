@@ -1326,6 +1326,45 @@ to compare with in the other.
 Every result but the same audio is an error, as is a comparison that could not
 be made, so the exit status is zero only for audio that is the same.
 
+### 13.12 Comparing rips
+
+Given two logs, `mrr compare A.log B.log` compares two rips of one disc, such as
+made with different drives, which is the question when a drive is new or a rip
+is in doubt. Each log's cue sheet, beside it, names the image that is compared,
+as in `split --check`. Besides the checks of 13.11 on the images, it uses what
+the logs say.
+
+Each log's checksum is checked, since what is taken from them is the drives'
+settings, and the logs must be of the same disc: their tables of contents must
+be the same, and if not, nothing that follows would mean anything. Each rip is
+then described by its drive, read offset and overread setting, and from them, by
+what its drive could not read. A drive delivers audio late or early by its
+offset, so with a positive offset the last samples of the disc are past the end
+of what it reads and with a negative one the first are before the start, and
+Exact Audio Copy fills what it could not read with silence, where the image's
+length is kept. With overread on, the drive is taken to read past the ends and
+to lose nothing, which is a request in the log and not proof that it did, and so
+what differs is checked against this and not taken to follow from it.
+
+What differs is then one of:
+
+- nothing: the same audio, a pass;
+- the audio moved along: an error, since with both offsets right the images line
+  up, so one offset is not its drive's, by as much as the shift. The logs'
+  AccurateRip results say which: the one that AccurateRip did not confirm is the
+  one to doubt;
+- samples that are all within what either drive could not read, and each of
+  which is silence in one rip or the other: a note, which does not fail the run,
+  since this is what two correct rips of one disc from drives with different
+  offsets give. Both the place and the silence are required, since the first
+  alone would excuse damage that happens to be near an end;
+- samples that are within it but are sound in both: a warning, since the log
+  says EAC filled in silence there and it did not;
+- anything else, including images of different lengths: an error, with what each
+  drive could not read, and, if the difference is at an end of the images where
+  a log says overread was on, that this does not show that the drive read past
+  it.
+
 ---
 
 ## 14. Architectural Principles

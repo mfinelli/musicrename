@@ -202,8 +202,15 @@ the first or last few; and if one is the other moved along by some samples,
 which is what a wrong drive offset does, it says by how many, and what is left
 once that is allowed for. Both files must be CD-audio FLAC.
 
+Given the logs of two rips of one disc instead, such as made with different
+drives, it compares their images (the cue sheet beside each log names one) and
+uses what the logs say about the drives. A drive that cannot read the first or
+last few samples of a disc leaves silence there, so two correct rips can differ
+in slightly.
+
 ```sh
 mrr compare ~/Music/RIP/drive-a/image.flac ~/Music/RIP/drive-b/image.flac
+mrr compare ~/Music/RIP/drive-a/Album.log ~/Music/RIP/drive-b/Album.log
 ```
 
 ### `sums`

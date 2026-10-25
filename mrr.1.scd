@@ -317,6 +317,13 @@ the lengths compare. If nearly every sample differs because one file is the othe
 moved along, as when a drive's read offset was wrong, it reports by how many
 samples, and what is left once that is allowed for.
 
+Given the logs of two rips of one disc instead, it compares the images they name,
+which are the FLAC files their cue sheets name. It uses the drives' read offset
+and overread settings to work out what each could not read: with a positive offset
+and no overread, the last samples, and with a negative one the first samples.
+EAC fills these samples with silence. Differences that are within that, and are
+silence in one of the rips, are reported with a note, but are not a failure.
+
 *-v*, *--verbose*
 	List every check, not only those that did not pass.
 

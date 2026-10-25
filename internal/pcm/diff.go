@@ -49,6 +49,11 @@ type Difference struct {
 	SamplesA, SamplesB int64
 	// Differing is how many samples differ, among those both have.
 	Differing int64
+	// Silent is how many of them are silence, every value zero, in one of the two:
+	// what a rip has where its drive could not read, which Exact Audio Copy fills
+	// in. If it is the same as Differing, every difference is a sample of silence
+	// against one of sound.
+	Silent int64
 	// First and Last are the first and last of them, or -1 if none differ.
 	First, Last int64
 	// Runs are the stretches they fall in, in order, with those no more than
@@ -216,6 +221,9 @@ func (d *Difference) note(a, b []byte, start int64) {
 
 		at := start + int64(i/bytesPerSample)
 		d.Differing++
+		if silent(a[i:i+bytesPerSample]) || silent(b[i:i+bytesPerSample]) {
+			d.Silent++
+		}
 		if d.First < 0 {
 			d.First = at
 		}
@@ -229,6 +237,16 @@ func (d *Difference) note(a, b []byte, start int64) {
 			d.RunsTruncated = true
 		}
 	}
+}
+
+// silent reports whether a sample is all zero.
+func silent(sample []byte) bool {
+	for _, b := range sample {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // capture is a window of A and the part of B around the same place, taken as
