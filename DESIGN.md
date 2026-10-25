@@ -1090,6 +1090,11 @@ reads the audio file the cue sheet names. It checks that:
   sector + 1) × 588 samples, 588 being the samples in each channel of a sector
   (44,100 a second over 75 sectors a second). That catches an image cut short or
   padded, which still decodes and so passes any check on its contents;
+- the image's audio is what EAC ripped. The log's Copy CRC is a CRC-32 of the
+  audio EAC read, before it was encoded, and FLAC loses nothing, so decoding the
+  image must give audio with that CRC. What it decodes to must also agree with
+  what the FLAC records of itself, its length and the MD5 of its audio, which is
+  how damage to the file shows;
 - it has the same tracks as the log, numbered the same, all of them audio;
 - every track's `INDEX 01` is exactly where the log's table of contents puts the
   track: the log's start sector, written as minutes, seconds and frames;
@@ -1098,9 +1103,30 @@ reads the audio file the cue sheet names. It checks that:
   sheet from another disc cannot pass this even if its tracks happen to line up;
 - any `INDEX 00` lines make sense: each lies inside the track before it.
 
-The format and the length are read from the FLAC's STREAMINFO block: the first
-42 bytes of every FLAC file hold its sample rate, channel count, bit depth and
-exact sample count.
+The format, the length and the MD5 are read from the FLAC's STREAMINFO block:
+the first 42 bytes of every FLAC file hold its sample rate, channel count, bit
+depth, exact sample count, and an MD5 of the audio.
+
+The audio is decoded with ffmpeg (the `pcm` package) as raw 16-bit samples with
+nothing converted, and its length, CRC-32 and MD5 are taken in one pass, which
+for a whole album takes a few seconds. The CRC is the ordinary one, the
+polynomial of zlib and gzip, over the samples without any file header. That is
+what EAC's Copy CRC is, and the check reproduces it exactly for a real rip, and
+for the tracks later split from it, laid end to end. It holds only while the log
+says "Null samples used in CRC calculations: Yes", which the profile requires;
+with it off EAC leaves silent samples out of the CRC, which is not reproduced,
+and the audio is not compared, with a note. Only CD audio is decoded, since
+anything else would be converted to 16 bits and what was hashed would be the
+conversion.
+
+ffmpeg is not trusted to say whether the audio decoded well. After a damaged
+frame it can exit successfully with the full length of wrong audio, and says
+nothing unless asked to check each frame's CRC. So it is asked, anything it
+writes counts as a problem, and the verdict is the comparison: the CRC with the
+log's, and the length and MD5 with the FLAC's own. That catches damage of any
+kind, including an image cut short, which a check of the length in the header
+cannot see because the header still claims the whole. A missing ffmpeg is only a
+warning.
 
 A disc can have audio before its first track: a hidden track in the pregap, or a
 short silence. The cue sheet then gives track 1 an `INDEX 00` at `00:00:00` and

@@ -244,7 +244,8 @@ database made of it. The encoder must also be FLAC with verification on, and the
 log's checksum must match its text, which shows that the log is as EAC wrote it.
 A fourth group is the files that go with the log: the cue sheet of the same name
 must agree with the log's table of contents, and the FLAC image it names must be
-CD audio of exactly the length the disc has. The last check is that the disc is
+CD audio of exactly the length the disc has, and its decoded audio must have the
+CRC that the log records as its Copy CRC. The last check is that the disc is
 one the MusicBrainz release saved in _musicbrainz.txt_ has, which needs a
 network connection. A required setting that the
 log does not state is an error. *mrr riplog --help* lists the settings and the

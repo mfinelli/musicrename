@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mfinelli/musicrename/internal/musicbrainz"
+	"github.com/mfinelli/musicrename/internal/pcm"
 )
 
 // The three fixture logs are real EAC 1.8 image-rip logs, byte for byte as EAC
@@ -189,16 +190,27 @@ func flacHeader(rate, channels, bits int, total uint64) []byte {
 // cdFLAC returns a FLAC header for CD-format audio of the given length.
 func cdFLAC(total uint64) []byte { return flacHeader(44100, 2, 16, total) }
 
+// testMD5 is the MD5 that the header of an image built by buildRip records.
+var testMD5 = [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+
+// withMD5 returns a FLAC header with the given MD5 of its audio in it.
+func withMD5(header []byte, sum [16]byte) []byte {
+	out := append([]byte(nil), header...)
+	copy(out[8+18:], sum[:])
+	return out
+}
+
 // imageFLAC returns the FLAC header an image of the disc in log should have,
-// beginning at the given sector of the disc (0 for the whole disc).
+// beginning at the given sector of the disc (0 for the whole disc), with an MD5
+// of its audio.
 func imageFLAC(t *testing.T, log []byte, start int) []byte {
 	t.Helper()
 	l, err := ParseLog(log)
 	require.NoError(t, err)
 	if len(l.TOC) == 0 {
-		return cdFLAC(0)
+		return withMD5(cdFLAC(0), testMD5)
 	}
-	return cdFLAC(uint64(expectedImageSamples(l, start)))
+	return withMD5(cdFLAC(uint64(expectedImageSamples(l, start))), testMD5)
 }
 
 // rip is the files of one rip in a temporary directory.
@@ -340,9 +352,43 @@ func knowing(discID string) *fakeLookup {
 	}}
 }
 
+// fakeAudio is a decoder that gives what a test tells it.
+type fakeAudio struct {
+	fp    pcm.Fingerprint
+	err   error
+	calls [][]string
+}
+
+func (f *fakeAudio) Fingerprint(_ context.Context, paths ...string) (pcm.Fingerprint, error) {
+	f.calls = append(f.calls, paths)
+	return f.fp, f.err
+}
+
+// honest returns a decoder that finds in the rip's image what the rip says is
+// there: the CRC the log gives as its Copy CRC, and the length and MD5 that the
+// FLAC's header records. It is what a good rip decodes to, and tests change one
+// thing from it. A part that is not there (a log without a Copy CRC, a FLAC that
+// is not one) is left at zero.
+func (r rip) honest(t *testing.T) *fakeAudio {
+	t.Helper()
+	f := &fakeAudio{}
+
+	if l, err := ParseLog(mustRead(t, r.logPath())); err == nil {
+		if crc, err := strconv.ParseUint(l.Range.CopyCRC, 16, 32); err == nil {
+			f.fp.CRC32 = uint32(crc)
+		}
+	}
+	if si, err := readStreamInfo(r.path(".flac")); err == nil {
+		f.fp.Bytes = int64(si.TotalSamples) * 4
+		f.fp.MD5 = si.MD5
+	}
+	return f
+}
+
 // check runs CheckFile on the rip against a MusicBrainz that has the rip's disc
 // attached to its release, as it would for a rip tagged with the right release,
-// and fails the test if it returns an error.
+// and an image that decodes to what the rip says it should, and fails the test
+// if it returns an error.
 func (r rip) check(t *testing.T) *Result {
 	t.Helper()
 	l, err := ParseLog(mustRead(t, r.logPath()))
@@ -351,10 +397,18 @@ func (r rip) check(t *testing.T) *Result {
 }
 
 // checkWith runs CheckFile on the rip against the given MusicBrainz (nil for
-// none) and fails the test if it returns an error.
+// none) and an image that decodes to what the rip says it should, and fails the
+// test if it returns an error.
 func (r rip) checkWith(t *testing.T, mb Lookup) *Result {
 	t.Helper()
-	_, res, err := CheckFile(context.Background(), r.logPath(), mb)
+	return r.checkOpts(t, Options{MusicBrainz: mb, Audio: r.honest(t)})
+}
+
+// checkOpts runs CheckFile on the rip with the given options and fails the test
+// if it returns an error.
+func (r rip) checkOpts(t *testing.T, opts Options) *Result {
+	t.Helper()
+	_, res, err := CheckFile(context.Background(), r.logPath(), opts)
 	require.NoError(t, err)
 	return res
 }

@@ -36,7 +36,7 @@ var mbCheckIDs = []string{"musicbrainz"}
 // cueCheckIDs are the checks CheckFile adds to Verify's when the cue sheet is
 // there and reads.
 var cueCheckIDs = []string{
-	"cue-sheet", "cue-image", "image-format", "image-length",
+	"cue-sheet", "cue-image", "image-format", "image-length", "audio",
 	"cue-tracks", "cue-positions", "cue-disc-id", "cue-pregaps",
 }
 
@@ -126,7 +126,7 @@ func TestCheckFileRealRips(t *testing.T) {
 	})
 
 	t.Run("the log is returned too", func(t *testing.T) {
-		l, _, err := CheckFile(context.Background(), blackRip(t).logPath(), nil)
+		l, _, err := CheckFile(context.Background(), blackRip(t).logPath(), Options{})
 
 		require.NoError(t, err)
 		assert.Equal(t, "AC/DC / Back in Black", l.Title)
@@ -135,7 +135,7 @@ func TestCheckFileRealRips(t *testing.T) {
 
 func TestCheckFileErrors(t *testing.T) {
 	t.Run("a log that does not exist", func(t *testing.T) {
-		l, res, err := CheckFile(context.Background(), filepath.Join(t.TempDir(), "missing.log"), nil)
+		l, res, err := CheckFile(context.Background(), filepath.Join(t.TempDir(), "missing.log"), Options{})
 
 		assert.Nil(t, l)
 		assert.Nil(t, res)
@@ -147,7 +147,7 @@ func TestCheckFileErrors(t *testing.T) {
 		path := filepath.Join(dir, "x.log")
 		require.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
 
-		_, _, err := CheckFile(context.Background(), path, nil)
+		_, _, err := CheckFile(context.Background(), path, Options{})
 
 		var ue *UnsupportedError
 		assert.True(t, errors.As(err, &ue), "got %v", err)
@@ -158,7 +158,7 @@ func TestCheckFileErrors(t *testing.T) {
 		path := filepath.Join(dir, "x.log")
 		require.NoError(t, os.WriteFile(path, []byte{0x80, 0x81, 0x82, 0x83}, 0o644))
 
-		_, _, err := CheckFile(context.Background(), path, nil)
+		_, _, err := CheckFile(context.Background(), path, Options{})
 
 		assert.ErrorContains(t, err, "could not read the log")
 	})

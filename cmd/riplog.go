@@ -30,6 +30,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mfinelli/musicrename/internal/musicbrainz"
+	"github.com/mfinelli/musicrename/internal/pcm"
 	"github.com/mfinelli/musicrename/internal/riplog"
 	"github.com/mfinelli/musicrename/internal/style"
 )
@@ -59,8 +60,10 @@ Also checked:
   - AccurateRip and CUETools DB results (a disc they do not know is a warning)
   - the cue sheet (same name, .cue): same tracks as the log, every INDEX 01 at
     the log's start sector, and a matching disc ID
-  - the FLAC image the cue sheet names: that it is CD audio, and that it holds
-    exactly as many samples as the log's table of contents says the disc has
+  - the FLAC image the cue sheet names: that it is CD audio, that it holds
+    exactly as many samples as the log's table of contents says the disc has,
+    and that its audio, decoded, is what EAC ripped: its CRC is the log's Copy
+    CRC and it matches the MD5 the FLAC stores of itself
   - that the disc is one the MusicBrainz release in musicbrainz.txt has: the
     disc ID computed from the log is looked up there (--offline skips this)
   - that the log's checksum matches its text
@@ -148,16 +151,17 @@ func runRiplog(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out)
 
 	// One lookup serves every log, so a multi-disc rip asks MusicBrainz about
-	// its release once. A nil one is no network.
-	var mb riplog.Lookup
+	// its release once. A nil one is no network. The image is decoded with the
+	// ffmpeg on PATH.
+	opts := riplog.Options{Audio: pcm.Decoder{}}
 	if !offline {
-		mb = musicbrainz.NewLookup()
+		opts.MusicBrainz = musicbrainz.NewLookup()
 	}
 
 	var findings int
 	failed := false
 	for _, logPath := range logs {
-		n, fails := riplogCheckOne(cmd.Context(), out, logPath, mb, strict, verbose)
+		n, fails := riplogCheckOne(cmd.Context(), out, logPath, opts, strict, verbose)
 		findings += n
 		failed = failed || fails
 	}
@@ -199,10 +203,10 @@ func riplogTargets(path string) ([]string, error) {
 // riplogCheckOne checks and reports one log. It returns the number of findings
 // (errors and warnings) it contributes to the summary and whether the log makes
 // the run fail.
-func riplogCheckOne(ctx context.Context, out io.Writer, logPath string, mb riplog.Lookup, strict, verbose bool) (findings int, fails bool) {
+func riplogCheckOne(ctx context.Context, out io.Writer, logPath string, opts riplog.Options, strict, verbose bool) (findings int, fails bool) {
 	name := filepath.Base(logPath)
 
-	l, res, err := riplog.CheckFile(ctx, logPath, mb)
+	l, res, err := riplog.CheckFile(ctx, logPath, opts)
 	if err != nil {
 		lipgloss.Fprintln(out, "  "+name)
 		lipgloss.Fprintln(out, "    "+style.Error.Render("✗ "+err.Error()))

@@ -18,6 +18,7 @@
 package riplog
 
 import (
+	"context"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mfinelli/musicrename/internal/pcm"
 	"github.com/mfinelli/musicrename/internal/testutil"
 )
 
@@ -38,10 +40,17 @@ func writeFile(t *testing.T, data []byte) string {
 	return path
 }
 
+func md5Of(t *testing.T, s string) (sum [16]byte) {
+	t.Helper()
+	copy(sum[:], unhex(t, s))
+	return sum
+}
+
 func TestReadStreamInfoRealHeaders(t *testing.T) {
 	// The first 42 bytes of files made by ffmpeg's FLAC encoder, whose
-	// properties ffprobe independently reported. Unlike the headers the other
-	// tests build, these were not packed by this package's own code.
+	// properties ffprobe independently reported, and whose MD5 is that of the
+	// decoded audio, which was checked by decoding it. Unlike the headers the
+	// other tests build, these were not packed by this package's own code.
 	tests := []struct {
 		name string
 		hex  string
@@ -50,17 +59,17 @@ func TestReadStreamInfoRealHeaders(t *testing.T) {
 		{
 			"CD audio, 12 s",
 			"664c614300000022120012000016b1001af60ac442f00008133049ad6c370bb36713806d6f43e9050882",
-			streamInfo{SampleRate: 44100, Channels: 2, BitsPerSample: 16, TotalSamples: 529200},
+			streamInfo{SampleRate: 44100, Channels: 2, BitsPerSample: 16, TotalSamples: 529200, MD5: md5Of(t, "49ad6c370bb36713806d6f43e9050882")},
 		},
 		{
 			"24-bit 96 kHz, 5 s",
 			"664c61430000002220002000002f62004fda177003700007530074a8b458e0f5696c5d30c5bb0ba36534",
-			streamInfo{SampleRate: 96000, Channels: 2, BitsPerSample: 24, TotalSamples: 480000},
+			streamInfo{SampleRate: 96000, Channels: 2, BitsPerSample: 24, TotalSamples: 480000, MD5: md5Of(t, "74a8b458e0f5696c5d30c5bb0ba36534")},
 		},
 		{
 			"mono 48 kHz, 3 s",
 			"664c6143000000221200120000071b001c2d0bb800f00002328037b8c1768ca3c4cabdd42cc3517a8637",
-			streamInfo{SampleRate: 48000, Channels: 1, BitsPerSample: 16, TotalSamples: 144000},
+			streamInfo{SampleRate: 48000, Channels: 1, BitsPerSample: 16, TotalSamples: 144000, MD5: md5Of(t, "37b8c1768ca3c4cabdd42cc3517a8637")},
 		},
 	}
 	for _, tc := range tests {
@@ -176,6 +185,12 @@ func TestReadStreamInfoRealEncoder(t *testing.T) {
 		got, err := readStreamInfo(path)
 
 		require.NoError(t, err)
+		// The MD5 is of the audio, so it is checked against a decode of it.
+		fp, err := pcm.Decoder{}.Fingerprint(context.Background(), path)
+		require.NoError(t, err)
+		assert.True(t, got.HasMD5())
+		assert.Equal(t, fp.MD5, got.MD5)
+		got.MD5 = [16]byte{}
 		assert.Equal(t, streamInfo{SampleRate: 44100, Channels: 2, BitsPerSample: 16, TotalSamples: 44100 * 12}, got)
 	})
 
@@ -217,5 +232,37 @@ func TestExpectedImageSamples(t *testing.T) {
 
 		assert.Equal(t, int64(10000-3000)*588, expectedImageSamples(l, 3000))
 		assert.Equal(t, int64(10000)*588, expectedImageSamples(l, 0))
+	})
+}
+
+func TestStreamInfoMD5(t *testing.T) {
+	t.Run("a header that stores one", func(t *testing.T) {
+		data := cdFLAC(1000)
+		copy(data[26:], unhex(t, "0123456789abcdef0123456789abcdef"))
+
+		got, err := readStreamInfo(writeFile(t, data))
+
+		require.NoError(t, err)
+		assert.Equal(t, md5Of(t, "0123456789abcdef0123456789abcdef"), got.MD5)
+		assert.True(t, got.HasMD5())
+		assert.Equal(t, uint64(1000), got.TotalSamples, "and the length before it is not disturbed")
+	})
+
+	t.Run("a header that does not", func(t *testing.T) {
+		got, err := readStreamInfo(writeFile(t, cdFLAC(1000)))
+
+		require.NoError(t, err)
+		assert.Equal(t, [16]byte{}, got.MD5)
+		assert.False(t, got.HasMD5())
+	})
+
+	t.Run("the last byte counts", func(t *testing.T) {
+		data := cdFLAC(1)
+		data[41] = 1
+
+		got, err := readStreamInfo(writeFile(t, data))
+
+		require.NoError(t, err)
+		assert.True(t, got.HasMD5())
 	})
 }

@@ -31,15 +31,17 @@ import (
 // need only the log (Verify), and those that need the files beside it, namely
 // the cue sheet with the same name and the audio image the cue sheet names. For
 // a log named "Album.log" those are "Album.cue" and the file it points to. A
-// last check compares the disc's MusicBrainz disc ID with the release saved in
-// musicbrainz.txt beside the log, which needs mb to ask MusicBrainz about it; a
-// nil mb means no network, and the ID is computed but not compared.
+// check compares the disc's MusicBrainz disc ID with the release saved in
+// musicbrainz.txt beside the log, which needs opts.MusicBrainz to ask
+// MusicBrainz about it; without one the ID is computed but not compared. The
+// image is also decoded and its audio compared with the log's CRC, which needs
+// opts.Audio.
 //
 // The error is non-nil only when the log itself cannot be read or is not one
 // this package supports (an *UnsupportedError), so there is nothing to check.
 // A missing or wrong cue sheet or image is not an error here but a failed check
 // in the result.
-func CheckFile(ctx context.Context, logPath string, mb Lookup) (*Log, *Result, error) {
+func CheckFile(ctx context.Context, logPath string, opts Options) (*Log, *Result, error) {
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not read: %w", err)
@@ -55,8 +57,8 @@ func CheckFile(ctx context.Context, logPath string, mb Lookup) (*Log, *Result, e
 	}
 
 	r := Verify(l)
-	verifyCue(r, l, logPath)
-	verifyMusicBrainz(ctx, r, l, filepath.Dir(logPath), mb)
+	verifyCue(ctx, r, l, logPath, opts.Audio)
+	verifyMusicBrainz(ctx, r, l, filepath.Dir(logPath), opts.MusicBrainz)
 	return l, r, nil
 }
 
@@ -82,7 +84,7 @@ func findFile(dir, name string) string {
 
 // verifyCue adds the checks on the cue sheet beside the log, and on the audio
 // image it names.
-func verifyCue(r *Result, l *Log, logPath string) {
+func verifyCue(ctx context.Context, r *Result, l *Log, logPath string, dec Decoder) {
 	dir := filepath.Dir(logPath)
 	stem := strings.TrimSuffix(filepath.Base(logPath), filepath.Ext(logPath))
 	want := stem + ".cue"
@@ -106,9 +108,12 @@ func verifyCue(r *Result, l *Log, logPath string) {
 	}
 	r.add("cue-sheet", "Cue sheet", StatusPass, "%s", filepath.Base(cuePath))
 
-	if info := checkCueImage(r, l, c, dir); info != nil {
-		checkImageFormat(r, *info)
-		checkImageLength(r, l, c, *info)
+	if img := checkCueImage(r, l, c, dir); img != nil {
+		isCD := checkImageFormat(r, img.info)
+		checkImageLength(r, l, c, img.info)
+		if isCD {
+			checkAudio(ctx, r, l, *img, dec)
+		}
 	}
 	checkCueTracks(r, l, c)
 	checkCuePositions(r, l, c)
@@ -131,9 +136,9 @@ func stemOf(name string) string {
 }
 
 // checkCueImage confirms the cue sheet points at one FLAC file that is there,
-// and that it is the image the log says was ripped. It returns the file's
-// properties if it is a FLAC file that can be examined further, and nil if not.
-func checkCueImage(r *Result, l *Log, c *Cue, dir string) *streamInfo {
+// and that it is the image the log says was ripped. It returns the file, with its
+// properties, if it is a FLAC file that can be examined further, and nil if not.
+func checkCueImage(r *Result, l *Log, c *Cue, dir string) *imageFile {
 	const id, name = "cue-image", "Audio image"
 
 	switch len(c.Files) {
@@ -194,10 +199,10 @@ func checkCueImage(r *Result, l *Log, c *Cue, dir string) *streamInfo {
 	if ripped := windowsBase(l.Range.Filename); ripped != "" && stemOf(ripped) != stemOf(file) {
 		r.add(id, name, StatusWarning,
 			"the cue sheet names %q but the log ripped %q: are they from the same rip?", file, ripped)
-		return &si
+		return &imageFile{path: path, info: si}
 	}
 	r.add(id, name, StatusPass, "%s", file)
-	return &si
+	return &imageFile{path: path, info: si}
 }
 
 // A CD holds 44.1 kHz, 16-bit, stereo audio.
@@ -228,17 +233,19 @@ func channelsName(n int) string {
 }
 
 // checkImageFormat confirms the image is CD audio. A rip of a CD cannot be
-// anything else, so another format means something has re-processed it.
-func checkImageFormat(r *Result, info streamInfo) {
+// anything else, so another format means something has re-processed it. It
+// reports whether it is.
+func checkImageFormat(r *Result, info streamInfo) bool {
 	const id, name = "image-format", "Image format"
 
 	format := fmt.Sprintf("%s, %d-bit, %s", rateName(info.SampleRate), info.BitsPerSample, channelsName(info.Channels))
 	if info.SampleRate == cdSampleRate && info.Channels == cdChannels && info.BitsPerSample == cdBits {
 		r.add(id, name, StatusPass, "%s", format)
-		return
+		return true
 	}
 	r.add(id, name, StatusError, "%s: a CD is %s, %d-bit, %s",
 		format, rateName(cdSampleRate), cdBits, channelsName(cdChannels))
+	return false
 }
 
 // expectedImageSamples is how many samples an image should hold if it begins at

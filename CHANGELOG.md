@@ -14,7 +14,8 @@ my own reference.
   that a wrong option, or a log that has been edited, is noticed right after the
   rip. It also checks that the cue sheet and FLAC image beside the log match it:
   the same tracks, each `INDEX 01` at the log's start sector, the same disc ID,
-  and an image of CD audio exactly as long as the disc. It also looks the disc's
+  and an image of CD audio exactly as long as the disc, whose decoded audio has
+  the CRC the log records (this needs ffmpeg). It also looks the disc's
   MusicBrainz disc ID up and checks that it is one the release in
   `musicbrainz.txt` has, naming the releases that have it if not; `--offline`
   skips that. Image rips from English-language EAC 1.x only. Exits non-zero on

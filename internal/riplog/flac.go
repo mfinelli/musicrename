@@ -33,7 +33,13 @@ type streamInfo struct {
 	// TotalSamples is the number of samples in each channel, or zero if the
 	// encoder did not know it, as when it wrote to a pipe it could not seek in.
 	TotalSamples uint64
+	// MD5 is the MD5 of the audio, as the encoder worked it out; all zeros if
+	// it did not.
+	MD5 [16]byte
 }
+
+// HasMD5 reports whether the file stores an MD5 of its audio.
+func (si streamInfo) HasMD5() bool { return si.MD5 != [16]byte{} }
 
 // errNotFLAC is returned (wrapped, with the reason) for a file that is not a
 // well-formed FLAC file.
@@ -52,7 +58,7 @@ const streamInfoLen = 34
 // The block packs its fields into bits, not bytes. After 10 bytes of block and
 // frame sizes come 20 bits of sample rate, 3 of channel count (less one), 5 of
 // bits per sample (less one) and 36 of total samples, filling 8 bytes, then the
-// MD5 signature of the audio.
+// 16 bytes of the MD5 signature of the audio.
 func readStreamInfo(path string) (streamInfo, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -81,11 +87,13 @@ func readStreamInfo(path string) (streamInfo, error) {
 	}
 
 	p := b[8+10 : 8+18] // the 64 packed bits
-	return streamInfo{
+	si := streamInfo{
 		SampleRate:    int(p[0])<<12 | int(p[1])<<4 | int(p[2])>>4,
 		Channels:      int(p[2]>>1&0x07) + 1,
 		BitsPerSample: int(p[2]&0x01)<<4 | int(p[3]>>4) + 1,
 		TotalSamples: uint64(p[3]&0x0F)<<32 | uint64(p[4])<<24 |
 			uint64(p[5])<<16 | uint64(p[6])<<8 | uint64(p[7]),
-	}, nil
+	}
+	copy(si.MD5[:], b[8+18:])
+	return si, nil
 }
