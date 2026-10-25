@@ -32,6 +32,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/musicbrainz"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var musicbrainzDiffCmd = &cobra.Command{
@@ -114,7 +115,7 @@ func runMusicbrainzDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	lipgloss.Fprintln(out, renameHeaderStyle.Render(fmt.Sprintf("Checking MusicBrainz for %s...", filepath.Base(absPath))))
+	lipgloss.Fprintln(out, style.Header.Render(fmt.Sprintf("Checking MusicBrainz for %s...", filepath.Base(absPath))))
 	fmt.Fprintln(out)
 
 	result, err := musicbrainz.Check(context.Background(), mbid, absPath, dryRun)
@@ -184,12 +185,12 @@ func readMusicBrainzAlbumID(path string) (string, error) {
 // printMusicbrainzDiffResult renders a musicbrainz.CheckResult to out.
 func printMusicbrainzDiffResult(out io.Writer, result *musicbrainz.CheckResult, dryRun bool) {
 	if result.FirstCheck {
-		lipgloss.Fprintln(out, sumsCheckStyle.Render("✓  no prior snapshot; recorded current data as the baseline"))
+		lipgloss.Fprintln(out, style.OK.Render("✓  no prior snapshot; recorded current data as the baseline"))
 		return
 	}
 
 	if len(result.Changes) == 0 {
-		lipgloss.Fprintln(out, sumsCheckStyle.Render("✓  no changes since the last check"))
+		lipgloss.Fprintln(out, style.OK.Render("✓  no changes since the last check"))
 		return
 	}
 
@@ -201,7 +202,7 @@ func printMusicbrainzDiffResult(out io.Writer, result *musicbrainz.CheckResult, 
 	if dryRun {
 		suffix = " (dry run; snapshot not updated)"
 	}
-	lipgloss.Fprintln(out, renameBoldStyle.Render(
+	lipgloss.Fprintln(out, style.Bold.Render(
 		fmt.Sprintf("%d %s since the last check%s:", len(result.Changes), changeLabel, suffix),
 	))
 	for _, c := range result.Changes {

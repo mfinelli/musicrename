@@ -34,22 +34,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
 	"github.com/mfinelli/musicrename/internal/renamesync"
-)
-
-// Lipgloss styles for the dry-run output. Defined at package level so they are
-// initialised once and reused across calls to printDryRun.
-var (
-	renameHeaderStyle   = lipgloss.NewStyle().Bold(true)
-	renameArtistStyle   = lipgloss.NewStyle().Bold(true)
-	renameAlbumStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6")) // cyan
-	renameSourceStyle   = lipgloss.NewStyle().Faint(true)
-	renameArrowStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("4")) // blue
-	renameNewPathStyle  = lipgloss.NewStyle().Bold(true)
-	renameNoOpStyle     = lipgloss.NewStyle().Faint(true)
-	renameCaseOnlyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // bright yellow
-	renameWarningStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // bright yellow
-	renameRuleStyle     = lipgloss.NewStyle().Faint(true)
-	renameBoldStyle     = lipgloss.NewStyle().Bold(true)
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var renameCmd = &cobra.Command{
@@ -157,7 +142,7 @@ func runRename(cmd *cobra.Command, args []string) error {
 // begins. It shows artists and albums with file counts but omits per-file
 // detail, giving the user a sense of scope without the full dry-run verbosity.
 func printRunPlan(out io.Writer, plan *planner.Plan) {
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Renaming library..."))
+	lipgloss.Fprintln(out, style.Header.Render("Renaming library..."))
 	fmt.Fprintln(out)
 
 	if len(plan.Albums) == 0 {
@@ -167,7 +152,7 @@ func printRunPlan(out io.Writer, plan *planner.Plan) {
 
 	groups := renameGroupByArtist(plan.Albums)
 	for _, g := range groups {
-		lipgloss.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
+		lipgloss.Fprintln(out, style.Bold.Render(g.bucket+" / "+g.artist))
 		for _, ap := range g.albums {
 			count := len(ap.Moves)
 			fileLabel := "files"
@@ -175,9 +160,9 @@ func printRunPlan(out io.Writer, plan *planner.Plan) {
 				fileLabel = "file"
 			}
 			fmt.Fprintln(out, "  "+
-				renameAlbumStyle.Render(ap.AlbumName)+
+				style.Name.Render(ap.AlbumName)+
 				"  "+
-				renameSourceStyle.Render(fmt.Sprintf("· %d %s", count, fileLabel)),
+				style.Faint.Render(fmt.Sprintf("· %d %s", count, fileLabel)),
 			)
 		}
 		fmt.Fprintln(out)
@@ -198,9 +183,9 @@ func printRunSummary(out io.Writer, plan *planner.Plan, execWarnings []string, e
 	allWarnings = append(allWarnings, execWarnings...)
 
 	if len(allWarnings) > 0 {
-		lipgloss.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
+		lipgloss.Fprintln(out, style.Warn.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
 		for _, w := range allWarnings {
-			lipgloss.Fprintln(out, "   "+renameWarningStyle.Render(w))
+			lipgloss.Fprintln(out, "   "+style.Warn.Render(w))
 		}
 		fmt.Fprintln(out)
 	}
@@ -220,14 +205,14 @@ func printDryRun(out io.Writer, plan *planner.Plan, elapsed time.Duration) {
 	}
 
 	// Header.
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Dry run: no files will be moved."))
+	lipgloss.Fprintln(out, style.Header.Render("Dry run: no files will be moved."))
 	fmt.Fprintln(out)
 
 	// Warnings block (shown before the plan so the user sees them first).
 	if len(allWarnings) > 0 {
-		lipgloss.Fprintln(out, renameWarningStyle.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
+		lipgloss.Fprintln(out, style.Warn.Render(fmt.Sprintf("⚠  %d warning(s)", len(allWarnings))))
 		for _, w := range allWarnings {
-			lipgloss.Fprintln(out, "   "+renameWarningStyle.Render(w))
+			lipgloss.Fprintln(out, "   "+style.Warn.Render(w))
 		}
 		fmt.Fprintln(out)
 	}
@@ -241,14 +226,14 @@ func printDryRun(out io.Writer, plan *planner.Plan, elapsed time.Duration) {
 	groups := renameGroupByArtist(plan.Albums)
 	for _, g := range groups {
 		// "b / beyonce" bold artist header.
-		lipgloss.Fprintln(out, renameArtistStyle.Render(g.bucket+" / "+g.artist))
+		lipgloss.Fprintln(out, style.Bold.Render(g.bucket+" / "+g.artist))
 
 		for _, ap := range g.albums {
 			// Album sub-header, indented two spaces.
-			lipgloss.Fprintln(out, "  "+renameAlbumStyle.Render(ap.AlbumName))
+			lipgloss.Fprintln(out, "  "+style.Name.Render(ap.AlbumName))
 			// Source directory shown once per album so it doesn't repeat on
 			// every move line.
-			lipgloss.Fprintln(out, "  "+renameSourceStyle.Render("from "+ap.SourceDir))
+			lipgloss.Fprintln(out, "  "+style.Faint.Render("from "+ap.SourceDir))
 
 			for _, op := range ap.Moves {
 				// Show only the base filename on the left (the source
@@ -256,14 +241,14 @@ func printDryRun(out io.Writer, plan *planner.Plan, elapsed time.Duration) {
 				// destination path in bold so the sanitized result stands out.
 				oldName := filepath.Base(op.OldPath)
 				relPath, _ := filepath.Rel(ap.DestDir, op.NewPath)
-				arrow := renameArrowStyle.Render("→")
-				line := fmt.Sprintf("    %s  %s  %s", oldName, arrow, renameNewPathStyle.Render(relPath))
+				arrow := style.Pointer.Render("→")
+				line := fmt.Sprintf("    %s  %s  %s", oldName, arrow, style.Bold.Render(relPath))
 
 				switch {
 				case op.IsNoOp:
-					line += "  " + renameNoOpStyle.Render("(no-op)")
+					line += "  " + style.Faint.Render("(no-op)")
 				case op.IsCaseOnly:
-					line += "  " + renameCaseOnlyStyle.Render("(case rename)")
+					line += "  " + style.Warn.Render("(case rename)")
 				}
 
 				fmt.Fprintln(out, line)
@@ -302,8 +287,8 @@ func printSummaryLine(out io.Writer, albums, moves, noOps, warnings int, elapsed
 		"%d albums · %d moves · %d %s · %d warnings · %s",
 		albums, moves, noOps, noOpLabel, warnings, elapsed.Round(10*time.Millisecond),
 	)
-	lipgloss.Fprintln(out, renameRuleStyle.Render(strings.Repeat("─", len(summaryText))))
-	lipgloss.Fprintln(out, renameBoldStyle.Render(summaryText))
+	lipgloss.Fprintln(out, style.Rule.Render(strings.Repeat("─", len(summaryText))))
+	lipgloss.Fprintln(out, style.Bold.Render(summaryText))
 }
 
 // artistGroup clusters all AlbumPlans for a single artist together with the

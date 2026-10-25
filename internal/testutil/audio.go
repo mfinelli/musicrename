@@ -26,6 +26,7 @@
 package testutil
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -108,6 +109,33 @@ func MakeToneFile(t *testing.T, dir, name string) string {
 	).CombinedOutput()
 	if err != nil {
 		t.Fatalf("MakeToneFile: ffmpeg failed: %v\n%s", err, out)
+	}
+
+	return path
+}
+
+// MakePCMFlac encodes pcm, raw 16-bit stereo little-endian samples at 44.1 kHz
+// (CD audio), as a FLAC file at dir/name, so a test knows exactly what audio the
+// file holds. outputArgs are extra ffmpeg output options, such as
+// "-compression_level", "8" or "-metadata", "TITLE=x".
+//
+// Requires a real ffmpeg binary on PATH.
+func MakePCMFlac(t *testing.T, dir, name string, pcm []byte, outputArgs ...string) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	args := []string{
+		"-y", "-v", "error",
+		"-f", "s16le", "-ar", "44100", "-ac", "2", "-i", "pipe:0",
+		"-c:a", "flac",
+	}
+	args = append(args, outputArgs...)
+	args = append(args, path)
+
+	cmd := exec.Command("ffmpeg", args...)
+	cmd.Stdin = bytes.NewReader(pcm)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("MakePCMFlac: ffmpeg failed: %v\n%s", err, out)
 	}
 
 	return path

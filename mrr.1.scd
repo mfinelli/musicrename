@@ -221,6 +221,113 @@ or *likely fake*, or if a track cannot be decoded.
 	Show the technical detail behind each verdict: the analysis window, the
 	bit depth, and each channel's cutoff and drop.
 
+## mrr riplog [_path_] [*--strict*] [*--offline*] [*-v*]
+
+Checks the settings recorded in an Exact Audio Copy rip log against the ones a
+rip should have been made with. EAC does not refuse to rip with a wrong setting,
+and the result usually sounds fine, so nothing at the time says anything is
+wrong.
+
+_path_ is a *.log* file, which is checked, or a directory, in which every *.log*
+file directly inside it is checked (a multi-disc rip has one per disc). A log
+named _Album_.log is expected to have _Album_.cue beside it. Run it
+on the original rip, before the files are checksummed and the image is split.
+Defaults to the current directory.
+
+The checks fall into three groups. The first is how accurately EAC read the
+disc: the read mode, accurate stream, whether the audio cache was defeated, and
+C2 pointers. The second is what was done to the audio: normalization, removal of
+silent blocks, and the handling of the drive's read offset and of the samples at
+the ends of the disc. The third is how the rip turned out: whether the test and
+copy passes agree, any reported errors, and what AccurateRip and the CUETools
+database made of it. The encoder must also be FLAC with verification on, and the
+log's checksum must match its text, which shows that the log is as EAC wrote it.
+A fourth group is the files that go with the log: the cue sheet of the same name
+must agree with the log's table of contents, and the FLAC image it names must be
+CD audio of exactly the length the disc has, and its decoded audio must have the
+CRC that the log records as its Copy CRC. The last check is that the disc is
+one the MusicBrainz release saved in _musicbrainz.txt_ has, which needs a
+network connection. A required setting that the
+log does not state is an error. *mrr riplog --help* lists the settings and the
+values they must have.
+
+Each check is reported as ok, a note, a warning, or an error. By default only
+the checks that did not pass are listed.
+
+Only image rips (one disc, one file, with a cue sheet) from English-language
+EAC 1.x are supported. A log of any other kind is reported as unsupported, which
+counts as an error, since it cannot be verified.
+
+Read-only. Exits non-zero if any log has an error. Warnings, such as a disc that
+AccurateRip does not know, do not by themselves fail the run.
+
+*--strict*
+	Treat warnings as failures for the exit status.
+
+*--offline*
+	Do not look the disc up on MusicBrainz. Its disc ID is still computed and
+	shown, but not compared with the release.
+
+*-v*, *--verbose*
+	List every check, not only those that did not pass.
+
+## mrr split *--check* [*--strict*] [*-v*] _log_ [_dir_]
+
+Checks that the tracks an image rip was split into hold exactly what was ripped.
+_log_ is the *.log* file of the rip, with its cue sheet of the same name beside
+it, and _dir_ is the directory of the split tracks, which defaults to the current
+directory.
+
+Tracks are named _NN Title_.flac for a single disc, _D-NN Title_.flac for disc
+_D_ of a multi-disc album, whose discs share the directory, the disc being taken
+from the log's name as in _Album (disc 1)_.log, and _00 Title_.flac for audio
+before track 1 (_D-00 Title_.flac on a multi-disc album). There must be a file
+for each track of the log's table of contents. The tracks, decoded in order,
+must have the CRC the log records as its Copy CRC, and each must match the MD5
+its own FLAC records. If the tracks do not have the log's CRC and the rip's
+image is beside the log, the tracks are compared with it, and the track and
+place in it of the first and last difference are reported. Each track must also
+be the length the cue sheet gives, with each pregap at the end of the track
+before it (at the start of the track it leads into is a warning), since a split
+can be cut a few samples off at every boundary and still hold exactly the audio
+of the rip.
+
+Each check is reported as ok, a note, a warning, or an error. By default only the
+checks that did not pass are listed. Read-only. Exits non-zero on an error.
+
+*--check*
+	Check an existing split. It is required, so that the command can split
+	later without changing how it is run to check.
+
+*--strict*
+	Treat warnings as failures for the exit status.
+
+*-v*, *--verbose*
+	List every check, not only those that did not pass.
+
+## mrr compare [*-v*] _a_ _b_
+
+Compares the audio of two FLAC files, which can be tracks or images, and says
+whether it is the same. What is compared is what the files decode to, so how they
+were encoded, and their tags, do not matter. Both must be CD audio (44.1 kHz,
+16-bit, stereo).
+
+If the audio is not the same, it reports how many samples differ, where the first
+and last are, whether they are all within the first or last few samples, and how
+the lengths compare. If nearly every sample differs because one file is the other
+moved along, as when a drive's read offset was wrong, it reports by how many
+samples, and what is left once that is allowed for.
+
+Given the logs of two rips of one disc instead, it compares the images they name,
+which are the FLAC files their cue sheets name. It uses the drives' read offset
+and overread settings to work out what each could not read: with a positive offset
+and no overread, the last samples, and with a negative one the first samples.
+EAC fills these samples with silence. Differences that are within that, and are
+silence in one of the rips, are reported with a note, but are not a failure.
+
+*-v*, *--verbose*
+	List every check, not only those that did not pass.
+
 ## mrr sums [_path_]
 
 Computes MD5 checksums for all files in an album and writes a *sums.md5* file

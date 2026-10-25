@@ -27,6 +27,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 	"github.com/mfinelli/musicrename/internal/target"
 )
 
@@ -80,7 +81,7 @@ func runPlaylistCreate(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Created %s\n", relPlaylistPath(absRoot, path))
 	if warning != "" {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+warning))
 	}
 	return nil
 }

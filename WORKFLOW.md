@@ -25,6 +25,27 @@ Homepage: <https://www.exactaudiocopy.de/>
   8. On the next screen, check "I am an expert, let me use the full potential of
      EAC".
   9. Finish.
+- At the very least, these settings must be configured. After every rip,
+  `mrr riplog` checks them against the rip log (see
+  [Staging the rip](#staging-the-rip)). The names are as they appear in the log:
+
+  | Setting (as named in the log)               | Required value                                |
+  | ------------------------------------------- | --------------------------------------------- |
+  | Read mode                                   | Secure                                        |
+  | Utilize accurate stream                     | Yes                                           |
+  | Defeat audio cache                          | Yes                                           |
+  | Make use of C2 pointers                     | No                                            |
+  | Read offset correction                      | The drive's AccurateRip-confirmed offset      |
+  | Overread into Lead-In and Lead-Out          | Whether the drive supports it (currently: No) |
+  | Fill up missing offset samples with silence | Yes                                           |
+  | Delete leading and trailing silent blocks   | No                                            |
+  | Null samples used in CRC calculations       | Yes                                           |
+  | Add ID3 tag                                 | No                                            |
+  | Command line compressor                     | `FLAC.EXE`                                    |
+  | Additional command line options             | Includes `-V` (verify the encode)             |
+
+  **TODO:** document where in EAC each of these is set.
+
 - **TODO:** document the EAC settings to configure after the wizard.
 
 ### foobar2000
@@ -151,6 +172,13 @@ For releases that also include a video DVD:
 2. Copy the ripped files into that directory.
 3. Find the release on MusicBrainz (creating it if it doesn't already exist) and
    save its URL in a file named `musicbrainz.txt` inside that directory.
+4. Check the rip log with `mrr riplog` (from inside that directory, or pass its
+   path). It reports any EAC setting that was wrong when the disc was ripped, a
+   test and copy that disagree, errors, and other mismatches between the rip log
+   and the ripped audio. It notes whether the cue sheet records any pregaps, but
+   can't tell whether the disc has none or gaps weren't detected (step 3 of
+   ripping), so that one is still on you. An error means the rip should be
+   redone with the correct settings; a warning is for you to judge.
 
 ## Scanning album art (gscan2pdf)
 
@@ -222,6 +250,10 @@ only offers lossy files).
    "Convert", using the "single-disc" or "multi-disc" preset as appropriate.
 3. The destination directory is the `WORKING` directory in the home `Music`
    directory.
+4. Check the split with `mrr split --check`, from inside the album's directory
+   there, passing the log of the archived rip. It confirms that the tracks hold
+   exactly what was ripped, and that each starts and ends where the cue sheet
+   says.
 
 Note: this is the point where the "rip from CD" and "purchase album online"
 workflows unify, since purchased albums ship with tracks already split. For the

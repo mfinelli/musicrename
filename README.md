@@ -145,6 +145,74 @@ mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love
 mrr spectrum ~/music/b/beyonce/\[2003\]\ dangerously\ in\ love --png /tmp/spectra --annotated --fixed-scale
 ```
 
+### `riplog`
+
+Checks an Exact Audio Copy rip log for the correct settings. EAC will finish a
+rip made with a wrong setting without complaint, and the result usually sounds
+fine, so a mistake can go unnoticed. `riplog` reads the settings back out of the
+log and verifies that the rip was made in secure mode with accurate stream and
+the audio cache defeated, without C2 pointers, normalization, or removal of
+silent blocks; that the drive's read offset and overread setting are the ones
+known for it; that the test and copy passes agree and no errors were reported;
+that the cue sheet and FLAC image beside the log match it (the same tracks, each
+starting where the log says, a matching disc ID, and an image of CD audio,
+exactly as long as the disc, that decodes to the audio the log's CRC is of); and
+that the disc is one the MusicBrainz release in `musicbrainz.txt` has, by
+looking its disc ID up there (`--offline` skips that); that AccurateRip and the
+CUETools database confirmed the rip; and that FLAC verification was on. Operates
+on a `.log` file or on the `.log` files in a directory, and is meant to be run
+on the original rip before it is checksummed.
+
+Only image rips from English-language EAC 1.x are supported; any other log is
+reported as unsupported, which counts as an error. The command exits non-zero if
+any log has an error; warnings (such as a disc AccurateRip doesn't know) only
+fail the run with `--strict`. By default only the checks that didn't pass are
+listed, and `-v` shows them all. The settings checked are hardcoded; see
+[DESIGN.md](DESIGN.md) for what they are and why.
+
+```sh
+mrr riplog ~/Music/RIP/2003\ Dangerously\ in\ Love
+mrr riplog "Dangerously in Love.log" -v
+```
+
+### `split`
+
+Checks that the tracks an image rip was split into hold exactly what was ripped.
+`mrr split --check` takes the rip's log (its cue sheet is beside it) and the
+directory of the tracks, which is the current directory unless one is given, so
+run it from inside the directory the album was split into. It checks that there
+is a file for every track; that the tracks, in order, decode to the CRC the log
+records, and that none is damaged; and that each track is as long as the cue
+sheet says, because a split can be cut a few samples off at every boundary and
+still hold exactly what was ripped.
+
+```sh
+cd ~/Music/WORKING/Dangerously\ in\ Love
+mrr split --check ~/Music/RIP/2003\ Dangerously\ in\ Love/Dangerously\ in\ Love.log
+```
+
+### `compare`
+
+Compares the audio of two FLAC files, which can be tracks or images, and says
+whether it is the same: for instance, whether two rips of one disc made with
+different drives hold the same audio, or whether a library track is the one in
+an image. How the files were encoded, and their tags, do not matter. If the
+audio differs it says how many samples and where, and whether they are only in
+the first or last few; and if one is the other moved along by some samples,
+which is what a wrong drive offset does, it says by how many, and what is left
+once that is allowed for. Both files must be CD-audio FLAC.
+
+Given the logs of two rips of one disc instead, such as made with different
+drives, it compares their images (the cue sheet beside each log names one) and
+uses what the logs say about the drives. A drive that cannot read the first or
+last few samples of a disc leaves silence there, so two correct rips can differ
+in slightly.
+
+```sh
+mrr compare ~/Music/RIP/drive-a/image.flac ~/Music/RIP/drive-b/image.flac
+mrr compare ~/Music/RIP/drive-a/Album.log ~/Music/RIP/drive-b/Album.log
+```
+
 ### `sums`
 
 Computes MD5 checksums for all files in an album and writes `sums.md5`,

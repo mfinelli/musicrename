@@ -954,7 +954,421 @@ one sample rate and only roughly across rates.
 
 ---
 
-## 13. Architectural Principles
+## 13. Rip Log Verification
+
+`musicrename riplog` checks an Exact Audio Copy (EAC) rip log against the
+settings a rip should have been made with. A rip made with a wrong setting still
+completes, and the result usually sounds fine, so the mistake is easy to make
+and hard to notice. The log records every setting that affects accuracy, which
+makes it possible to check them after the fact.
+
+### 13.1 Scope
+
+The command operates on a single `.log` file or on the `.log` files directly
+inside one directory (a multi-disc rip has one per disc). It is meant to be run
+on the original rip as archived, before the files are checksummed and before the
+image is split for the library.
+
+Only **image rips** from **English-language EAC 1.x** are supported: one disc
+ripped as one range, with a cue sheet. This is how the library's CDs are ripped
+(see `WORKFLOW.md`). Anything else (a per-track log, a log in another language,
+a log from EAC before 1.0) is reported as unsupported rather than judged against
+rules written for something else. An unsupported log counts as an error, because
+it cannot be verified. Supporting more is possible but unneeded, and would
+multiply the number of log layouts the parser has to know.
+
+### 13.2 Policy, not a score
+
+Some other tools attempt to grade a log with a score, deducting points for each
+departure from some setting, but that model is a poor fit here.
+
+`riplog` instead runs a fixed list of checks and reports each as one of:
+
+- **ok** — the check holds.
+- **note** — informational; needs no action.
+- **warning** — something could not be confirmed or looks unusual, but nothing
+  is known to be wrong.
+- **error** — a setting is wrong, the log shows a problem with the rip, or the
+  log cannot be verified as it should be.
+
+### 13.3 The profile
+
+The required settings are the author's own and are hardcoded in the package
+(`settingRules` in `internal/riplog/verify.go`), not configurable, for the same
+reason device targets are: a short, personally-curated list lives in code rather
+than behind a configuration system. A rip with any of them wrong should be
+redone, because the mistake is in the audio and not only in the log.
+
+| Setting                                     | Required | Why                                                                      |
+| ------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| Read mode                                   | Secure   | Only secure mode re-reads sectors until they agree.                      |
+| Utilize accurate stream                     | Yes      | Otherwise the drive's reading can drift unnoticed.                       |
+| Defeat audio cache                          | Yes      | Otherwise re-reads may come from the drive's cache and hide errors.      |
+| Make use of C2 pointers                     | No       | A drive's own error report can be wrong, and trusting it skips re-reads. |
+| Fill up missing offset samples with silence | Yes      | Otherwise audio is shifted rather than padded at the ends.               |
+| Delete leading and trailing silent blocks   | No       | It removes audio, so the result no longer matches the disc.              |
+| Null samples used in CRC calculations       | Yes      | Otherwise CRCs differ from those AccurateRip and other rippers compute.  |
+| Add ID3 tag                                 | No       | ID3 tags do not belong in FLAC files, which use Vorbis comments.         |
+
+Besides these settings it checks that:
+
+- no normalization is recorded;
+- the encoder is `flac.exe` and its command line includes `-V`, so the encode is
+  verified to decode back to the same audio;
+- the read offset and the overread setting are the ones known for the drive
+  (13.5);
+- both the test and the copy pass were made and their CRCs agree, and the log
+  says the copy is OK;
+- no errors were reported;
+- the log's table of contents has tracks, and AccurateRip results cover all of
+  them;
+- AccurateRip confirmed every track. A disc that AccurateRip does not know, or a
+  pressing that differs, is a warning rather than an error, since neither is
+  evidence of a bad rip;
+- the CUETools database result, when present, confirms every track. Its absence
+  is a warning, since it comes from a plugin that may not be installed;
+- the cue sheet and FLAC image that go with the log agree with it (13.6);
+- the disc is one the MusicBrainz release in `musicbrainz.txt` has (13.7);
+- the log's checksum matches its text (13.8).
+
+Settings outside the profile, such as the interface EAC used or the encoder's
+bitrate and quality, are not looked at, whether the log states them or not.
+
+### 13.4 Unverifiable is not verified
+
+A setting the log is expected to state but does not is an error ("not found in
+the log, so it cannot be verified"). A check never passes because the
+information it needs is missing. "Expected" means part of the profile: a log
+with `Read mode` deleted fails, while one with a line deleted that the profile
+does not look at is unchanged.
+
+### 13.5 Drive offset and overread
+
+The read offset is a property of the drive: how far its reading is shifted from
+where the audio really is. A wrong one shifts every track. The offsets of the
+drives actually used are a small table in code (`internal/riplog/drives.go`),
+each one a value AccurateRip has confirmed for that drive. A known drive must
+match its offset; a mismatch is an error.
+
+Overread (`Overread into Lead-In and Lead-Out`) is also a property of the drive
+and is recorded in the same table. To correct for a drive's offset, EAC needs a
+few samples from beyond the edge of the audio: past the end of the last track
+for a positive offset, before the start of the first track for a negative one. A
+drive that can read into the lead-in and lead-out supplies them; for one that
+cannot, EAC fills them in with silence, which is why
+`Fill up missing offset samples with silence` is required to be on. The log
+cannot say which kind of drive it is, and turning overread on for a drive that
+cannot do it can cause read errors, so the table records the setting as
+determined for each drive (EAC can test for it), and a known drive's log must
+match. The difference is a handful of samples at the very ends of the disc.
+
+The log's drive line carries its adapter and ID, which vary, so it is normalized
+before lookup (lower-cased, adapter and revision removed). For an unknown drive
+the offset result depends on whether AccurateRip confirmed every track at the
+offset used: if so, it is a note that the drive and offset can be added to the
+table; if not, a warning that the offset cannot be verified. Overread is only
+noted, since there is nothing to compare it with. When a drive is added or
+replaced, run EAC's AccurateRip configuration, rip a disc AccurateRip knows, and
+add the drive to the table, with its overread setting.
+
+### 13.6 Cue sheet and image
+
+An image rip is a log, a cue sheet, and one FLAC file holding the whole disc,
+and the three have to belong together. For a log `Album.log`, `riplog` expects
+`Album.cue` beside it (the name EAC gives them, and so also for `(disc N)`) and
+reads the audio file the cue sheet names. It checks that:
+
+- the cue sheet is there and can be read. EAC writes cue sheets in the system's
+  ANSI code page unless told otherwise, so one with an accent in a title is not
+  valid UTF-8; text that is not is read as Windows-1252;
+- it names exactly one file, which is a `.flac` in the same directory and is a
+  well-formed FLAC file. The file's name is also compared with the image the log
+  says was ripped; a difference is only a warning, since the files may have been
+  renamed;
+- the image is CD audio: 44.1 kHz, 16-bit, stereo;
+- the image holds exactly the audio the disc has, which is (the last track's end
+  sector + 1) × 588 samples, 588 being the samples in each channel of a sector
+  (44,100 a second over 75 sectors a second). That catches an image cut short or
+  padded, which still decodes and so passes any check on its contents;
+- the image's audio is what EAC ripped. The log's Copy CRC is a CRC-32 of the
+  audio EAC read, before it was encoded, and FLAC loses nothing, so decoding the
+  image must give audio with that CRC. What it decodes to must also agree with
+  what the FLAC records of itself, its length and the MD5 of its audio, which is
+  how damage to the file shows;
+- it has the same tracks as the log, numbered the same, all of them audio;
+- every track's `INDEX 01` is exactly where the log's table of contents puts the
+  track: the log's start sector, written as minutes, seconds and frames;
+- its `REM DISCID` equals the freedb disc ID computed from the log's table of
+  contents. EAC computes the one in the cue sheet from that same table, so a cue
+  sheet from another disc cannot pass this even if its tracks happen to line up;
+- any `INDEX 00` lines make sense: each lies inside the track before it.
+
+The format, the length and the MD5 are read from the FLAC's STREAMINFO block:
+the first 42 bytes of every FLAC file hold its sample rate, channel count, bit
+depth, exact sample count, and an MD5 of the audio.
+
+The audio is decoded with ffmpeg (the `pcm` package) as raw 16-bit samples with
+nothing converted, and its length, CRC-32 and MD5 are taken in one pass, which
+for a whole album takes a few seconds. The CRC is the ordinary one, the
+polynomial of zlib and gzip, over the samples without any file header. That is
+what EAC's Copy CRC is, and the check reproduces it exactly for a real rip, and
+for the tracks later split from it, laid end to end. It holds only while the log
+says "Null samples used in CRC calculations: Yes", which the profile requires;
+with it off EAC leaves silent samples out of the CRC, which is not reproduced,
+and the audio is not compared, with a note. Only CD audio is decoded, since
+anything else would be converted to 16 bits and what was hashed would be the
+conversion.
+
+ffmpeg is not trusted to say whether the audio decoded well. After a damaged
+frame it can exit successfully with the full length of wrong audio, and says
+nothing unless asked to check each frame's CRC. So it is asked, anything it
+writes counts as a problem, and the verdict is the comparison: the CRC with the
+log's, and the length and MD5 with the FLAC's own. That catches damage of any
+kind, including an image cut short, which a check of the length in the header
+cannot see because the header still claims the whole. A missing ffmpeg is only a
+warning.
+
+A disc can have audio before its first track: a hidden track in the pregap, or a
+short silence. The cue sheet then gives track 1 an `INDEX 00` at `00:00:00` and
+an `INDEX 01` at the log's start sector for it, so every position is measured
+from the first sector of the disc and is checked like any other. If that audio
+was left out of the image, the cue sheet's positions are all smaller than the
+log's by exactly its length, which is reported as such (the image starts at
+track 1, leaving out the hidden track or pregap) instead of as a list of
+unrelated mismatches. The image's expected length follows the cue sheet in
+either case, since its `00:00:00` is where the image begins.
+
+`INDEX 00` marks where a track's pregap begins and is what EAC's Detect Gaps
+leaves in the cue sheet. The checks can confirm that what is recorded is
+consistent, but not that nothing is missing: a disc with no pregaps and a rip
+made without detecting them produce the same cue sheet. A cue sheet with none is
+therefore a note rather than a failure, and seeing that gaps were detected is
+left to the workflow (`WORKFLOW.md`).
+
+### 13.7 MusicBrainz release
+
+The same album is often several releases on MusicBrainz, one per pressing, and
+ripping one while tagging another is easy to do and not obvious afterwards. The
+disc's MusicBrainz disc ID identifies its track layout, so it can be compared
+with the release saved in `musicbrainz.txt` beside the log (see `WORKFLOW.md`),
+which holds that release's URL and nothing else.
+
+The disc ID is computed from the log's table of contents the way MusicBrainz's
+libdiscid computes it from a disc's: a SHA-1 hash of the first and last track
+numbers and the offsets of the lead-out and of each of 99 track slots (zero for
+a track the disc does not have), written in hex and base64 encoded with a
+URL-safe alphabet. Every offset counts from the physical start of the disc's
+audio, 150 sectors before the sector 0 that EAC counts from. The computation
+reproduces the test vector MusicBrainz's libraries are tested with, and gives
+IDs that resolve to the right release for real discs, including one with audio
+before track 1, where the first offset is not the usual 150.
+
+One request asks MusicBrainz for the release's disc IDs, and the result is:
+
+- **listed on the release** — ok, saying which medium of a multi-disc release it
+  is;
+- **the release has disc IDs, but not this one** — a warning, since it is
+  probably a different pressing. One more request finds the releases that do
+  have this disc ID and names them, which is usually the answer;
+- **the release has no disc IDs yet** — a note: there is nothing to compare;
+- **MusicBrainz has no such release** — an error: `musicbrainz.txt` names one
+  that does not exist;
+- **no `musicbrainz.txt`** — a warning, and a file that is not a release URL (a
+  release group's, say) is an error;
+- **MusicBrainz cannot be reached** — a warning. Being offline says nothing
+  about the rip.
+
+`--offline` makes no request: the disc ID is still computed and shown, and noted
+as not compared. The requests follow the rules of the `musicbrainz` package: one
+release is asked about once per run, however many discs of it are checked,
+within MusicBrainz's rate limit, on demand for one album, and time-limited so
+that a machine with no network is told so rather than kept waiting.
+
+### 13.8 Log checksum
+
+EAC ends a log with a checksum that signs the text above it. `riplog` verifies
+it: the checksum must be present, well formed, and the one EAC's algorithm gives
+for the log's text. A log that fails was edited after EAC wrote it, damaged, cut
+short, or written by an old EAC, and is an error.
+
+This is checked even though a log from one's own rip is trusted almost
+completely, for the same reason the other checks are made: the log is kept with
+the album for years, and it should be possible to tell later that it is still
+exactly as EAC wrote it, not changed by accident or damaged in storage.
+
+EAC does not document the scheme; the algorithm follows the descriptions of
+other software that verifies the checksums. The text above the checksum line,
+with its line endings and byte order marks removed, is encoded as UTF-16
+little-endian and run through a CBC-MAC: Rijndael with a 256-bit block and a
+fixed 256-bit key, starting from zeros, the last block padded with zeros. AES
+has a 128-bit block and Go's standard library has no wider one, so the package
+carries its own Rijndael, which is checked against `crypto/aes` where the two
+overlap. The key is the same in every copy of EAC, so the checksum guards
+against accident and casual editing, not against a determined forgery. It covers
+the text and not the bytes, so a log saved again with other line endings or as
+UTF-8 still verifies.
+
+The checksum does not cover what follows its own line. Anything there but blank
+lines is an error: text added to the log, or several logs in one file, which
+this check of one rip's log does not handle. The one exception is the row of 60
+hyphens EAC writes to separate a log from the next that it appends to the file,
+which says nothing.
+
+### 13.9 Output and exit status
+
+By default each log is shown with the checks that did not pass, followed by a
+count of those that did, so a good rip is a single line. `--verbose` lists every
+check with what was found.
+
+The exit status is non-zero when any log has an error. Warnings and notes do not
+fail the run, so a disc AccurateRip does not know does not stop a script; with
+`--strict`, warnings fail it too. The command only reads the logs.
+
+### 13.10 Verifying the split
+
+Once the image is split into tracks, `mrr split --check Album.log [dir]`
+verifies that the tracks hold exactly what was ripped. `dir` is the directory of
+the tracks, the current directory by default, so it is run from inside the
+directory the album was split into, with the log of the archived rip as its
+argument. Checking is a flag so that the command can later do the splitting
+itself without changing how it is run to check.
+
+The tracks are named as the workflow names them: `01 Title.flac` for a single
+disc; `1-01 Title.flac` for disc 1 of several, which share the directory, the
+disc coming from the log's name (`Album (disc 1).log`); and `00 Title.flac` for
+audio before track 1, such as a hidden track in the pregap (`1-00 Title.flac` on
+a disc of several).
+
+It checks that:
+
+- the log's checksum matches (13.8), since the log is what the tracks are
+  compared with, and the cue sheet beside it is there and can be read;
+- there is a file for each track of the log's table of contents, and a `00` file
+  only if the cue sheet puts audio before track 1, with no other file for any of
+  them. Other FLAC files in the directory, such as the other discs of a
+  multi-disc album, are counted and left out. A disc with audio before track 1
+  and no `00` file is a warning, since the audio can be in track 1, and is
+  checked as being, but the workflow gives it a file of its own;
+- every track is CD audio, as the image is (13.6);
+- the tracks, decoded in order as one stretch of audio, have the log's Copy CRC,
+  so that together they hold the audio EAC ripped. This was confirmed for the
+  tracks of a real rip laid end to end. Each track is also compared with what
+  its own FLAC records of it, its length and the MD5 of its audio, so that
+  damage is traced to a track. When the CRC is not the log's and no track is
+  damaged, the tracks are compared with the rip's image, which the cue sheet
+  names and which is beside the log, to say where they differ: the track and the
+  place in it of the first and last differing sample, how many differ in all,
+  and how much longer or shorter the tracks are than the image;
+- each track is as long as the cue sheet says.
+
+The last is needed because the audio of a split can be exactly the rip's while
+every boundary is a few samples off: cut the end of one track and the start of
+the next at the wrong place and nothing is lost, so no check of the audio as a
+whole can see it, while one track starts a moment early. A track's length is
+known to the sample, from what it decodes to, or from its header if it was not
+decoded.
+
+Where the cue sheet puts a track's boundaries depends on what the split did with
+a pregap, which must go somewhere. The workflow appends it to the end of the
+track before it, so that every track begins at its `INDEX 01`. The other way, at
+the start of the track it leads into, so that it begins at its `INDEX 00`, is
+where the cue sheet's `INDEX 00` puts it and loses nothing, but it is not what
+the workflow does, so a split cut that way is a warning that says so. Which was
+used is found, not assumed: a split that fits the workflow's way for every track
+passes, and one that fits the other way for every track is the warning. One that
+is cut one way for some tracks and the other way for the rest is an error that
+names the two groups, and a track that fits neither is reported with what the
+cue sheet gives for both, how far off it is from the nearer, and how many more
+are. A way the cue sheet cannot work out, because its `INDEX 00` lines make no
+sense (which `riplog` reports), is not one a split can be.
+
+Audio before track 1 is a `00` file from the start of the image to track 1's
+`INDEX 01`; without one, track 1 holds it, and begins at the start of the image.
+
+Nothing more is checked of track files that are not right (a missing track, a
+file that is not CD audio), and a decoder that is missing leaves the audio
+unchecked with a warning while the lengths, which come from the headers, are
+still checked. The output and exit status are the same as for `riplog` (13.9).
+
+### 13.11 Comparing audio
+
+`mrr compare A B` compares the audio of two FLAC files, which can be tracks or
+images, and says whether it is the same. It is for questions such as whether two
+rips of a disc made with different drives hold the same audio, and works for a
+single track as it does for an image, because it knows nothing of rips: two
+stretches of audio are the same or they are not. What is compared is what the
+files decode to, so how they were encoded and their tags do not matter.
+
+Both files must be CD audio, since the decoder gives exactly what was stored
+only for that: a 24-bit file would be compared as a conversion of itself, and an
+MP3 of a track differs from it in every sample. Anything else is refused.
+
+The audio is compared sample by sample, in step, without holding either. The
+result is that it is the same, or how many samples differ, where the first and
+last are, the stretches they fall in, and how the lengths compare. Differences
+that are all within the first or last 2% of what both have are said to be, which
+is a fact about them and not a reason: with no log there is nothing to say
+whether a drive that could not read the ends of a disc, or damage, made them.
+
+Where nearly every sample differs, the likely reason is that one is the other
+moved along, as a wrong drive offset moves every sample of an image, or a pregap
+kept in another place moves the start of a track. A shift is looked for in the
+same pass. A few stretches of A, spread through it, are held as it is read, and
+each is searched for in the part of B within about three seconds either way of
+where it was in A. A stretch is searched for only if it has enough different
+samples to be distinctive, so silence is not, and is accepted only if found
+exactly once, on a sample boundary, so a sound that repeats is not. A shift is
+reported only if every stretch that was found agrees on one that is not zero,
+which is how a stretch moved in only part of the audio is told from one that is
+moved throughout. The two are then compared again with the shift allowed for, to
+say what is left of the difference, and how many samples at each end have none
+to compare with in the other.
+
+Every result but the same audio is an error, as is a comparison that could not
+be made, so the exit status is zero only for audio that is the same.
+
+### 13.12 Comparing rips
+
+Given two logs, `mrr compare A.log B.log` compares two rips of one disc, such as
+made with different drives, which is the question when a drive is new or a rip
+is in doubt. Each log's cue sheet, beside it, names the image that is compared,
+as in `split --check`. Besides the checks of 13.11 on the images, it uses what
+the logs say.
+
+Each log's checksum is checked, since what is taken from them is the drives'
+settings, and the logs must be of the same disc: their tables of contents must
+be the same, and if not, nothing that follows would mean anything. Each rip is
+then described by its drive, read offset and overread setting, and from them, by
+what its drive could not read. A drive delivers audio late or early by its
+offset, so with a positive offset the last samples of the disc are past the end
+of what it reads and with a negative one the first are before the start, and
+Exact Audio Copy fills what it could not read with silence, where the image's
+length is kept. With overread on, the drive is taken to read past the ends and
+to lose nothing, which is a request in the log and not proof that it did, and so
+what differs is checked against this and not taken to follow from it.
+
+What differs is then one of:
+
+- nothing: the same audio, a pass;
+- the audio moved along: an error, since with both offsets right the images line
+  up, so one offset is not its drive's, by as much as the shift. The logs'
+  AccurateRip results say which: the one that AccurateRip did not confirm is the
+  one to doubt;
+- samples that are all within what either drive could not read, and each of
+  which is silence in one rip or the other: a note, which does not fail the run,
+  since this is what two correct rips of one disc from drives with different
+  offsets give. Both the place and the silence are required, since the first
+  alone would excuse damage that happens to be near an end;
+- samples that are within it but are sound in both: a warning, since the log
+  says EAC filled in silence there and it did not;
+- anything else, including images of different lengths: an error, with what each
+  drive could not read, and, if the difference is at an end of the images where
+  a log says overread was on, that this does not show that the drive read past
+  it.
+
+---
+
+## 14. Architectural Principles
 
 Several principles govern the design:
 
@@ -1008,3 +1422,9 @@ competing naming conventions.
 A heuristic check reports what it measured and how strongly that points to a
 conclusion. It separates ambiguous results from conclusive ones, does not claim
 more certainty than it has, and never acts on its own conclusions.
+
+### Unverifiable is not verified
+
+A check that cannot be performed because the information it needs is missing is
+reported as such. It is never passed silently, and a verifier does not treat the
+absence of evidence of a problem as evidence that there is none.

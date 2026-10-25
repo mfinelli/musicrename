@@ -27,6 +27,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var playlistEntriesDedupeCmd = &cobra.Command{
@@ -101,7 +102,7 @@ func runPlaylistEntriesDedupe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if warning != "" {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "Removed %d duplicate entries; %d remaining\n", removed, len(deduped))
 	return nil

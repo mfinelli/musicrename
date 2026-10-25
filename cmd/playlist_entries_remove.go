@@ -29,6 +29,7 @@ import (
 
 	"github.com/mfinelli/musicrename/internal/completion"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 var playlistEntriesRemoveCmd = &cobra.Command{
@@ -132,7 +133,7 @@ func runPlaylistEntriesRemove(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  - "+r)
 	}
 	if warning != "" {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "%d removed\n", len(removed))
 	return nil
@@ -150,7 +151,7 @@ func selectPlaylistEntryRows(rows []playlist.EntryRow, path string) (kept, remov
 	for i, r := range rows {
 		label := r.Label
 		if r.Missing {
-			label = renameWarningStyle.Render("⚠  " + label)
+			label = style.Warn.Render("⚠  " + label)
 		}
 		options = append(options, huh.NewOption(label, i).Selected(true))
 	}

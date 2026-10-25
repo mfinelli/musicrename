@@ -34,6 +34,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/devicesync"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/playlist"
+	"github.com/mfinelli/musicrename/internal/style"
 	"github.com/mfinelli/musicrename/internal/video"
 )
 
@@ -113,7 +114,7 @@ func runPlaylistEntriesAdd(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "  + "+a)
 	}
 	for _, w := range warnings {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+w))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+w))
 	}
 	fmt.Fprintf(out, "%d added, %d warning(s)\n", len(added), len(warnings))
 
@@ -176,7 +177,7 @@ func runPlaylistEntriesAddInteractive(cmd *cobra.Command, absRoot, path string) 
 		return err
 	}
 	if warning != "" {
-		lipgloss.Fprintln(out, renameWarningStyle.Render("⚠ "+warning))
+		lipgloss.Fprintln(out, style.Warn.Render("⚠ "+warning))
 	}
 	fmt.Fprintf(out, "Playlist now has %d entries\n", len(newEntries))
 
@@ -568,25 +569,25 @@ func (m *entriesAddModel) View() tea.View {
 	if rel != "" {
 		header += "  ·  " + rel
 	}
-	b.WriteString(renameHeaderStyle.Render(header))
+	b.WriteString(style.Header.Render(header))
 	b.WriteString("\n")
-	b.WriteString(renameSourceStyle.Render(fmt.Sprintf("%d staged", m.selection.StagedCount())))
+	b.WriteString(style.Faint.Render(fmt.Sprintf("%d staged", m.selection.StagedCount())))
 	b.WriteString("\n\n")
 
 	if m.filtering {
 		b.WriteString("/" + m.filterQuery + "█\n\n")
 	} else if m.filterQuery != "" {
-		b.WriteString(renameSourceStyle.Render("filter: " + m.filterQuery))
+		b.WriteString(style.Faint.Render("filter: " + m.filterQuery))
 		b.WriteString("\n\n")
 	}
 
 	if m.errMsg != "" {
-		b.WriteString(renameWarningStyle.Render("⚠ " + m.errMsg))
+		b.WriteString(style.Warn.Render("⚠ " + m.errMsg))
 		b.WriteString("\n\n")
 	}
 
 	if len(m.dirEntries) == 0 {
-		b.WriteString(renameSourceStyle.Render("  (empty)"))
+		b.WriteString(style.Faint.Render("  (empty)"))
 		b.WriteString("\n")
 	}
 
@@ -601,7 +602,7 @@ func (m *entriesAddModel) View() tea.View {
 
 	b.WriteString("\n")
 	help := "↑/↓ move · ←/h up · →/enter open · / filter · esc/q save & quit · ctrl+c discard"
-	b.WriteString(renameSourceStyle.Render(help))
+	b.WriteString(style.Faint.Render(help))
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true

@@ -32,18 +32,12 @@ import (
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
 	"github.com/mfinelli/musicrename/internal/sanitize"
+	"github.com/mfinelli/musicrename/internal/style"
 )
 
 // inspectLabelWidth is the column at which tag values begin, measured in
 // runes. Wide enough for "Album Artist:" (12 chars) plus one space.
 const inspectLabelWidth = 14
-
-// Lipgloss styles for inspect output.
-var (
-	inspectFaintStyle    = lipgloss.NewStyle().Faint(true)
-	inspectBoldStyle     = lipgloss.NewStyle().Bold(true)
-	inspectFilenameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6")) // cyan, matches renameAlbumStyle
-)
 
 var inspectCmd = &cobra.Command{
 	Use:   "inspect <file>",
@@ -144,16 +138,16 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	// Header.
-	lipgloss.Fprintln(out, renameHeaderStyle.Render("Inspecting..."))
+	lipgloss.Fprintln(out, style.Header.Render("Inspecting..."))
 	fmt.Fprintln(out)
 
 	// File line: cyan filename + faint format badge, indented.
 	formatLabel := strings.ToUpper(strings.TrimPrefix(ext, "."))
 	fmt.Fprintln(out,
 		"  "+
-			inspectFilenameStyle.Render(filepath.Base(path))+
+			style.Name.Render(filepath.Base(path))+
 			"  "+
-			inspectFaintStyle.Render(formatLabel),
+			style.Faint.Render(formatLabel),
 	)
 	fmt.Fprintln(out)
 
@@ -166,7 +160,7 @@ func runInspect(cmd *cobra.Command, args []string) error {
 
 	yearDisplay := inspectDash(year)
 	if rawDate != "" && rawDate != year {
-		yearDisplay = fmt.Sprintf("%s  %s", year, inspectFaintStyle.Render("(DATE: "+strconv.Quote(rawDate)+")"))
+		yearDisplay = fmt.Sprintf("%s  %s", year, style.Faint.Render("(DATE: "+strconv.Quote(rawDate)+")"))
 	}
 	inspectPrintField(out, "Year", yearDisplay)
 	inspectPrintField(out, "Track", inspectDash(trackNum))
@@ -195,7 +189,7 @@ func inspectPrintTagField(out io.Writer, label, raw string, clean sanitize.Resul
 // lipgloss bold adds ANSI escape bytes that are not counted by %-*s, padding
 // is computed from the unstyled label length and applied manually.
 func inspectPrintField(out io.Writer, label, value string) {
-	styled := inspectBoldStyle.Render(label + ":")
+	styled := style.Bold.Render(label + ":")
 	// Pad based on rune count of the plain label + colon so that ANSI bytes
 	// in the styled version don't throw off the column alignment.
 	plainWidth := utf8.RuneCountInString(label + ":")
@@ -215,7 +209,7 @@ func inspectPrintSanitized(out io.Writer, result sanitize.Result) {
 	if result.ManualOverride {
 		line += "  [manual override]"
 	}
-	lipgloss.Fprintln(out, indent+inspectFaintStyle.Render(line))
+	lipgloss.Fprintln(out, indent+style.Faint.Render(line))
 }
 
 // inspectDash returns s unchanged, or "—" if s is empty.

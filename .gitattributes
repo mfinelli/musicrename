@@ -1,0 +1,7 @@
+# Rip logs used as test fixtures must not be line-ending converted or diffed as
+# text; they are UTF-16.
+internal/riplog/testdata/*.log binary
+
+# Cue sheets used as test fixtures keep the CRLF line endings and the
+# (Windows-1252) encoding EAC wrote them with.
+internal/riplog/testdata/*.cue binary
