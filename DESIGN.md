@@ -1379,6 +1379,48 @@ What differs is then one of:
   a log says overread was on, that this does not show that the drive read past
   it.
 
+### 13.13 Making a split
+
+`mrr split [path] dir` takes the rip's log, or a directory of logs and splits
+every log in it in turn. A rename puts the tracks into folders later, so they
+are written flat.
+
+The tracks are cut where the cue sheet puts them, with each pregap at the end of
+the track before it, which makes every cut an `INDEX 01`; and audio before track
+1 is part of track 1 if it is a pregap and a track 00 of its own if it is a
+hidden track, as defined in 13.10.
+
+The image is decoded once, with ffmpeg, to raw samples, and cut by counting
+them, each piece being written to a FLAC file by ffmpeg as it goes. ffmpeg's
+ways of cutting are not used, since they cut at times and not at samples.
+Counting makes every cut exact, and means the audio is read once, and hashed as
+it is read.
+
+Nothing is written unless it is right, which is found out first. The log must be
+as EAC wrote it, so that what is taken from it is true; the cue sheet must be
+usable; the image must be the one it names, CD audio, and as long as the disc;
+and no file that is to be made may be there already. The pieces are written
+under names that are not those of tracks, and the CRC-32 of the whole of the
+audio is compared with the log's Copy CRC, when it can be (13.6), before any is
+put in place; if it is not the CRC EAC recorded, the image is not what was
+ripped, and nothing is made of it. Only then are the pieces renamed, and a split
+that fails before that leaves nothing, not even a directory it made. What is
+made is then checked as `--check` would, and its findings are the command's.
+
+A track is tagged with what the cue sheet says of it as UTF-8, converted from
+the code page EAC wrote it in if that is what it was: its title, artist, the
+album and its artist, its number, the disc number if the log is one of several,
+and its ISRC; and with the MusicBrainz release if the rip has a
+`musicbrainz.txt` that holds one, which is what lets Picard find the release
+without being told. What else the cue sheet has, the genre, the year and the
+comment that EAC adds, is not written: Picard keeps tags it has nothing to say
+about, and the genre and the year come from a database that is often wrong. A
+hidden track is tagged as track 0 with the title "Hidden track", the cue sheet
+having none for it, and will need tagging by hand.
+
+The files are named as in 13.10, with the title of the track cleaned and cut by
+the same rules as `rename`, so that it has nothing to change.
+
 ---
 
 ## 14. Architectural Principles

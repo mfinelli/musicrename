@@ -12,6 +12,8 @@ my own reference.
   same, where it differs and whether that is only in the first or last few
   samples, or whether one is the other moved along by some number of samples, as
   when two drives' offsets differ, and what is left once that is allowed for.
+- Make `split` split: it splits the image of an EAC rip into one FLAC file per
+  track.
 - Add `--hidden-track` to `split --check`: audio before track 1 of up to five
   seconds is expected in track 1 as a pregap, and more as a hidden track in a
   file of its own (00).

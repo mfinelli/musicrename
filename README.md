@@ -177,17 +177,29 @@ mrr riplog "Dangerously in Love.log" -v
 
 ### `split`
 
-Checks that the tracks an image rip was split into hold exactly what was ripped.
-`mrr split --check` takes the rip's log (its cue sheet is beside it) and the
-directory of the tracks, which is the current directory unless one is given, so
-run it from inside the directory the album was split into. It checks that there
-is a file for every track; that the tracks, in order, decode to the CRC the log
-records, and that none is damaged; and that each track is as long as the cue
-sheet says, because a split can be cut a few samples off at every boundary and
-still hold exactly what was ripped. Audio before track 1 of up to five seconds
-is taken to be a pregap and expected in track 1, and more to be a hidden track,
-expected in a file of its own named `00`; `--hidden-track=yes` or `no` says
-which it is when that is known.
+Splits the image of an EAC rip into one FLAC file per track, or checks a split.
+`mrr split [path] dir` takes the rip's log (or a directory of logs) and the
+directory for the tracks. Every log in a directory is split in turn, so that the
+discs of a multi-disc album go into a single directory. The tracks are cut where
+the cue sheet puts them, with each pregap at the end of the track before it, and
+tagged with what the cue sheet recorded. The MusicBrainz release in
+`musicbrainz.txt` is added as well which lets Picard find the release by itself.
+Audio before track 1 of up to five seconds is a pregap and stays in track 1, and
+more is a hidden track, in a file of its own named `00`; `--hidden-track=yes` or
+`no` let's you override if you know one way or the other.
+
+```sh
+mrr split ~/Music/RIP/2003\ Dangerously\ in\ Love ~/Music/WORKING/Dangerously\ in\ Love
+```
+
+`mrr split --check` checks that the tracks an image rip was split into hold
+exactly what was ripped, which is what a split is checked with when it is made.
+It takes the rip's log and the directory of the tracks, which is the current
+directory unless one is given, so run it from inside the directory the album was
+split into. It checks that there is a file for every track; that the tracks, in
+order, decode to the CRC the log records, and that none is damaged; and that
+each track is as long as the cue sheet says, because a split can be cut a few
+samples off at every boundary and still hold exactly what was ripped.
 
 ```sh
 cd ~/Music/WORKING/Dangerously\ in\ Love
