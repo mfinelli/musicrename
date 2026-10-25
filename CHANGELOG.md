@@ -6,6 +6,11 @@ my own reference.
 
 ## Unreleased
 
+- Add `compare`, which compares the audio of two FLAC files, tracks or images:
+  whether it is the same, where it differs and whether that is only in the first
+  or last few samples, or whether one is the other moved along by some number of
+  samples, as when two drives' offsets differ, and what is left once that is
+  allowed for.
 - Add `split --check`, which checks that the tracks an image rip was split into
   hold exactly what was ripped: a file for every track of the log's table of
   contents (a `00` file for audio before track 1, and `1-01` style names for a

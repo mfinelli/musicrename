@@ -191,6 +191,21 @@ cd ~/Music/WORKING/Dangerously\ in\ Love
 mrr split --check ~/Music/RIP/2003\ Dangerously\ in\ Love/Dangerously\ in\ Love.log
 ```
 
+### `compare`
+
+Compares the audio of two FLAC files, which can be tracks or images, and says
+whether it is the same: for instance, whether two rips of one disc made with
+different drives hold the same audio, or whether a library track is the one in
+an image. How the files were encoded, and their tags, do not matter. If the
+audio differs it says how many samples and where, and whether they are only in
+the first or last few; and if one is the other moved along by some samples,
+which is what a wrong drive offset does, it says by how many, and what is left
+once that is allowed for. Both files must be CD-audio FLAC.
+
+```sh
+mrr compare ~/Music/RIP/drive-a/image.flac ~/Music/RIP/drive-b/image.flac
+```
+
 ### `sums`
 
 Computes MD5 checksums for all files in an album and writes `sums.md5`,

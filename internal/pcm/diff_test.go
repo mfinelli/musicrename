@@ -18,7 +18,11 @@
 package pcm
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -366,5 +370,418 @@ esac`)
 		case <-time.After(30 * time.Second):
 			t.Fatal("Diff did not return")
 		}
+	})
+}
+
+// delayed is pcm moved later by k samples, with silence in front and the end cut:
+// what a drive with an offset k greater gives. advanced is it moved earlier.
+func delayed(pcm []byte, k int) []byte {
+	out := make([]byte, k*bytesPerSample, len(pcm))
+	return append(out, pcm[:len(pcm)-k*bytesPerSample]...)
+}
+
+func advanced(pcm []byte, k int) []byte {
+	return append(append([]byte(nil), pcm[k*bytesPerSample:]...), make([]byte, k*bytesPerSample)...)
+}
+
+func TestDiffShift(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	const n = 700000 // 16 seconds: two of the places a shift is looked for are inside it
+	base := audio(n, 61)
+
+	diff := func(t *testing.T, name string, a, b []byte) Difference {
+		t.Helper()
+		fa := testutil.MakePCMFlac(t, dir, name+"-a.flac", a)
+		fb := testutil.MakePCMFlac(t, dir, name+"-b.flac", b)
+		d, err := Decoder{}.Diff(ctx, []string{fa}, []string{fb})
+		require.NoError(t, err)
+		return d
+	}
+
+	t.Run("audio moved later, by what drives differ by and what a pregap is", func(t *testing.T) {
+		for _, k := range []int{1, 6, 667, 2500, 100000} {
+			d := diff(t, fmt.Sprintf("later%d", k), base, delayed(base, k))
+
+			require.NotNil(t, d.Shift, "shift %d", k)
+			assert.Equal(t, int64(k), d.Shift.Samples, "shift %d", k)
+			assert.Equal(t, 2, d.Shift.Matches, "both places agree")
+			assert.Equal(t, 2, d.Shift.Tried)
+			assert.False(t, d.Identical())
+		}
+	})
+
+	t.Run("audio moved earlier", func(t *testing.T) {
+		for _, k := range []int{1, 6, 667, -0 + 2500, 100000} {
+			d := diff(t, fmt.Sprintf("earlier%d", k), base, advanced(base, k))
+
+			require.NotNil(t, d.Shift, "shift %d", k)
+			assert.Equal(t, int64(-k), d.Shift.Samples, "shift -%d", k)
+		}
+	})
+
+	t.Run("a shift past what is looked for is not found", func(t *testing.T) {
+		d := diff(t, "toofar", base, delayed(base, maxShift+1000))
+
+		assert.Nil(t, d.Shift)
+		assert.Greater(t, d.Differing, int64(n/2), "though nearly every sample differs")
+	})
+
+	t.Run("audio that is not shifted has no shift", func(t *testing.T) {
+		d := diff(t, "same", base, base)
+		assert.Nil(t, d.Shift)
+		assert.True(t, d.Identical())
+
+		d = diff(t, "local", base, changed(base, 300000, 450000))
+		assert.Nil(t, d.Shift, "a few samples are wrong, and the rest is where it was")
+		assert.Equal(t, int64(2), d.Differing)
+	})
+
+	t.Run("unrelated audio has no shift", func(t *testing.T) {
+		d := diff(t, "unrelated", base, audio(n, 62))
+
+		assert.Nil(t, d.Shift)
+		assert.Greater(t, d.Differing, int64(n-1000))
+	})
+
+	t.Run("a shift that is only in part of it is not one shift", func(t *testing.T) {
+		// Moved by 6 for the first part and not at all for the rest, as when a stretch
+		// is inserted: the two places looked at disagree.
+		partly := append(delayed(base[:350000*bytesPerSample], 6), base[350000*bytesPerSample:]...)
+		d := diff(t, "partly", base, partly)
+
+		assert.Nil(t, d.Shift)
+		assert.Greater(t, d.Differing, int64(0))
+	})
+
+	t.Run("audio that is silent where it is looked at is skipped for another place", func(t *testing.T) {
+		// Silent for the first 400000 samples and then music: only the later of
+		// the places looked at has anything to find.
+		quiet := append(make([]byte, 400000*bytesPerSample), base[:300000*bytesPerSample]...)
+		d := diff(t, "quiet", quiet, delayed(quiet, 6))
+
+		require.NotNil(t, d.Shift)
+		assert.Equal(t, int64(6), d.Shift.Samples)
+		assert.Equal(t, 1, d.Shift.Matches)
+		assert.Equal(t, 1, d.Shift.Tried)
+	})
+
+	t.Run("all silence has nothing to find", func(t *testing.T) {
+		silence := make([]byte, n*bytesPerSample)
+		d := diff(t, "silence", silence, changed(silence, 100))
+
+		assert.Nil(t, d.Shift)
+		assert.Equal(t, int64(1), d.Differing)
+	})
+
+	t.Run("a sound that repeats exactly cannot be placed", func(t *testing.T) {
+		// A pattern of 4096 samples over and over: a window of it is found at every
+		// repeat, so where it was is not told by finding it.
+		pattern := audio(4096, 63)
+		var rep []byte
+		for len(rep) < n*bytesPerSample {
+			rep = append(rep, pattern...)
+		}
+		rep = rep[:n*bytesPerSample]
+		d := diff(t, "repeat", rep, delayed(rep, 100))
+
+		assert.Nil(t, d.Shift)
+	})
+
+	t.Run("audio too short to have places to look", func(t *testing.T) {
+		short := audio(150000, 64)
+		d := diff(t, "short", short, delayed(short, 6))
+
+		assert.Nil(t, d.Shift)
+		assert.Greater(t, d.Differing, int64(100000))
+	})
+}
+
+func TestDiffShifted(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	base := audio(300000, 65)
+	flac := func(t *testing.T, name string, pcm []byte) string {
+		t.Helper()
+		return testutil.MakePCMFlac(t, dir, name, pcm)
+	}
+	a := flac(t, "a.flac", base)
+
+	t.Run("audio moved later, compared with that allowed for", func(t *testing.T) {
+		b := flac(t, "later.flac", delayed(base, 667))
+
+		d, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{b}, 667)
+
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), d.Differing)
+		assert.Equal(t, int64(300000), d.SamplesA, "the lengths are of the whole of each")
+		assert.Equal(t, int64(300000), d.SamplesB)
+		assert.Nil(t, d.Shift, "it does not look for one")
+	})
+
+	t.Run("audio moved earlier", func(t *testing.T) {
+		b := flac(t, "earlier.flac", advanced(base, 667))
+
+		d, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{b}, -667)
+
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), d.Differing)
+		assert.Equal(t, int64(300000), d.SamplesA, "the whole of each, though 667 of A were skipped")
+		assert.Equal(t, int64(300000), d.SamplesB)
+	})
+
+	t.Run("it does not look for a shift, even when it is wrong about it", func(t *testing.T) {
+		b := flac(t, "wrong.flac", delayed(base, 667))
+
+		d, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{b}, 100)
+
+		require.NoError(t, err)
+		assert.Greater(t, d.Differing, int64(250000), "it is not the shift it was told")
+		assert.Nil(t, d.Shift)
+	})
+
+	t.Run("a shift of nothing is Diff", func(t *testing.T) {
+		b := flac(t, "same.flac", changed(base, 1234))
+
+		shifted, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{b}, 0)
+		require.NoError(t, err)
+		plain, err := Decoder{}.Diff(ctx, []string{a}, []string{b})
+		require.NoError(t, err)
+
+		assert.Equal(t, plain.Differing, shifted.Differing)
+		assert.Equal(t, plain.First, shifted.First)
+	})
+
+	t.Run("what still differs is placed by A's samples", func(t *testing.T) {
+		// B moved later by 100, with the sample that is A's 5000th changed.
+		b := flac(t, "later-changed.flac", changed(delayed(base, 100), 5100))
+
+		later, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{b}, 100)
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(1), later.Differing)
+		assert.Equal(t, int64(5000), later.First)
+
+		// And moved earlier by 100, with A's 5000th, B's 4900th, changed.
+		c := flac(t, "earlier-changed.flac", changed(advanced(base, 100), 4900))
+		earlier, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{c}, -100)
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(1), earlier.Differing)
+		assert.Equal(t, int64(5000), earlier.First)
+	})
+
+	t.Run("a shift past the end of one is nothing to compare", func(t *testing.T) {
+		short := flac(t, "short.flac", base[:1000*bytesPerSample])
+
+		d, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{short}, 5000)
+
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), d.Differing)
+		assert.Equal(t, int64(1000), d.SamplesB)
+		assert.Equal(t, int64(300000), d.SamplesA)
+
+		d, err = Decoder{}.DiffShifted(ctx, []string{short}, []string{a}, -5000)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), d.Differing)
+	})
+
+	t.Run("a file that does not decode", func(t *testing.T) {
+		bad := filepath.Join(dir, "bad.flac")
+		require.NoError(t, os.WriteFile(bad, []byte("garbage"), 0o644))
+
+		for _, shift := range []int64{0, 100, -100} {
+			_, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{bad}, shift)
+
+			var de *DecodeError
+			assert.ErrorAs(t, err, &de, "bad on the second side, shift %d", shift)
+
+			_, err = Decoder{}.DiffShifted(ctx, []string{bad}, []string{a}, shift)
+			assert.ErrorAs(t, err, &de, "bad on the first side, shift %d", shift)
+		}
+	})
+
+	t.Run("a context that is cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		_, err := Decoder{}.DiffShifted(ctx, []string{a}, []string{a}, 100)
+
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+func TestAppendOverlap(t *testing.T) {
+	// A buffer for the 8 bytes from position 10 on, fed chunks in order.
+	fed := func(chunks ...[]byte) []byte {
+		dst := make([]byte, 0, 8)
+		at := int64(0)
+		for _, c := range chunks {
+			appendOverlap(&dst, 10, c, at)
+			at += int64(len(c))
+		}
+		return dst
+	}
+	bytesFrom := func(from, to int) []byte {
+		var b []byte
+		for i := from; i < to; i++ {
+			b = append(b, byte(i))
+		}
+		return b
+	}
+
+	assert.Equal(t, bytesFrom(10, 18), fed(bytesFrom(0, 30)), "all in one chunk")
+	assert.Equal(t, bytesFrom(10, 18), fed(bytesFrom(0, 12), bytesFrom(12, 15), bytesFrom(15, 40)), "across several")
+	assert.Equal(t, bytesFrom(10, 14), fed(bytesFrom(0, 14)), "as far as there is")
+	assert.Equal(t, []byte{}, fed(bytesFrom(0, 10)), "ends before it begins")
+	assert.Equal(t, []byte{}, fed(bytesFrom(20, 30)[:0], bytesFrom(40, 50)), "begins after it ends")
+	assert.Equal(t, bytesFrom(10, 18), fed(bytesFrom(0, 18), bytesFrom(18, 30)), "a chunk that ends where it ends")
+
+	t.Run("a chunk that does not follow on is not added", func(t *testing.T) {
+		dst := make([]byte, 0, 8)
+		appendOverlap(&dst, 10, bytesFrom(0, 12), 0)   // positions 10 and 11
+		appendOverlap(&dst, 10, bytesFrom(16, 20), 16) // a gap: 12 to 15 were not given
+
+		assert.Equal(t, bytesFrom(10, 12), dst)
+	})
+}
+
+func TestFindAligned(t *testing.T) {
+	win := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+
+	t.Run("found once, on a sample", func(t *testing.T) {
+		region := append(append(make([]byte, 12), win...), make([]byte, 8)...)
+
+		at, ok := findAligned(region, win)
+
+		assert.True(t, ok)
+		assert.Equal(t, 12, at)
+	})
+
+	t.Run("not there", func(t *testing.T) {
+		_, ok := findAligned(make([]byte, 100), win)
+		assert.False(t, ok)
+	})
+
+	t.Run("there twice", func(t *testing.T) {
+		region := append(append(append(make([]byte, 8), win...), make([]byte, 4)...), win...)
+
+		_, ok := findAligned(region, win)
+
+		assert.False(t, ok, "so it does not say where")
+	})
+
+	t.Run("a match across samples is not one", func(t *testing.T) {
+		region := append(append(make([]byte, 6), win...), make([]byte, 6)...) // starts 2 bytes into a sample
+
+		_, ok := findAligned(region, win)
+
+		assert.False(t, ok)
+	})
+
+	t.Run("one on a sample, and another that is not, is one", func(t *testing.T) {
+		region := append(append(append(make([]byte, 8), win...), make([]byte, 6)...), win...)
+
+		at, ok := findAligned(region, win)
+
+		assert.True(t, ok)
+		assert.Equal(t, 8, at)
+	})
+
+	t.Run("a region shorter than the window", func(t *testing.T) {
+		_, ok := findAligned(win[:4], win)
+		assert.False(t, ok)
+	})
+}
+
+func TestDetectShift(t *testing.T) {
+	// Captures made by hand: a window of A, and a region of B that has it k samples
+	// on from where it was.
+	win := audio(windowSamples, 66)
+	mk := func(centre int64, k int64) *capture {
+		c := newCapture(centre)
+		c.window = append(c.window, win...)
+		pad := make([]byte, (maxShift+k)*bytesPerSample)
+		c.region = append(append(c.region, pad...), win...)
+		return c
+	}
+
+	assert.Nil(t, detectShift(nil), "nothing looked at")
+
+	s := detectShift([]*capture{mk(200000, 6), mk(500000, 6)})
+	require.NotNil(t, s)
+	assert.Equal(t, Shift{Samples: 6, Matches: 2, Tried: 2}, *s)
+
+	assert.Nil(t, detectShift([]*capture{mk(200000, 6), mk(500000, 7)}), "they disagree")
+	assert.Nil(t, detectShift([]*capture{mk(200000, 0)}), "found where it was")
+	assert.Nil(t, detectShift([]*capture{mk(200000, 0), mk(500000, 6)}), "one where it was and one not")
+
+	t.Run("a place that is not found does not count against one that is", func(t *testing.T) {
+		unmatched := newCapture(500000)
+		unmatched.window = append(unmatched.window, win...)
+		unmatched.region = append(unmatched.region, make([]byte, 1000*bytesPerSample)...)
+
+		s := detectShift([]*capture{mk(200000, 6), unmatched})
+
+		require.NotNil(t, s)
+		assert.Equal(t, Shift{Samples: 6, Matches: 1, Tried: 2}, *s)
+	})
+
+	t.Run("a window that is not all there is not used", func(t *testing.T) {
+		partial := mk(200000, 6)
+		partial.window = partial.window[:100]
+
+		assert.Nil(t, detectShift([]*capture{partial}))
+	})
+
+	t.Run("a window that is only partly there is not used, however distinctive", func(t *testing.T) {
+		partial := mk(200000, 6)
+		partial.window = partial.window[:1000*bytesPerSample] // 1000 different samples, but not all it should be
+
+		assert.Nil(t, detectShift([]*capture{partial}))
+	})
+
+	t.Run("a window that is silence is not used", func(t *testing.T) {
+		quiet := newCapture(200000)
+		quiet.window = append(quiet.window, make([]byte, windowSamples*bytesPerSample)...)
+		quiet.region = append(quiet.region, make([]byte, 5000*bytesPerSample)...)
+
+		assert.Nil(t, detectShift([]*capture{quiet}))
+	})
+}
+
+func TestDistinctSamples(t *testing.T) {
+	assert.Equal(t, 0, distinctSamples(nil))
+	assert.Equal(t, 1, distinctSamples(make([]byte, 40)))
+	assert.Equal(t, 2, distinctSamples([]byte{1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0}))
+	assert.Equal(t, 1, distinctSamples([]byte{1, 0, 0, 0, 1, 0, 0}), "a part of a sample at the end is not counted")
+}
+
+func TestSkipBytes(t *testing.T) {
+	t.Run("what is skipped", func(t *testing.T) {
+		n, ended, err := skipBytes(bytes.NewReader(make([]byte, 100)), 40)
+		require.NoError(t, err)
+		assert.Equal(t, int64(40), n)
+		assert.False(t, ended)
+	})
+	t.Run("a stream that is shorter", func(t *testing.T) {
+		n, ended, err := skipBytes(bytes.NewReader(make([]byte, 10)), 40)
+		require.NoError(t, err)
+		assert.Equal(t, int64(10), n)
+		assert.True(t, ended)
+	})
+	t.Run("nothing", func(t *testing.T) {
+		n, ended, err := skipBytes(bytes.NewReader(make([]byte, 10)), 0)
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), n)
+		assert.False(t, ended)
+	})
+	t.Run("a stream that fails", func(t *testing.T) {
+		pr, pw := io.Pipe()
+		pw.CloseWithError(errors.New("broken"))
+
+		_, _, err := skipBytes(pr, 5)
+
+		assert.ErrorContains(t, err, "broken")
 	})
 }

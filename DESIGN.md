@@ -1289,6 +1289,43 @@ file that is not CD audio), and a decoder that is missing leaves the audio
 unchecked with a warning while the lengths, which come from the headers, are
 still checked. The output and exit status are the same as for `riplog` (13.9).
 
+### 13.11 Comparing audio
+
+`mrr compare A B` compares the audio of two FLAC files, which can be tracks or
+images, and says whether it is the same. It is for questions such as whether two
+rips of a disc made with different drives hold the same audio, and works for a
+single track as it does for an image, because it knows nothing of rips: two
+stretches of audio are the same or they are not. What is compared is what the
+files decode to, so how they were encoded and their tags do not matter.
+
+Both files must be CD audio, since the decoder gives exactly what was stored
+only for that: a 24-bit file would be compared as a conversion of itself, and an
+MP3 of a track differs from it in every sample. Anything else is refused.
+
+The audio is compared sample by sample, in step, without holding either. The
+result is that it is the same, or how many samples differ, where the first and
+last are, the stretches they fall in, and how the lengths compare. Differences
+that are all within the first or last 2% of what both have are said to be, which
+is a fact about them and not a reason: with no log there is nothing to say
+whether a drive that could not read the ends of a disc, or damage, made them.
+
+Where nearly every sample differs, the likely reason is that one is the other
+moved along, as a wrong drive offset moves every sample of an image, or a pregap
+kept in another place moves the start of a track. A shift is looked for in the
+same pass. A few stretches of A, spread through it, are held as it is read, and
+each is searched for in the part of B within about three seconds either way of
+where it was in A. A stretch is searched for only if it has enough different
+samples to be distinctive, so silence is not, and is accepted only if found
+exactly once, on a sample boundary, so a sound that repeats is not. A shift is
+reported only if every stretch that was found agrees on one that is not zero,
+which is how a stretch moved in only part of the audio is told from one that is
+moved throughout. The two are then compared again with the shift allowed for, to
+say what is left of the difference, and how many samples at each end have none
+to compare with in the other.
+
+Every result but the same audio is an error, as is a comparison that could not
+be made, so the exit status is zero only for audio that is the same.
+
 ---
 
 ## 14. Architectural Principles

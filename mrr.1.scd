@@ -304,6 +304,22 @@ checks that did not pass are listed. Read-only. Exits non-zero on an error.
 *-v*, *--verbose*
 	List every check, not only those that did not pass.
 
+## mrr compare [*-v*] _a_ _b_
+
+Compares the audio of two FLAC files, which can be tracks or images, and says
+whether it is the same. What is compared is what the files decode to, so how they
+were encoded, and their tags, do not matter. Both must be CD audio (44.1 kHz,
+16-bit, stereo).
+
+If the audio is not the same, it reports how many samples differ, where the first
+and last are, whether they are all within the first or last few samples, and how
+the lengths compare. If nearly every sample differs because one file is the other
+moved along, as when a drive's read offset was wrong, it reports by how many
+samples, and what is left once that is allowed for.
+
+*-v*, *--verbose*
+	List every check, not only those that did not pass.
+
 ## mrr sums [_path_]
 
 Computes MD5 checksums for all files in an album and writes a *sums.md5* file
