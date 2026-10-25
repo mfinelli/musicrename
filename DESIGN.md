@@ -1264,16 +1264,18 @@ known to the sample, from what it decodes to, or from its header if it was not
 decoded.
 
 Where the cue sheet puts a track's boundaries depends on what the split did with
-a pregap, which must go somewhere. It can go at the end of the track before it,
-so that every track begins at its `INDEX 01`, or at the start of the track it
-leads into, so that it begins at its `INDEX 00`. Either is right, and which was
-used is found, not assumed: a split that fits one of them for every track
-passes, saying which. One that is cut one way for some tracks and the other way
-for the rest is an error that names the two groups, and a track that fits
-neither is reported with what the cue sheet gives for both, how far off it is
-from the nearer, and how many more are. A way the cue sheet cannot work out,
-because its `INDEX 00` lines make no sense (which `riplog` reports), is not one
-a split can be.
+a pregap, which must go somewhere. The workflow appends it to the end of the
+track before it, so that every track begins at its `INDEX 01`. The other way, at
+the start of the track it leads into, so that it begins at its `INDEX 00`, is
+where the cue sheet's `INDEX 00` puts it and loses nothing, but it is not what
+the workflow does, so a split cut that way is a warning that says so. Which was
+used is found, not assumed: a split that fits the workflow's way for every track
+passes, and one that fits the other way for every track is the warning. One that
+is cut one way for some tracks and the other way for the rest is an error that
+names the two groups, and a track that fits neither is reported with what the
+cue sheet gives for both, how far off it is from the nearer, and how many more
+are. A way the cue sheet cannot work out, because its `INDEX 00` lines make no
+sense (which `riplog` reports), is not one a split can be.
 
 Audio before track 1 is a `00` file from the start of the image to track 1's
 `INDEX 01`; without one, track 1 holds it, and begins at the start of the image.

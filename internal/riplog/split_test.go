@@ -368,15 +368,21 @@ func TestCheckSplitGoodSplits(t *testing.T) {
 		assert.Equal(t, "10 Track 10.flac", names[9])
 	})
 
-	t.Run("pregaps kept at the start of the track they lead into", func(t *testing.T) {
+	t.Run("pregaps at the start of the track they lead into are a warning, not a pass", func(t *testing.T) {
+		// Nothing is lost and every track is where the cue sheet puts it, but the
+		// workflow appends a pregap to the track before it.
 		rip := blackRip(t)
 		specs := splitSpecs(t, fixture(t, fixtureBlack), cueText(t, fixtureBlackCue), 0, false, true)
 
 		r := checkSplit(t, rip, makeTracks(t, specs), honestTracks(t, rip))
 
-		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError))
-		assert.Equal(t, "each track is the length the cue sheet gives, with each pregap at the start of the track it leads into",
-			want(t, r, "split-lengths", StatusPass).Detail)
+		assert.Equal(t, "each track is the length the cue sheet gives, but with each pregap at the start of the track it leads into; it should be at the end of the track before it",
+			want(t, r, "split-lengths", StatusWarning).Detail)
+		assert.Equal(t, 0, r.Count(StatusError))
+		assert.Equal(t, 1, r.Count(StatusWarning), "and it is the only finding")
+		want(t, r, "split-audio", StatusPass)
+		assert.False(t, r.Failed(), "a warning does not fail the run")
+		assert.True(t, r.Fails(true), "unless --strict")
 	})
 
 	t.Run("the two ways differ for this disc, so a split is one of them", func(t *testing.T) {
@@ -436,14 +442,39 @@ func TestCheckSplitHiddenTrack(t *testing.T) {
 		assert.Contains(t, want(t, r, "split-lengths", StatusPass).Detail, "each track is the length the cue sheet gives")
 	})
 
-	t.Run("with pregaps at the start of the track they lead into", func(t *testing.T) {
+	t.Run("with pregaps at the start of the track they lead into, which is a warning", func(t *testing.T) {
 		rip := transistorRip(t)
 		specs := splitSpecs(t, log, cue, 0, true, true)
 
 		r := checkSplit(t, rip, makeTracks(t, specs), honestTracks(t, rip))
 
-		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError))
-		assert.Contains(t, want(t, r, "split-lengths", StatusPass).Detail, "start of the track it leads into")
+		assert.Equal(t, 0, r.Count(StatusError))
+		assert.Contains(t, want(t, r, "split-lengths", StatusWarning).Detail, "it should be at the end of the track before it")
+		want(t, r, "split-tracks", StatusPass)
+	})
+
+	t.Run("a hidden track of one disc of several is 1-00", func(t *testing.T) {
+		// The same disc as a disc 1 of a larger album: the files carry the disc, and
+		// the audio before track 1 is 1-00.
+		rip := buildRip(t, "[1997] Transistor (disc 1)", log, cue)
+		specs := splitSpecs(t, log, cue, 1, true, false)
+		require.Equal(t, "1-00 Track 0.flac", specs[0].name)
+		specs = append(specs, fileSpec{"2-00 Another disc.flac", 1000}, fileSpec{"2-01 Another disc.flac", 1000})
+
+		r := checkSplit(t, rip, makeTracks(t, specs), honestTracks(t, rip))
+
+		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
+		assert.Equal(t, "22 tracks, 1-00 and 1-01 to 1-21", want(t, r, "split-tracks", StatusPass).Detail)
+		assert.Contains(t, want(t, r, "split-others", StatusInfo).Detail, "2 other FLAC files")
+	})
+
+	t.Run("and a file for it that is missing is reported as 1-00", func(t *testing.T) {
+		rip := buildRip(t, "[1997] Transistor (disc 2)", log, cue)
+		specs := splitSpecs(t, log, cue, 2, false, false)
+
+		r := checkSplit(t, rip, makeTracks(t, specs), honestTracks(t, rip))
+
+		assert.Contains(t, want(t, r, "split-tracks", StatusWarning).Detail, "there is no 2-00 file")
 	})
 
 	t.Run("with no file for it, the audio is in track 1, which is a warning", func(t *testing.T) {
@@ -1544,8 +1575,10 @@ func TestCheckSplitWithFFmpeg(t *testing.T) {
 
 		r := run(t, d, d.split(t, false, []int{1000 * s, 1900 * s}))
 
-		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
-		assert.Contains(t, want(t, r, "split-lengths", StatusPass).Detail, "start of the track it leads into")
+		// Right, and so a warning and not an error, but not how the workflow splits.
+		assert.Equal(t, 0, r.Count(StatusError), "%v", r.Findings())
+		assert.Contains(t, want(t, r, "split-lengths", StatusWarning).Detail, "it should be at the end of the track before it")
+		assert.False(t, r.Failed())
 	})
 
 	t.Run("a boundary a sample late leaves the audio as it was, and the lengths find it", func(t *testing.T) {

@@ -147,7 +147,7 @@ func CheckSplit(ctx context.Context, logPath, dir string, dec TrackDecoder) (*Lo
 		return l, r, nil
 	}
 
-	infos, ok := checkSplitFormat(r, tracks, disc)
+	infos, ok := checkSplitFormat(r, tracks)
 	if !ok {
 		return l, r, nil
 	}
@@ -329,7 +329,7 @@ func listLimited(names []string) string {
 }
 
 // checkSplitFormat confirms every track is CD audio, and returns their headers.
-func checkSplitFormat(r *Result, tracks []splitTrack, disc int) ([]streamInfo, bool) {
+func checkSplitFormat(r *Result, tracks []splitTrack) ([]streamInfo, bool) {
 	const id, name = "split-format", "Track format"
 
 	infos := make([]streamInfo, len(tracks))
@@ -569,7 +569,10 @@ func expectedLengths(l *Log, c *Cue, hidden, pregapsWithNext bool) (map[int]int6
 }
 
 // checkSplitLengths confirms each track is as long as the cue sheet says it
-// should be. The audio of a split can be exactly the rip's while every boundary
+// should be. A pregap goes at the end of the track before it, which is how the
+// workflow splits; at the start of the track it leads into, as the cue sheet's
+// INDEX 00 puts it, is a warning, since nothing is lost but it is not what the
+// workflow does. The audio of a split can be exactly the rip's while every boundary
 // is a few samples off, which no check on the audio as a whole can see, and which
 // puts the end of one track at the start of the next.
 func checkSplitLengths(r *Result, l *Log, c *Cue, tracks []splitTrack, actual map[int]int64, disc int) {
@@ -623,7 +626,10 @@ func checkSplitLengths(r *Result, l *Log, c *Cue, tracks []splitTrack, actual ma
 		}
 		return
 	case len(wrong) == 0 && len(onlyPrev) == 0:
-		r.add(id, name, StatusPass, "each track is the length the cue sheet gives, with each pregap at the start of the track it leads into")
+		// Every track is where the cue sheet puts it, which is what a pregap's
+		// INDEX 00 says, but the workflow appends a pregap to the track before it.
+		r.add(id, name, StatusWarning,
+			"each track is the length the cue sheet gives, but with each pregap at the start of the track it leads into; it should be at the end of the track before it")
 		return
 	case len(wrong) == 0:
 		// Every track is right for one way or the other, but not the same one.

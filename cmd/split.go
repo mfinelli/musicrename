@@ -55,10 +55,10 @@ Checked:
   - the tracks, in order, decode to the log's Copy CRC, so that they hold the
     audio EAC ripped; and each matches the MD5 its own FLAC stores, so that none
     is damaged
-  - each track is as long as the cue sheet says, with pregaps kept either at the
-    end of the track before or at the start of the track they lead into, since a
-    split can be cut a few samples off at every boundary and still hold exactly
-    the audio of the rip
+    - each track is as long as the cue sheet says, with each pregap at the end of
+    the track before it (at the start of the track it leads into is a warning),
+    since a split can be cut a few samples off at every boundary and still hold
+    exactly the audio of the rip
 
 The audio is decoded with ffmpeg, which takes a few seconds for an album.
 
