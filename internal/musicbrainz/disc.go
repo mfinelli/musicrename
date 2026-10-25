@@ -105,8 +105,7 @@ func (c *client) getJSON(ctx context.Context, endpoint string, params url.Values
 		// A failed request's error repeats the whole URL, which says nothing a
 		// person reading it needs; the cause (no such host, connection refused,
 		// a timeout) is what matters.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
+		if urlErr, ok := errors.AsType[*url.Error](err); ok {
 			err = urlErr.Err
 		}
 		return false, err

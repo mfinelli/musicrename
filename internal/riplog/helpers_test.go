@@ -119,7 +119,7 @@ func withoutLine(t *testing.T, text, prefix string) string {
 	t.Helper()
 	var out []string
 	found := false
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), prefix) {
 			found = true
 			continue

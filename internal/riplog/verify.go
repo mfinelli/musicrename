@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -279,11 +280,9 @@ func checkEncoder(r *Result, l *Log) {
 			"\"Additional command line options\" not found in the log")
 		return
 	}
-	for _, t := range optionTokens(opts) {
-		if t == "-V" {
-			r.add("encoder-verify", "FLAC verification", StatusPass, "-V is set")
-			return
-		}
+	if slices.Contains(optionTokens(opts), "-V") {
+		r.add("encoder-verify", "FLAC verification", StatusPass, "-V is set")
+		return
 	}
 	r.add("encoder-verify", "FLAC verification", StatusError,
 		"-V is not set: without it the encoder does not check that the FLAC decodes back to the same audio")

@@ -64,7 +64,7 @@ var (
 func parseReleaseURL(text string) (id, problem string) {
 	text = strings.TrimPrefix(text, "\ufeff") // a byte order mark, if an editor added one
 	line := ""
-	for _, l := range strings.Split(text, "\n") {
+	for l := range strings.SplitSeq(text, "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			line = l
 			break

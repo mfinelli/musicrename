@@ -50,7 +50,7 @@ func FLACComments(t *testing.T, path string) (vendor string, comments []string) 
 			body = body[4+n:]
 			count := int(binary.LittleEndian.Uint32(body))
 			body = body[4:]
-			for i := 0; i < count; i++ {
+			for range count {
 				n := int(binary.LittleEndian.Uint32(body))
 				comments = append(comments, string(body[4:4+n]))
 				body = body[4+n:]

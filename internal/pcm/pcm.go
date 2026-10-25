@@ -188,7 +188,7 @@ const noTimestamp = " at PTS -9223372036854775808"
 // message returns the first line of ffmpeg's error output, without its prefix,
 // which is the most specific of what it says; or "" if there is none.
 func message(stderr string) string {
-	for _, line := range strings.Split(stderr, "\n") {
+	for line := range strings.SplitSeq(stderr, "\n") {
 		line = reLogPrefix.ReplaceAllString(strings.TrimSpace(line), "")
 		if line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(line), noTimestamp)); line != "" {
 			return line

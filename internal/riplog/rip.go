@@ -206,8 +206,7 @@ func readLog(logPath string) (*Log, error) {
 
 	l, err := ParseLog(data)
 	if err != nil {
-		var unsupported *UnsupportedError
-		if errors.As(err, &unsupported) {
+		if _, ok := errors.AsType[*UnsupportedError](err); ok {
 			return nil, err
 		}
 		return nil, fmt.Errorf("could not read the log: %w", err)

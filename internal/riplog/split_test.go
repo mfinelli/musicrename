@@ -131,7 +131,7 @@ func cueIndexes(text string) (index00, index01 map[int]int) {
 	track := regexp.MustCompile(`(?i)TRACK\s+(\d+)`)
 	index := regexp.MustCompile(`INDEX\s+(\d+)\s+(\d+):(\d+):(\d+)`)
 	current := 0
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
+	for line := range strings.SplitSeq(strings.ReplaceAll(text, "\r", ""), "\n") {
 		if m := track.FindStringSubmatch(line); m != nil {
 			current, _ = strconv.Atoi(m[1])
 		}
