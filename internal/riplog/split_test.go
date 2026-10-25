@@ -2186,3 +2186,16 @@ func TestCheckSplitAPregapKeptInTrackOneWithFFmpeg(t *testing.T) {
 		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
 	})
 }
+
+func TestHiddenTrackValues(t *testing.T) {
+	// What is offered for completion is what is accepted, and each is a different thing.
+	seen := map[HiddenTrack]string{}
+	for _, v := range HiddenTrackValues() {
+		got, err := ParseHiddenTrack(v)
+		require.NoError(t, err, v)
+		assert.NotContains(t, seen, got, "%q and %q are the same", v, seen[got])
+		seen[got] = v
+	}
+	assert.Len(t, seen, 3, "all of them are offered")
+	assert.Equal(t, []string{"auto", "yes", "no"}, HiddenTrackValues())
+}

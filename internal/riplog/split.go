@@ -70,6 +70,10 @@ const MaxMergedPregap = 5
 // maxMergedFrames is MaxMergedPregap in the cue sheet's frames.
 const maxMergedFrames = MaxMergedPregap * 75
 
+// HiddenTrackValues are the values of the option, in the order they are best
+// offered, as ParseHiddenTrack takes them.
+func HiddenTrackValues() []string { return []string{"auto", "yes", "no"} }
+
 // ParseHiddenTrack reads the value of a command line option: auto, yes or no.
 func ParseHiddenTrack(s string) (HiddenTrack, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
