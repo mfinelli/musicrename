@@ -49,6 +49,7 @@ type TrackDecoder interface {
 //	01 Title.flac       a single disc
 //	1-01 Title.flac     disc 1 of several, which share the directory
 //	00 Title.flac       audio before track 1, a hidden track or a pregap
+//	1-00 Title.flac     the same, on a disc of several
 //
 // The disc a log is for is read from its name, as "(disc 2)", the way EAC and the
 // rest of the workflow name the logs of a multi-disc rip.

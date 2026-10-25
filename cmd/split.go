@@ -46,6 +46,7 @@ The tracks are named as the workflow names them:
   1-01 Title.flac   disc 1 of several, which share the directory (the disc is
                     taken from the log's name, as in "Album (disc 1).log")
   00 Title.flac     audio before track 1, a hidden track or a pregap
+  1-00 Title.flac   the same, on a disc of several
 
 Checked:
   - the log's checksum, since the log is what the tracks are compared with

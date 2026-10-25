@@ -1236,7 +1236,8 @@ itself without changing how it is run to check.
 The tracks are named as the workflow names them: `01 Title.flac` for a single
 disc; `1-01 Title.flac` for disc 1 of several, which share the directory, the
 disc coming from the log's name (`Album (disc 1).log`); and `00 Title.flac` for
-audio before track 1, such as a hidden track in the pregap.
+audio before track 1, such as a hidden track in the pregap (`1-00 Title.flac` on
+a disc of several).
 
 It checks that:
 
