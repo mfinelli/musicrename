@@ -523,3 +523,78 @@ func ffmpegVersion() string {
 	line, _, _ := strings.Cut(string(out), "\n")
 	return line
 }
+
+func TestFingerprints(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	p1, p2, p3 := audio(30000, 31), audio(41000, 32), audio(1234, 33)
+	f1 := testutil.MakePCMFlac(t, dir, "a.flac", p1)
+	f2 := testutil.MakePCMFlac(t, dir, "b.flac", p2)
+	f3 := testutil.MakePCMFlac(t, dir, "c.flac", p3)
+
+	t.Run("the whole, and each file on its own", func(t *testing.T) {
+		total, files, err := Decoder{}.Fingerprints(ctx, f1, f2, f3)
+
+		require.NoError(t, err)
+		whole := append(append(append([]byte(nil), p1...), p2...), p3...)
+		assert.Equal(t, want(whole), total)
+		require.Len(t, files, 3)
+		assert.Equal(t, want(p1), files[0])
+		assert.Equal(t, want(p2), files[1])
+		assert.Equal(t, want(p3), files[2])
+	})
+
+	t.Run("the whole is what Fingerprint gives", func(t *testing.T) {
+		total, _, err := Decoder{}.Fingerprints(ctx, f1, f2)
+		require.NoError(t, err)
+
+		one, err := Decoder{}.Fingerprint(ctx, f1, f2)
+
+		require.NoError(t, err)
+		assert.Equal(t, one, total)
+	})
+
+	t.Run("a single file is its own whole", func(t *testing.T) {
+		total, files, err := Decoder{}.Fingerprints(ctx, f2)
+
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		assert.Equal(t, total, files[0])
+	})
+
+	t.Run("no files", func(t *testing.T) {
+		total, files, err := Decoder{}.Fingerprints(ctx)
+
+		require.NoError(t, err)
+		assert.Equal(t, want(nil), total)
+		assert.Empty(t, files)
+	})
+
+	t.Run("a file that fails is the last one, and the rest are as they were", func(t *testing.T) {
+		bad := filepath.Join(dir, "bad.flac")
+		require.NoError(t, os.WriteFile(bad, []byte("garbage"), 0o644))
+
+		total, files, err := Decoder{}.Fingerprints(ctx, f1, f2, bad, f3)
+
+		var de *DecodeError
+		require.ErrorAs(t, err, &de)
+		assert.Equal(t, bad, de.Path)
+		require.Len(t, files, 3, "nothing after the failure was decoded")
+		assert.Equal(t, want(p1), files[0])
+		assert.Equal(t, want(p2), files[1])
+		assert.Equal(t, int64(0), files[2].Bytes)
+		assert.Equal(t, want(append(append([]byte(nil), p1...), p2...)), total)
+	})
+
+	t.Run("the order matters to the whole, not to the files", func(t *testing.T) {
+		a, filesA, err := Decoder{}.Fingerprints(ctx, f1, f2)
+		require.NoError(t, err)
+		b, filesB, err := Decoder{}.Fingerprints(ctx, f2, f1)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, a.CRC32, b.CRC32)
+		assert.Equal(t, filesA[0], filesB[1])
+		assert.Equal(t, filesA[1], filesB[0])
+	})
+}

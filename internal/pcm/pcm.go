@@ -40,6 +40,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"hash/crc32"
 	"io"
 	"os/exec"
@@ -99,22 +100,39 @@ type Decoder struct{}
 // cleanly and returns a *DecodeError for it, with the fingerprint of the audio
 // before the problem; or ErrNoFFmpeg if there is no ffmpeg; or the context's
 // error if it was cancelled.
-func (Decoder) Fingerprint(ctx context.Context, paths ...string) (Fingerprint, error) {
-	crc, sum := crc32.NewIEEE(), md5.New()
-	w := &countWriter{w: io.MultiWriter(crc, sum)}
+func (d Decoder) Fingerprint(ctx context.Context, paths ...string) (Fingerprint, error) {
+	total, _, err := d.Fingerprints(ctx, paths...)
+	return total, err
+}
 
-	fp := func() Fingerprint {
-		f := Fingerprint{Bytes: w.n, CRC32: crc.Sum32()}
-		sum.Sum(f.MD5[:0])
-		return f
-	}
+// Fingerprints is Fingerprint, in the same single pass, and also returns the
+// fingerprint of each file on its own, so that a problem with the whole can be
+// traced to a file. On an error, the last of the files is the one that failed,
+// with the fingerprint of what was decoded of it, and the total covers what was
+// decoded before the problem.
+func (Decoder) Fingerprints(ctx context.Context, paths ...string) (total Fingerprint, files []Fingerprint, err error) {
+	totalCRC, totalSum := crc32.NewIEEE(), md5.New()
+	all := &countWriter{w: io.MultiWriter(totalCRC, totalSum)}
 
 	for _, path := range paths {
-		if err := decode(ctx, path, w); err != nil {
-			return fp(), err
+		crc, sum := crc32.NewIEEE(), md5.New()
+		one := &countWriter{w: io.MultiWriter(crc, sum, all)}
+
+		err := decode(ctx, path, one)
+
+		files = append(files, fingerprintOf(one.n, crc, sum))
+		if err != nil {
+			return fingerprintOf(all.n, totalCRC, totalSum), files, err
 		}
 	}
-	return fp(), nil
+	return fingerprintOf(all.n, totalCRC, totalSum), files, nil
+}
+
+// fingerprintOf makes a Fingerprint of the length and hashes of some audio.
+func fingerprintOf(n int64, crc hash.Hash32, sum hash.Hash) Fingerprint {
+	f := Fingerprint{Bytes: n, CRC32: crc.Sum32()}
+	sum.Sum(f.MD5[:0])
+	return f
 }
 
 // decode writes the decoded audio of the file at path to w.

@@ -271,6 +271,36 @@ AccurateRip does not know, do not by themselves fail the run.
 *-v*, *--verbose*
 	List every check, not only those that did not pass.
 
+## mrr split *--check* [*--strict*] [*-v*] _log_ [_dir_]
+
+Checks that the tracks an image rip was split into hold exactly what was ripped.
+_log_ is the *.log* file of the rip, with its cue sheet of the same name beside
+it, and _dir_ is the directory of the split tracks, which defaults to the current
+directory.
+
+Tracks are named _NN Title_.flac for a single disc, _D-NN Title_.flac for disc _D_
+of a multi-disc album, whose discs share the directory, the disc being taken from
+the log's name as in _Album (disc 1)_.log, and _00 Title_.flac for audio before
+track 1. There must be a file for each track of the log's table of contents. The
+tracks, decoded in order, must have the CRC the log records as its Copy CRC, and
+each must match the MD5 its own FLAC records. Each track must also be the
+length the cue sheet gives, with pregaps kept either at the end of the track
+before or at the start of the track they lead into, since a split can be cut
+a few samples off at every boundary and still hold exactly the audio of the rip.
+
+Each check is reported as ok, a note, a warning, or an error. By default only the
+checks that did not pass are listed. Read-only. Exits non-zero on an error.
+
+*--check*
+	Check an existing split. It is required, so that the command can split
+	later without changing how it is run to check.
+
+*--strict*
+	Treat warnings as failures for the exit status.
+
+*-v*, *--verbose*
+	List every check, not only those that did not pass.
+
 ## mrr sums [_path_]
 
 Computes MD5 checksums for all files in an album and writes a *sums.md5* file

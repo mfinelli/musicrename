@@ -42,18 +42,9 @@ import (
 // A missing or wrong cue sheet or image is not an error here but a failed check
 // in the result.
 func CheckFile(ctx context.Context, logPath string, opts Options) (*Log, *Result, error) {
-	data, err := os.ReadFile(logPath)
+	l, err := readLog(logPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not read: %w", err)
-	}
-
-	l, err := ParseLog(data)
-	if err != nil {
-		var unsupported *UnsupportedError
-		if errors.As(err, &unsupported) {
-			return nil, nil, err
-		}
-		return nil, nil, fmt.Errorf("could not read the log: %w", err)
+		return nil, nil, err
 	}
 
 	r := Verify(l)
@@ -205,6 +196,25 @@ func checkCueImage(r *Result, l *Log, c *Cue, dir string) *imageFile {
 	return &imageFile{path: path, info: si}
 }
 
+// readLog reads and parses the log at logPath. A log that is not in a form this
+// package handles is returned as an *UnsupportedError.
+func readLog(logPath string) (*Log, error) {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not read: %w", err)
+	}
+
+	l, err := ParseLog(data)
+	if err != nil {
+		var unsupported *UnsupportedError
+		if errors.As(err, &unsupported) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("could not read the log: %w", err)
+	}
+	return l, nil
+}
+
 // A CD holds 44.1 kHz, 16-bit, stereo audio.
 const (
 	cdSampleRate = 44100
@@ -309,13 +319,18 @@ func checkImageLength(r *Result, l *Log, c *Cue, info streamInfo) {
 	if diff < 0 {
 		diff, how = -diff, "long"
 	}
-	size := fmt.Sprintf("%d %s", diff, plural(diff, "sample"))
-	if diff%samplesPerSector == 0 {
-		size = fmt.Sprintf("%d %s", diff/samplesPerSector, plural(diff/samplesPerSector, "sector"))
-	}
 	r.add(id, name, StatusError,
 		"the FLAC holds %d samples and the log's table of contents gives %d: %s %s",
-		got, want, size, how)
+		got, want, describeSize(diff), how)
+}
+
+// describeSize says how much audio n samples is: in sectors if it is a whole
+// number of them, which is how a disc is laid out, and in samples if not.
+func describeSize(n int64) string {
+	if n%samplesPerSector == 0 {
+		return fmt.Sprintf("%d %s", n/samplesPerSector, plural(n/samplesPerSector, "sector"))
+	}
+	return fmt.Sprintf("%d %s", n, plural(n, "sample"))
 }
 
 // plural returns noun, with an "s" unless n is exactly one.

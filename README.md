@@ -175,6 +175,22 @@ mrr riplog ~/Music/RIP/2003\ Dangerously\ in\ Love
 mrr riplog "Dangerously in Love.log" -v
 ```
 
+### `split`
+
+Checks that the tracks an image rip was split into hold exactly what was ripped.
+`mrr split --check` takes the rip's log (its cue sheet is beside it) and the
+directory of the tracks, which is the current directory unless one is given, so
+run it from inside the directory the album was split into. It checks that there
+is a file for every track; that the tracks, in order, decode to the CRC the log
+records, and that none is damaged; and that each track is as long as the cue
+sheet says, because a split can be cut a few samples off at every boundary and
+still hold exactly what was ripped.
+
+```sh
+cd ~/Music/WORKING/Dangerously\ in\ Love
+mrr split --check ~/Music/RIP/2003\ Dangerously\ in\ Love/Dangerously\ in\ Love.log
+```
+
 ### `sums`
 
 Computes MD5 checksums for all files in an album and writes `sums.md5`,

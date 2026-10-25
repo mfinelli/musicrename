@@ -1224,6 +1224,65 @@ The exit status is non-zero when any log has an error. Warnings and notes do not
 fail the run, so a disc AccurateRip does not know does not stop a script; with
 `--strict`, warnings fail it too. The command only reads the logs.
 
+### 13.10 Verifying the split
+
+Once the image is split into tracks, `mrr split --check Album.log [dir]`
+verifies that the tracks hold exactly what was ripped. `dir` is the directory of
+the tracks, the current directory by default, so it is run from inside the
+directory the album was split into, with the log of the archived rip as its
+argument. Checking is a flag so that the command can later do the splitting
+itself without changing how it is run to check.
+
+The tracks are named as the workflow names them: `01 Title.flac` for a single
+disc; `1-01 Title.flac` for disc 1 of several, which share the directory, the
+disc coming from the log's name (`Album (disc 1).log`); and `00 Title.flac` for
+audio before track 1, such as a hidden track in the pregap.
+
+It checks that:
+
+- the log's checksum matches (13.8), since the log is what the tracks are
+  compared with, and the cue sheet beside it is there and can be read;
+- there is a file for each track of the log's table of contents, and a `00` file
+  only if the cue sheet puts audio before track 1, with no other file for any of
+  them. Other FLAC files in the directory, such as the other discs of a
+  multi-disc album, are counted and left out. A disc with audio before track 1
+  and no `00` file is a warning, since the audio can be in track 1, and is
+  checked as being, but the workflow gives it a file of its own;
+- every track is CD audio, as the image is (13.6);
+- the tracks, decoded in order as one stretch of audio, have the log's Copy CRC,
+  so that together they hold the audio EAC ripped. This was confirmed for the
+  tracks of a real rip laid end to end. Each track is also compared with what
+  its own FLAC records of it, its length and the MD5 of its audio, so that
+  damage is traced to a track;
+- each track is as long as the cue sheet says.
+
+The last is needed because the audio of a split can be exactly the rip's while
+every boundary is a few samples off: cut the end of one track and the start of
+the next at the wrong place and nothing is lost, so no check of the audio as a
+whole can see it, while one track starts a moment early. A track's length is
+known to the sample, from what it decodes to, or from its header if it was not
+decoded.
+
+Where the cue sheet puts a track's boundaries depends on what the split did with
+a pregap, which must go somewhere. It can go at the end of the track before it,
+so that every track begins at its `INDEX 01`, or at the start of the track it
+leads into, so that it begins at its `INDEX 00`. Either is right, and which was
+used is found, not assumed: a split that fits one of them for every track
+passes, saying which. One that is cut one way for some tracks and the other way
+for the rest is an error that names the two groups, and a track that fits
+neither is reported with what the cue sheet gives for both, how far off it is
+from the nearer, and how many more are. A way the cue sheet cannot work out,
+because its `INDEX 00` lines make no sense (which `riplog` reports), is not one
+a split can be.
+
+Audio before track 1 is a `00` file from the start of the image to track 1's
+`INDEX 01`; without one, track 1 holds it, and begins at the start of the image.
+
+Nothing more is checked of track files that are not right (a missing track, a
+file that is not CD audio), and a decoder that is missing leaves the audio
+unchecked with a warning while the lengths, which come from the headers, are
+still checked. The output and exit status are the same as for `riplog` (13.9).
+
 ---
 
 ## 14. Architectural Principles

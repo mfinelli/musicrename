@@ -250,6 +250,10 @@ only offers lossy files).
    "Convert", using the "single-disc" or "multi-disc" preset as appropriate.
 3. The destination directory is the `WORKING` directory in the home `Music`
    directory.
+4. Check the split with `mrr split --check`, from inside the album's directory
+   there, passing the log of the archived rip. It confirms that the tracks hold
+   exactly what was ripped, and that each starts and ends where the cue sheet
+   says.
 
 Note: this is the point where the "rip from CD" and "purchase album online"
 workflows unify, since purchased albums ship with tracks already split. For the

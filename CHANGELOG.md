@@ -6,6 +6,14 @@ my own reference.
 
 ## Unreleased
 
+- Add `split --check`, which checks that the tracks an image rip was split into
+  hold exactly what was ripped: a file for every track of the log's table of
+  contents (a `00` file for audio before track 1, and `1-01` style names for a
+  disc of a multi-disc album), the tracks decoding in order to the CRC the log
+  records, each track undamaged by what its own FLAC records, and each track the
+  length the cue sheet gives, since a split can be cut a few samples off at
+  every boundary and still hold exactly the audio of the rip. Run it from inside
+  the directory of the tracks, passing the rip's log.
 - Add `riplog`, which checks an Exact Audio Copy rip log for the correct
   settings: secure mode, accurate stream, audio cache defeated, no C2 pointers,
   normalization, or removal of silent blocks, the drive's known read offset and
