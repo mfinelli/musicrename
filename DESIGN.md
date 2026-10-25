@@ -1029,7 +1029,7 @@ Besides these settings it checks that:
   is a warning, since it comes from a plugin that may not be installed;
 - the cue sheet and FLAC image that go with the log agree with it (13.6);
 - the disc is one the MusicBrainz release in `musicbrainz.txt` has (13.7);
-- the log carries its checksum (13.8).
+- the log's checksum matches its text (13.8).
 
 Settings outside the profile, such as the interface EAC used or the encoder's
 bitrate and quality, are not looked at, whether the log states them or not.
@@ -1160,11 +1160,33 @@ that a machine with no network is told so rather than kept waiting.
 
 ### 13.8 Log checksum
 
-EAC signs its logs with a checksum. `riplog` checks that the checksum is present
-and well formed, and does not verify it. Verifying it would show that a log has
-not been edited since EAC wrote it, which matters for a log received from
-someone else and not for one's own rip. A log with no checksum, or a malformed
-one, was edited, cut short, or written by an old EAC, and is an error.
+EAC ends a log with a checksum that signs the text above it. `riplog` verifies
+it: the checksum must be present, well formed, and the one EAC's algorithm gives
+for the log's text. A log that fails was edited after EAC wrote it, damaged, cut
+short, or written by an old EAC, and is an error.
+
+This is checked even though a log from one's own rip is trusted almost
+completely, for the same reason the other checks are made: the log is kept with
+the album for years, and it should be possible to tell later that it is still
+exactly as EAC wrote it, not changed by accident or damaged in storage.
+
+EAC does not document the scheme; the algorithm follows the descriptions of
+other software that verifies the checksums. The text above the checksum line,
+with its line endings and byte order marks removed, is encoded as UTF-16
+little-endian and run through a CBC-MAC: Rijndael with a 256-bit block and a
+fixed 256-bit key, starting from zeros, the last block padded with zeros. AES
+has a 128-bit block and Go's standard library has no wider one, so the package
+carries its own Rijndael, which is checked against `crypto/aes` where the two
+overlap. The key is the same in every copy of EAC, so the checksum guards
+against accident and casual editing, not against a determined forgery. It covers
+the text and not the bytes, so a log saved again with other line endings or as
+UTF-8 still verifies.
+
+The checksum does not cover what follows its own line. Anything there but blank
+lines is an error: text added to the log, or several logs in one file, which
+this check of one rip's log does not handle. The one exception is the row of 60
+hyphens EAC writes to separate a log from the next that it appends to the file,
+which says nothing.
 
 ### 13.9 Output and exit status
 

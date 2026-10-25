@@ -94,7 +94,7 @@ func TestVerifyRealLogs(t *testing.T) {
 		assert.Contains(t, want(t, r, "test-copy", StatusPass).Detail, "9FB18E2F")
 		assert.Contains(t, want(t, r, "accuraterip", StatusPass).Detail, "all 10 tracks")
 		assert.Contains(t, want(t, r, "accuraterip", StatusPass).Detail, "lowest confidence 200")
-		assert.Contains(t, want(t, r, "checksum", StatusPass).Detail, "not verified")
+		assert.Contains(t, want(t, r, "checksum", StatusPass).Detail, "matches")
 	})
 }
 
@@ -562,26 +562,102 @@ func TestVerifyCTDB(t *testing.T) {
 func TestVerifyChecksum(t *testing.T) {
 	good := fixtureText(t, fixtureBlack)
 
-	t.Run("missing", func(t *testing.T) {
-		r := verify(t, withoutLine(t, good, "==== Log checksum"))
+	// These test the checksum itself, so they check the text as it is, where
+	// the verify helper would sign it first.
+	asIs := func(t *testing.T, text string) *Result {
+		t.Helper()
+		l, err := ParseLog([]byte(text))
+		require.NoError(t, err)
+		return Verify(l)
+	}
+
+	t.Run("a log as EAC wrote it", func(t *testing.T) {
+		for _, name := range allFixtures {
+			c := want(t, asIs(t, fixtureText(t, name)), "checksum", StatusPass)
+
+			assert.Contains(t, c.Detail, "matches", name)
+		}
+	})
+
+	t.Run("the same log in another encoding or with other line endings", func(t *testing.T) {
+		for name, text := range map[string]string{
+			"Windows line endings":    strings.ReplaceAll(good, "\n", "\r\n"),
+			"a UTF-8 byte order mark": "\ufeff" + good,
+		} {
+			c := want(t, asIs(t, text), "checksum", StatusPass)
+
+			assert.Contains(t, c.Detail, "matches", name)
+		}
+	})
+
+	t.Run("a change to the log is an error", func(t *testing.T) {
+		for name, edited := range map[string]string{
+			"a setting": withSetting(t, good, "Defeat audio cache", "No"),
+			"a title":   replaced(t, good, "AC/DC / Back in Black", "AC/DC / Back in Blue"),
+			"a result":  replaced(t, good, "Copy OK", "Copy Ok"),
+		} {
+			r := asIs(t, edited)
+
+			c := want(t, r, "checksum", StatusError)
+			assert.Contains(t, c.Detail, "does not match", name)
+			assert.Contains(t, c.Detail, "edited after EAC wrote it", name)
+		}
+	})
+
+	t.Run("a change that is signed again passes", func(t *testing.T) {
+		r := asIs(t, signed(withSetting(t, good, "Defeat audio cache", "No")))
+
+		want(t, r, "checksum", StatusPass)
+		want(t, r, "defeat-cache", StatusError) // and the setting is still caught
+	})
+
+	t.Run("a checksum in lower case is not the one EAC wrote", func(t *testing.T) {
+		// EAC writes upper case. A match in any other case is a copy that has
+		// passed through something.
+		r := asIs(t, replaced(t, good, "66FF03DD933AE06F", "66ff03dd933ae06f"))
+
+		c := want(t, r, "checksum", StatusError)
+		assert.Contains(t, c.Detail, "does not match")
+	})
+
+	t.Run("no checksum", func(t *testing.T) {
+		r := asIs(t, withoutLine(t, good, "==== Log checksum"))
 
 		c := want(t, r, "checksum", StatusError)
 		assert.Contains(t, c.Detail, "no checksum")
 	})
 
 	t.Run("malformed", func(t *testing.T) {
-		r := verify(t, regexp.MustCompile(`==== Log checksum \S+ ====`).ReplaceAllString(good, "==== Log checksum 1234 ===="))
+		r := asIs(t, regexp.MustCompile(`==== Log checksum \S+ ====`).ReplaceAllString(good, "==== Log checksum 1234 ===="))
 
 		c := want(t, r, "checksum", StatusError)
 		assert.Contains(t, c.Detail, "malformed")
 	})
 
-	t.Run("it is not verified, so an edited log with its old checksum still passes", func(t *testing.T) {
-		// This is why the fixtures can be edited into bad logs and still be
-		// useful: nothing here depends on the checksum matching the text.
-		r := verify(t, withSetting(t, good, "Defeat audio cache", "No"))
+	t.Run("text after the checksum, which it does not cover", func(t *testing.T) {
+		for name, extra := range map[string]string{
+			"a line added":        "Everything above was ripped perfectly\n",
+			"several logs in one": "Exact Audio Copy V1.8 from 15. July 2024\n\nEAC extraction logfile\n",
+		} {
+			r := asIs(t, good+"\n"+extra)
+
+			c := want(t, r, "checksum", StatusError)
+			assert.Contains(t, c.Detail, "continues after its checksum", name)
+		}
+	})
+
+	t.Run("a separator after the checksum is not text", func(t *testing.T) {
+		r := asIs(t, good+"\n"+strings.Repeat("-", 60)+"\n")
 
 		want(t, r, "checksum", StatusPass)
+	})
+
+	t.Run("only the checksum check is affected", func(t *testing.T) {
+		// A mismatch is one finding. Nothing else about the log changes.
+		r := asIs(t, replaced(t, good, "AC/DC / Back in Black", "AC/DC / Back in Blue"))
+
+		assert.Equal(t, 1, r.Count(StatusError))
+		assert.Equal(t, len(allCheckIDs)-1, r.Count(StatusPass))
 	})
 }
 

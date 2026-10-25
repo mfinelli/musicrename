@@ -41,9 +41,8 @@
 //   - The profile is the author's own, hardcoded, not configurable. It lives
 //     in profile.go and drives.go.
 //
-// The log's checksum is checked for presence only, not verified. Verifying it
-// would show that a log has not been edited since EAC wrote it, which matters
-// for logs from other people and not for one's own.
+// The log's checksum is verified: it shows that the log is exactly as EAC
+// wrote it, which is worth knowing for log kept for years.
 package riplog
 
 import (
@@ -154,6 +153,13 @@ type Log struct {
 	// Checksum is the hex string on the final "==== Log checksum" line, or
 	// empty if there is none.
 	Checksum string
+	// ComputedChecksum is the checksum EAC's algorithm gives for the text above
+	// the checksum line, which Checksum should be. It is empty if there is no
+	// checksum line.
+	ComputedChecksum string
+	// TextAfterChecksum is whether anything but blank lines follows the checksum
+	// line. The checksum does not cover that text.
+	TextAfterChecksum bool
 	// Normalization is whether any line says audio was normalized.
 	Normalization bool
 }
@@ -167,16 +173,17 @@ func (l *Log) Setting(label string) (string, bool) {
 }
 
 var (
-	reVersion  = regexp.MustCompile(`^Exact Audio Copy V(\d+)\.(\d+)(.*?) from (.+)$`)
-	reSetting  = regexp.MustCompile(`^(\S[^:]*?)\s*:\s+(.*?)\s*$`)
-	reTOCRow   = regexp.MustCompile(`^\s*(\d+)\s*\|\s*[\d:.]+\s*\|\s*[\d:.]+\s*\|\s*(\d+)\s*\|\s*(\d+)\s*$`)
-	reTrackHdr = regexp.MustCompile(`^Track\s+\d+$`)
-	reARTrack  = regexp.MustCompile(`^Track\s+(\d+)\s+(.*)$`)
-	reConf     = regexp.MustCompile(`(?i)confidence\s+(\d+)`)
-	reCTDBID   = regexp.MustCompile(`^\[CTDB TOCID:\s*(\S+?)\]\s*(.*)$`)
-	reCTDBRow  = regexp.MustCompile(`^(\d+)\s*\|\s*(.+)$`)
-	reChecksum = regexp.MustCompile(`^==== Log checksum\s+(\S+)\s+====$`)
-	reNormal   = regexp.MustCompile(`(?i)^Normalize to\s*:`)
+	reVersion   = regexp.MustCompile(`^Exact Audio Copy V(\d+)\.(\d+)(.*?) from (.+)$`)
+	reSetting   = regexp.MustCompile(`^(\S[^:]*?)\s*:\s+(.*?)\s*$`)
+	reTOCRow    = regexp.MustCompile(`^\s*(\d+)\s*\|\s*[\d:.]+\s*\|\s*[\d:.]+\s*\|\s*(\d+)\s*\|\s*(\d+)\s*$`)
+	reTrackHdr  = regexp.MustCompile(`^Track\s+\d+$`)
+	reARTrack   = regexp.MustCompile(`^Track\s+(\d+)\s+(.*)$`)
+	reConf      = regexp.MustCompile(`(?i)confidence\s+(\d+)`)
+	reCTDBID    = regexp.MustCompile(`^\[CTDB TOCID:\s*(\S+?)\]\s*(.*)$`)
+	reCTDBRow   = regexp.MustCompile(`^(\d+)\s*\|\s*(.+)$`)
+	reSeparator = regexp.MustCompile(`^-{60}$`)
+	reChecksum  = regexp.MustCompile(`^==== Log checksum\s+(\S+)\s+====$`)
+	reNormal    = regexp.MustCompile(`(?i)^Normalize to\s*:`)
 )
 
 // section is which part of the log the parser is in.
@@ -226,8 +233,17 @@ func ParseLog(data []byte) (*Log, error) {
 	titleNext := false
 	var ctdbTracks map[int]string
 
-	for _, raw := range lines[i+1:] {
+	checksumAt := -1 // the index in lines of the checksum line, once seen
+
+	for off, raw := range lines[i+1:] {
 		line := strings.TrimSpace(raw)
+
+		// The checksum covers only what is above its line, so anything below it
+		// is not protected by it. A row of hyphens is not text: EAC writes one
+		// to separate a log from whatever it appends to the file next.
+		if checksumAt >= 0 && line != "" && !reSeparator.MatchString(line) {
+			l.TextAfterChecksum = true
+		}
 
 		// Lines that mark the start of a section, wherever they occur.
 		switch {
@@ -257,7 +273,10 @@ func ParseLog(data []byte) (*Log, error) {
 			continue
 		}
 		if cm := reChecksum.FindStringSubmatch(line); cm != nil {
-			l.Checksum = cm[1]
+			if checksumAt < 0 {
+				l.Checksum = cm[1]
+				checksumAt = i + 1 + off
+			}
 			continue
 		}
 		if reNormal.MatchString(line) {
@@ -327,6 +346,9 @@ func ParseLog(data []byte) (*Log, error) {
 		for n := 1; n <= len(ctdbTracks); n++ {
 			l.CTDB.Tracks = append(l.CTDB.Tracks, ctdbTracks[n])
 		}
+	}
+	if checksumAt >= 0 {
+		l.ComputedChecksum = computeChecksum(strings.Join(lines[:checksumAt], "\n"))
 	}
 	return l, nil
 }

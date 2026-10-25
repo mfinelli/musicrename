@@ -492,18 +492,29 @@ func checkCTDB(r *Result, l *Log) {
 
 var reHex64 = regexp.MustCompile(`^[0-9A-Fa-f]{64}$`)
 
-// checkChecksum confirms the log carries EAC's checksum line. It does not
-// verify it: that would show the log is unedited, which matters for a log
-// from someone else and not for one's own. A missing or malformed checksum on
-// a fresh rip means the log was edited or cut short, or came from an old EAC.
+// checkChecksum confirms the log is as EAC wrote it, by its checksum: a signature
+// of the text above the checksum line that EAC adds. A missing or malformed
+// checksum on a fresh rip means the log was edited or cut short, or came from an
+// old EAC; one that does not match means the text was changed after EAC wrote
+// it, or damaged. The signature does not cover what follows its own line, so
+// anything there is reported too: it would otherwise be a way to add to a log
+// unnoticed.
 func checkChecksum(r *Result, l *Log) {
+	const id, name = "checksum", "Log checksum"
+
 	switch {
 	case l.Checksum == "":
-		r.add("checksum", "Log checksum", StatusError,
+		r.add(id, name, StatusError,
 			"the log has no checksum: it was edited, cut short, or written by an old EAC")
 	case !reHex64.MatchString(l.Checksum):
-		r.add("checksum", "Log checksum", StatusError, "the checksum is malformed (%q)", truncate(l.Checksum, 20))
+		r.add(id, name, StatusError, "the checksum is malformed (%q)", truncate(l.Checksum, 20))
+	case l.TextAfterChecksum:
+		r.add(id, name, StatusError,
+			"the log continues after its checksum, which does not cover that text: it was added to, or is several logs in one")
+	case l.Checksum != l.ComputedChecksum:
+		r.add(id, name, StatusError,
+			"the checksum does not match the log: it was edited after EAC wrote it, or is damaged")
 	default:
-		r.add("checksum", "Log checksum", StatusPass, "present (not verified)")
+		r.add(id, name, StatusPass, "matches: the log is as EAC wrote it")
 	}
 }

@@ -63,7 +63,7 @@ Also checked:
     exactly as many samples as the log's table of contents says the disc has
   - that the disc is one the MusicBrainz release in musicbrainz.txt has: the
     disc ID computed from the log is looked up there (--offline skips this)
-  - that the log ends with its checksum (present and well formed, not verified)
+  - that the log's checksum matches its text
 
 A required setting the log does not state is an error, not a pass.
 

@@ -76,10 +76,23 @@ func fixtureText(t *testing.T, name string) string {
 	return s
 }
 
+// signed returns text with the checksum EAC would give it, in place of any it has.
+func signed(text string) string {
+	if i := strings.Index(text, "\n\n==== Log checksum"); i >= 0 {
+		text = text[:i]
+	}
+	return text + "\n\n==== Log checksum " + computeChecksum(text) + " ====\n"
+}
+
 // parse parses text as a log and fails the test if it does not parse.
+//
+// The text is signed first. Tests make a log with one particular fault by editing
+// a real one, and the edit would otherwise also break the checksum, so that every
+// such test was about two things. A test that is about the checksum calls
+// ParseLog itself, with the text as it wants it.
 func parse(t *testing.T, text string) *Log {
 	t.Helper()
-	l, err := ParseLog([]byte(text))
+	l, err := ParseLog([]byte(signed(text)))
 	require.NoError(t, err)
 	return l
 }

@@ -174,18 +174,11 @@ For releases that also include a video DVD:
    save its URL in a file named `musicbrainz.txt` inside that directory.
 4. Check the rip log with `mrr riplog` (from inside that directory, or pass its
    path). It reports any EAC setting that was wrong when the disc was ripped, a
-   test and copy that disagree, errors, and discs AccurateRip couldn't confirm.
-   It also checks that the cue sheet and FLAC image beside the log match it,
-   including that the image is exactly as long as the disc. If the disc has a
-   hidden track before track 1, this is where it shows up if gaps weren't
-   detected: the image then starts at track 1 and leaves it out. Last, it looks
-   the disc up on MusicBrainz and checks that it is one the release in
-   `musicbrainz.txt` has, which catches tagging a different pressing than the
-   one ripped; this needs a network connection (`--offline` skips it). It notes
-   whether the cue sheet records any pregaps, but can't tell whether the disc
-   has none or gaps weren't detected (step 3 of ripping), so that one is still
-   on you. An error means the rip should be redone with the correct settings; a
-   warning is for you to judge.
+   test and copy that disagree, errors, and other mismatches between the rip log
+   and the ripped audio. It notes whether the cue sheet records any pregaps, but
+   can't tell whether the disc has none or gaps weren't detected (step 3 of
+   ripping), so that one is still on you. An error means the rip should be
+   redone with the correct settings; a warning is for you to judge.
 
 ## Scanning album art (gscan2pdf)
 
