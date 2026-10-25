@@ -271,12 +271,33 @@ AccurateRip does not know, do not by themselves fail the run.
 *-v*, *--verbose*
 	List every check, not only those that did not pass.
 
-## mrr split *--check* [*--strict*] [*-v*] _log_ [_dir_]
+## mrr split [*--check*] [*--hidden-track* _auto_|_yes_|_no_] [*--strict*] [*-v*] [_path_] [_dir_]
+
+Splits the image of an Exact Audio Copy rip into one FLAC file per track, in
+_dir_, or checks a split.
+
+_path_ is a rip's log, whose cue sheet and image are beside it, or a directory
+with logs in it, and defaults to the current directory. Every log in a
+directory is split in turn, so the discs of a multi-disc album all end up in
+the same directory. To split, _dir_ has to be given, but _path_ may be omitted:
+with one argument it is _dir_, and to write into the current directory pass _._
+explicitly. The tracks are written to _dir_ without any subdirectories.
+
+Each track is cut where the cue sheet puts it, with each pregap at the end of
+the track before it, and is tagged, in UTF-8, with its title, artist, number and
+ISRC, the album and its artist, the disc number if there are several, and the
+MusicBrainz release in _musicbrainz.txt_ beside the log if there is one.
+Refuses to overwrite existing files. After writing runs the same checks as
+*--check* does.
+
+With *--check*, nothing is written: the arguments are _path_ and the directory
+of the tracks, again defaulting to the current directory, and it is checked
+that the tracks hold exactly what was ripped.
 
 Checks that the tracks an image rip was split into hold exactly what was ripped.
 _log_ is the *.log* file of the rip, with its cue sheet of the same name beside
-it, and _dir_ is the directory of the split tracks, which defaults to the current
-directory.
+it, and _dir_ is the directory of the split tracks, which defaults to the
+current directory.
 
 Tracks are named _NN Title_.flac for a single disc, _D-NN Title_.flac for disc
 _D_ of a multi-disc album, whose discs share the directory, the disc being taken
@@ -292,12 +313,24 @@ before it (at the start of the track it leads into is a warning), since a split
 can be cut a few samples off at every boundary and still hold exactly the audio
 of the rip.
 
-Each check is reported as ok, a note, a warning, or an error. By default only the
-checks that did not pass are listed. Read-only. Exits non-zero on an error.
+Audio before track 1 is a pregap, which belongs to track 1, or a hidden track,
+which is a track of its own, and the cue sheet does not say which. Up to five
+seconds of it is taken to be a pregap, which track 1 is expected to hold, and
+more to be a hidden track, expected in a file of its own named _00 Title_.flac.
+A split the other way is a warning, and an error if *--hidden-track* says which
+it is.
+
+Each check is reported as ok, a note, a warning, or an error. By default only
+the checks that did not pass are listed. Read-only. Exits non-zero on an error.
 
 *--check*
-	Check an existing split. It is required, so that the command can split
-	later without changing how it is run to check.
+	Check an existing split instead of making one.
+
+*--hidden-track* _auto_|_yes_|_no_
+	What the audio before track 1 is. _auto_, the default, takes up to five
+	seconds of it to be a pregap in track 1 and more to be a hidden track,
+	which is a file of its own. _yes_ makes any of it a hidden track, and
+	_no_ keeps all of it in track 1.
 
 *--strict*
 	Treat warnings as failures for the exit status.

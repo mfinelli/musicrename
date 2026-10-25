@@ -38,6 +38,9 @@ type CueTrack struct {
 	// audio track.
 	Type    string
 	Indexes []CueIndex
+	// Title, Performer and ISRC are the track's, from its TITLE, PERFORMER and
+	// ISRC lines, or "" if it has none.
+	Title, Performer, ISRC string
 }
 
 // Index returns the position of the track's INDEX n, in frames, and whether the
@@ -63,6 +66,10 @@ type Cue struct {
 	// DiscID is the freedb disc ID from the "REM DISCID" line, or "" if there
 	// is none.
 	DiscID string
+	// Title and Performer are the album's, from the TITLE and PERFORMER lines
+	// before the first TRACK, or "" if there are none. They are in UTF-8, whatever
+	// the cue sheet's encoding was.
+	Title, Performer string
 }
 
 var (
@@ -70,6 +77,7 @@ var (
 	reCueTrack  = regexp.MustCompile(`(?i)^TRACK\s+(\d+)\s+(\S+)$`)
 	reCueIndex  = regexp.MustCompile(`(?i)^INDEX\s+(\d+)\s+(\d+):(\d+):(\d+)$`)
 	reCueDiscID = regexp.MustCompile(`(?i)^REM\s+DISCID\s+(\S+)`)
+	reCueText   = regexp.MustCompile(`(?i)^(TITLE|PERFORMER|ISRC)\s+(.*)$`)
 )
 
 // ParseCue reads a cue sheet from its raw bytes. EAC writes them in the system's
@@ -122,7 +130,34 @@ func ParseCue(data []byte) (*Cue, error) {
 
 		case reCueDiscID.MatchString(line):
 			c.DiscID = reCueDiscID.FindStringSubmatch(line)[1]
+
+		case reCueText.MatchString(line):
+			m := reCueText.FindStringSubmatch(line)
+			value := cueUnquote(m[2])
+			switch key := strings.ToUpper(m[1]); {
+			case len(c.Tracks) == 0 && key == "TITLE":
+				c.Title = value
+			case len(c.Tracks) == 0 && key == "PERFORMER":
+				c.Performer = value
+			case len(c.Tracks) > 0 && key == "TITLE":
+				c.Tracks[len(c.Tracks)-1].Title = value
+			case len(c.Tracks) > 0 && key == "PERFORMER":
+				c.Tracks[len(c.Tracks)-1].Performer = value
+			case len(c.Tracks) > 0 && key == "ISRC":
+				c.Tracks[len(c.Tracks)-1].ISRC = value
+			}
 		}
 	}
 	return c, nil
+}
+
+// cueUnquote returns the text of a cue sheet value, which has no space around it
+// as it is from a line that was trimmed: what is between its quotes if it has
+// them, which is what EAC writes, and what there is if it does not. A quote
+// inside it is part of it.
+func cueUnquote(s string) string {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	return s
 }

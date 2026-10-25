@@ -1239,16 +1239,29 @@ disc coming from the log's name (`Album (disc 1).log`); and `00 Title.flac` for
 audio before track 1, such as a hidden track in the pregap (`1-00 Title.flac` on
 a disc of several).
 
+Audio before track 1 is either a pregap, which belongs to track 1, or a hidden
+track, which is a track of its own, and the cue sheet does not say which. Nearly
+always it is a pregap: a fraction of a second, or the two seconds the standard
+allows, of silence; and a hidden track is not as short as five seconds. So up to
+five seconds of it is kept in track 1, which then begins at the start of the
+image, and anything longer is a track 00. Where it is known which it is,
+`--hidden-track=yes` makes any audio before track 1 a track 00, and
+`--hidden-track=no` keeps all of it in track 1. A split that is the other way
+from what is expected is a warning by default, since nothing is lost and the
+lengths and the audio are checked as the files are; if the option says which, it
+is an error, and a `00` file where the option is `no` is not checked further. A
+pregap kept in track 1 is reported as a note, so that a hidden track that is as
+short as that is not missed.
+
 It checks that:
 
 - the log's checksum matches (13.8), since the log is what the tracks are
   compared with, and the cue sheet beside it is there and can be read;
 - there is a file for each track of the log's table of contents, and a `00` file
-  only if the cue sheet puts audio before track 1, with no other file for any of
-  them. Other FLAC files in the directory, such as the other discs of a
-  multi-disc album, are counted and left out. A disc with audio before track 1
-  and no `00` file is a warning, since the audio can be in track 1, and is
-  checked as being, but the workflow gives it a file of its own;
+  only if the audio before track 1 is a hidden track (as above), with no other
+  file for any of them. Other FLAC files in the directory, such as the other
+  discs of a multi-disc album, are counted and left out. What is expected of the
+  audio before track 1 is as above;
 - every track is CD audio, as the image is (13.6);
 - the tracks, decoded in order as one stretch of audio, have the log's Copy CRC,
   so that together they hold the audio EAC ripped. This was confirmed for the
@@ -1365,6 +1378,48 @@ What differs is then one of:
   drive could not read, and, if the difference is at an end of the images where
   a log says overread was on, that this does not show that the drive read past
   it.
+
+### 13.13 Making a split
+
+`mrr split [path] dir` takes the rip's log, or a directory of logs and splits
+every log in it in turn. A rename puts the tracks into folders later, so they
+are written flat.
+
+The tracks are cut where the cue sheet puts them, with each pregap at the end of
+the track before it, which makes every cut an `INDEX 01`; and audio before track
+1 is part of track 1 if it is a pregap and a track 00 of its own if it is a
+hidden track, as defined in 13.10.
+
+The image is decoded once, with ffmpeg, to raw samples, and cut by counting
+them, each piece being written to a FLAC file by ffmpeg as it goes. ffmpeg's
+ways of cutting are not used, since they cut at times and not at samples.
+Counting makes every cut exact, and means the audio is read once, and hashed as
+it is read.
+
+Nothing is written unless it is right, which is found out first. The log must be
+as EAC wrote it, so that what is taken from it is true; the cue sheet must be
+usable; the image must be the one it names, CD audio, and as long as the disc;
+and no file that is to be made may be there already. The pieces are written
+under names that are not those of tracks, and the CRC-32 of the whole of the
+audio is compared with the log's Copy CRC, when it can be (13.6), before any is
+put in place; if it is not the CRC EAC recorded, the image is not what was
+ripped, and nothing is made of it. Only then are the pieces renamed, and a split
+that fails before that leaves nothing, not even a directory it made. What is
+made is then checked as `--check` would, and its findings are the command's.
+
+A track is tagged with what the cue sheet says of it as UTF-8, converted from
+the code page EAC wrote it in if that is what it was: its title, artist, the
+album and its artist, its number, the disc number if the log is one of several,
+and its ISRC; and with the MusicBrainz release if the rip has a
+`musicbrainz.txt` that holds one, which is what lets Picard find the release
+without being told. What else the cue sheet has, the genre, the year and the
+comment that EAC adds, is not written: Picard keeps tags it has nothing to say
+about, and the genre and the year come from a database that is often wrong. A
+hidden track is tagged as track 0 with the title "Hidden track", the cue sheet
+having none for it, and will need tagging by hand.
+
+The files are named as in 13.10, with the title of the track cleaned and cut by
+the same rules as `rename`, so that it has nothing to change.
 
 ---
 

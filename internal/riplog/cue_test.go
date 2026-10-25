@@ -19,6 +19,7 @@ package riplog
 
 import (
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -200,4 +201,118 @@ func TestCueTrackIndex(t *testing.T) {
 
 	_, ok = track.Index(2)
 	assert.False(t, ok)
+}
+
+func TestParseCueMetadata(t *testing.T) {
+	t.Run("a cue sheet of EAC's, in UTF-8", func(t *testing.T) {
+		c, err := ParseCue(fixture(t, "back-in-black.cue"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "Back in Black", c.Title)
+		assert.Equal(t, "AC/DC", c.Performer)
+		require.Len(t, c.Tracks, 10)
+		assert.Equal(t, "Hells Bells", c.Tracks[0].Title)
+		assert.Equal(t, "AC/DC", c.Tracks[0].Performer)
+		assert.Equal(t, "AUAP08000041", c.Tracks[0].ISRC)
+		assert.Equal(t, "Rock and Roll Ain't Noise Pollution", c.Tracks[9].Title, "an apostrophe is part of it")
+		assert.Equal(t, "AUAP08000050", c.Tracks[9].ISRC)
+	})
+
+	t.Run("one in the Windows code page, read as text and not as bytes", func(t *testing.T) {
+		raw := fixture(t, "bday.cue")
+		require.False(t, utf8.Valid(raw), "it is not UTF-8, which is what makes this a test")
+
+		c, err := ParseCue(raw)
+		require.NoError(t, err)
+
+		assert.Equal(t, "B'day [Deluxe Edition]", c.Title)
+		assert.Equal(t, "Beyoncé", c.Performer, "the album's artist")
+		require.Len(t, c.Tracks, 19)
+		assert.Equal(t, "Beyoncé & Shakira", c.Tracks[0].Performer, "a track's can differ from the album's")
+		assert.Equal(t, "Beautiful Liar", c.Tracks[0].Title)
+		assert.Equal(t, "USSM10700448", c.Tracks[0].ISRC)
+		assert.True(t, utf8.ValidString(c.Performer+c.Tracks[0].Performer))
+	})
+
+	t.Run("an older EAC's, which has no ISRC", func(t *testing.T) {
+		c, err := ParseCue(fixture(t, "transistor.cue"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "Transistor", c.Title)
+		assert.Equal(t, "311", c.Performer)
+		require.Len(t, c.Tracks, 21)
+		assert.Equal(t, "Stealing Happy Hours", c.Tracks[20].Title)
+		for _, tr := range c.Tracks {
+			assert.Equal(t, "", tr.ISRC, "track %d", tr.Number)
+		}
+	})
+
+	t.Run("lines are the album's before the first track and the track's after", func(t *testing.T) {
+		c, err := ParseCue([]byte("PERFORMER \"Album Artist\"\r\nTITLE \"The Album\"\r\n" +
+			"FILE \"a.flac\" WAVE\r\n" +
+			"  TRACK 01 AUDIO\r\n    TITLE \"One\"\r\n    INDEX 01 00:00:00\r\n" +
+			"  TRACK 02 AUDIO\r\n    PERFORMER \"Guest\"\r\n    ISRC XX1234567890\r\n    INDEX 01 03:00:00\r\n"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "The Album", c.Title)
+		assert.Equal(t, "Album Artist", c.Performer)
+		assert.Equal(t, CueTrack{Number: 1, Type: "AUDIO", Title: "One", Indexes: []CueIndex{{1, 0}}}, c.Tracks[0], "none of the album's")
+		assert.Equal(t, "Guest", c.Tracks[1].Performer)
+		assert.Equal(t, "", c.Tracks[1].Title)
+		assert.Equal(t, "XX1234567890", c.Tracks[1].ISRC)
+	})
+
+	t.Run("values as people write them", func(t *testing.T) {
+		for name, tc := range map[string]struct{ line, want string }{
+			"quoted":                         {`TITLE "Hello"`, "Hello"},
+			"not quoted":                     {`TITLE Hello`, "Hello"},
+			"quotes inside":                  {`TITLE "Say "hi""`, `Say "hi"`},
+			"spaces around":                  {`TITLE    "  Hello  "   `, "  Hello  "},
+			"lower case keyword":             {`title "Hello"`, "Hello"},
+			"an empty one":                   {`TITLE ""`, ""},
+			"one quote":                      {`TITLE "`, `"`},
+			"text that looks like a keyword": {`TITLE "PERFORMER x"`, "PERFORMER x"},
+		} {
+			c, err := ParseCue([]byte(tc.line + "\r\n"))
+			require.NoError(t, err, name)
+			assert.Equal(t, tc.want, c.Title, name)
+		}
+	})
+
+	t.Run("a byte order mark does not hide the first line", func(t *testing.T) {
+		c, err := ParseCue([]byte("\xef\xbb\xbfTITLE \"First\"\r\nPERFORMER \"Someone\"\r\n"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "First", c.Title)
+		assert.Equal(t, "Someone", c.Performer)
+	})
+
+	t.Run("a longer word that begins with a keyword is not one", func(t *testing.T) {
+		c, err := ParseCue([]byte("TITLEX \"no\"\r\nPERFORMERS \"no\"\r\n  TRACK 01 AUDIO\r\n    ISRCX 1\r\n    INDEX 01 00:00:00\r\n"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "", c.Title)
+		assert.Equal(t, "", c.Performer)
+		assert.Equal(t, "", c.Tracks[0].ISRC)
+	})
+
+	t.Run("a keyword with nothing after it", func(t *testing.T) {
+		c, err := ParseCue([]byte("TITLE\r\nPERFORMER\r\n  TRACK 01 AUDIO\r\n    ISRC\r\n    INDEX 01 00:00:00\r\n"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "", c.Title)
+		assert.Equal(t, "", c.Performer)
+		assert.Equal(t, "", c.Tracks[0].ISRC)
+	})
+
+	t.Run("what was parsed before is still parsed", func(t *testing.T) {
+		c, err := ParseCue(fixture(t, "transistor.cue"))
+		require.NoError(t, err)
+
+		assert.Equal(t, "310F4D15", c.DiscID)
+		assert.Equal(t, []string{"[1997] Transistor.flac"}, c.Files)
+		frames, ok := c.Tracks[0].Index(1)
+		assert.True(t, ok)
+		assert.Equal(t, 12000, frames)
+	})
 }
