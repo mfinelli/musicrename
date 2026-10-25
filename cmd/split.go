@@ -53,8 +53,9 @@ Checked:
     before track 1), and no other file for any of them
   - each track is CD audio: 44.1 kHz, 16-bit, stereo
   - the tracks, in order, decode to the log's Copy CRC, so that they hold the
-    audio EAC ripped; and each matches the MD5 its own FLAC stores, so that none
-    is damaged
+    audio EAC ripped (if not, and the rip's image is beside the log, the first
+    and last difference from it are found, by track and place in it); and each
+    matches the MD5 its own FLAC stores, so that none is damaged
     - each track is as long as the cue sheet says, with each pregap at the end of
     the track before it (at the start of the track it leads into is a warning),
     since a split can be cut a few samples off at every boundary and still hold

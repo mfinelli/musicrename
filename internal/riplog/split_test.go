@@ -52,6 +52,20 @@ type fakeTracks struct {
 	override map[string]func(*pcm.Fingerprint) // by the file's name
 	err      error
 	calls    [][]string
+
+	// What Diff gives, and with what it was asked. By default the audio is the
+	// same.
+	diff      *pcm.Difference
+	diffErr   error
+	diffCalls [][2][]string
+}
+
+func (f *fakeTracks) Diff(_ context.Context, a, b []string) (pcm.Difference, error) {
+	f.diffCalls = append(f.diffCalls, [2][]string{a, b})
+	if f.diff == nil {
+		return pcm.Difference{First: -1, Last: -1}, f.diffErr
+	}
+	return *f.diff, f.diffErr
 }
 
 func (f *fakeTracks) Fingerprints(_ context.Context, paths ...string) (pcm.Fingerprint, []pcm.Fingerprint, error) {
@@ -1661,4 +1675,311 @@ func TestTrackListAndAbs(t *testing.T) {
 	assert.Equal(t, int64(5), abs(5))
 	assert.Equal(t, int64(5), abs(-5))
 	assert.Equal(t, int64(0), abs(0))
+}
+
+// withSampleChanged returns pcm with the sample at index i made different.
+func withSampleChanged(pcm []byte, i int) []byte {
+	out := append([]byte(nil), pcm...)
+	out[i*4] ^= 0x01
+	return out
+}
+
+// starts returns where each file of specs begins in the tracks as one stretch of
+// audio, in samples.
+func starts(specs []fileSpec) []int64 {
+	out := make([]int64, len(specs))
+	var at int64
+	for i, sp := range specs {
+		out[i] = at
+		at += int64(sp.samples)
+	}
+	return out
+}
+
+func totalOf(specs []fileSpec) int64 {
+	var n int64
+	for _, sp := range specs {
+		n += int64(sp.samples)
+	}
+	return n
+}
+
+func TestCheckSplitWhereTheyDiffer(t *testing.T) {
+	log, cue := fixture(t, fixtureBlack), cueText(t, fixtureBlackCue)
+	specs := splitSpecs(t, log, cue, 0, false, false)
+	at := starts(specs)
+	total := totalOf(specs)
+
+	// differing is a rip whose tracks have a CRC that is not the log's, and a
+	// Diff that says what it is told.
+	differing := func(t *testing.T, d pcm.Difference) (*Result, *fakeTracks, rip, string) {
+		t.Helper()
+		rip := blackRip(t)
+		dir := makeTracks(t, specs)
+		dec := honestTracks(t, rip)
+		dec.crc ^= 1
+		dec.diff = &d
+		return checkSplit(t, rip, dir, dec), dec, rip, dir
+	}
+
+	t.Run("the track and the place in it", func(t *testing.T) {
+		r, dec, rip, dir := differing(t, pcm.Difference{
+			SamplesA: total, SamplesB: total, Differing: 5,
+			First: at[6] + 1234, Last: at[8] + 99,
+		})
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "not the log's Copy CRC 9FB18E2F")
+		assert.Contains(t, c.Detail, "; the first difference from the rip's image is in track 07, 00:00:02 into it (sample 1234), "+
+			"and 5 samples differ in all, the last in track 09, 00:00:00 into it (sample 99)")
+
+		require.Len(t, dec.diffCalls, 1, "asked once")
+		assert.Equal(t, []string{rip.path(".flac")}, dec.diffCalls[0][0], "the image is what the tracks are compared with")
+		assert.Equal(t, "01 Track 1.flac", filepath.Base(dec.diffCalls[0][1][0]))
+		assert.Equal(t, filepath.Join(dir, "10 Track 10.flac"), dec.diffCalls[0][1][9], "all the tracks, in order")
+	})
+
+	t.Run("a single sample", func(t *testing.T) {
+		r, _, _, _ := differing(t, pcm.Difference{SamplesA: total, SamplesB: total, Differing: 1, First: at[3] + 7, Last: at[3] + 7})
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "is in track 04, 00:00:00 into it (sample 7), and 1 sample differ in all, the last in track 04")
+	})
+
+	t.Run("the first and the last sample of a track, and the first of the next", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			sample int64
+			track  string
+			offset int64
+		}{
+			"the first of the audio":       {0, "01", 0},
+			"the first of a track":         {at[4], "05", 0},
+			"the last of the track before": {at[4] - 1, "04", int64(specs[3].samples) - 1},
+			"the last of the audio":        {total - 1, "10", int64(specs[9].samples) - 1},
+		} {
+			r, _, _, _ := differing(t, pcm.Difference{SamplesA: total, SamplesB: total, Differing: 1, First: tc.sample, Last: tc.sample})
+
+			c := want(t, r, "split-audio", StatusError)
+			assert.Contains(t, c.Detail, fmt.Sprintf("is in track %s, ", tc.track), name)
+			assert.Contains(t, c.Detail, fmt.Sprintf("(sample %d)", tc.offset), name)
+		}
+	})
+
+	t.Run("a sample beyond the tracks is put in the last", func(t *testing.T) {
+		r, _, _, _ := differing(t, pcm.Difference{SamplesA: total + 100, SamplesB: total, Differing: 1, First: total + 50, Last: total + 50})
+
+		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail, "is in track 10")
+	})
+
+	t.Run("the same audio as far as the tracks go, which stop early", func(t *testing.T) {
+		r, _, _, _ := differing(t, pcm.Difference{SamplesA: total, SamplesB: total - 3*588, Differing: 0, First: -1, Last: -1})
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "; the audio they have in common with the rip's image is the same; the tracks are 3 sectors shorter than the image")
+		assert.NotContains(t, c.Detail, "where it has", "the lengths are not said twice")
+	})
+
+	t.Run("tracks that go on past the image", func(t *testing.T) {
+		r, _, _, _ := differing(t, pcm.Difference{SamplesA: total, SamplesB: total + 7, Differing: 0, First: -1, Last: -1})
+
+		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail, "the tracks are 7 samples longer than the image")
+	})
+
+	t.Run("a difference, and a difference in length", func(t *testing.T) {
+		r, _, _, _ := differing(t, pcm.Difference{SamplesA: total, SamplesB: total - 588, Differing: 2, First: at[1], Last: at[1] + 1})
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "the first difference from the rip's image is in track 02")
+		assert.Contains(t, c.Detail, "; the tracks are 1 sector shorter than the image")
+	})
+
+	t.Run("the same audio as the image, so the log is what disagrees", func(t *testing.T) {
+		r, _, _, _ := differing(t, pcm.Difference{SamplesA: total, SamplesB: total, First: -1, Last: -1})
+
+		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail,
+			"they are the same audio as the rip's image, which the log's CRC then disagrees with")
+	})
+
+	t.Run("an image that is not beside the log", func(t *testing.T) {
+		rip := blackRip(t)
+		require.NoError(t, os.Remove(rip.path(".flac")))
+		dec := honestTracks(t, rip)
+		dec.crc ^= 1
+
+		r := checkSplit(t, rip, makeTracks(t, specs), dec)
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "the rip's image is not beside the log, so where they differ from it is not known")
+		assert.Empty(t, dec.diffCalls, "nothing to compare with")
+	})
+
+	t.Run("an image that does not decode", func(t *testing.T) {
+		rip := blackRip(t)
+		dec := honestTracks(t, rip)
+		dec.crc ^= 1
+		dec.diffErr = &pcm.DecodeError{Path: rip.path(".flac"), Message: "CRC error"}
+
+		r := checkSplit(t, rip, makeTracks(t, specs), dec)
+
+		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail,
+			"the rip's image does not decode cleanly (CRC error), so where they differ from it is not known")
+	})
+
+	t.Run("a comparison that could not be made", func(t *testing.T) {
+		rip := blackRip(t)
+		dec := honestTracks(t, rip)
+		dec.crc ^= 1
+		dec.diffErr = errors.New("context canceled")
+
+		r := checkSplit(t, rip, makeTracks(t, specs), dec)
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "where they differ from the rip's image could not be found: context canceled")
+		assert.Contains(t, c.Detail, "not the log's Copy CRC", "and the finding stands")
+	})
+
+	t.Run("a hidden track", func(t *testing.T) {
+		tlog, tcue := fixture(t, fixtureTransistor), cueText(t, fixtureTransistorCue)
+		tspecs := splitSpecs(t, tlog, tcue, 0, true, false)
+		rip := transistorRip(t)
+		dec := honestTracks(t, rip)
+		dec.crc ^= 1
+		dec.diff = &pcm.Difference{SamplesA: totalOf(tspecs), SamplesB: totalOf(tspecs), Differing: 1, First: 100, Last: 100}
+
+		r := checkSplit(t, rip, makeTracks(t, tspecs), dec)
+
+		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail, "is in track 00, 00:00:00 into it (sample 100)")
+	})
+
+	t.Run("a disc of several", func(t *testing.T) {
+		clog, ccue := fixture(t, fixtureCentral), cueText(t, fixtureCentralCue)
+		cspecs := splitSpecs(t, clog, ccue, 1, false, false)
+		cat := starts(cspecs)
+		rip := centralRip(t)
+		dec := honestTracks(t, rip)
+		dec.crc ^= 1
+		dec.diff = &pcm.Difference{SamplesA: totalOf(cspecs), SamplesB: totalOf(cspecs), Differing: 1, First: cat[2] + 600, Last: cat[2] + 600}
+
+		r := checkSplit(t, rip, makeTracks(t, cspecs), dec)
+
+		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail, "is in track 1-03, 00:00:01 into it (sample 600)")
+	})
+
+	t.Run("it is only asked when the audio is wrong, and not otherwise", func(t *testing.T) {
+		for name, edit := range map[string]func(*fakeTracks){
+			"the CRC is right": func(d *fakeTracks) {},
+			"a track is damaged": func(d *fakeTracks) {
+				d.crc ^= 1
+				d.override = map[string]func(*pcm.Fingerprint){"03 Track 3.flac": func(f *pcm.Fingerprint) { f.MD5[0] ^= 1 }}
+			},
+			"the tracks do not decode": func(d *fakeTracks) { d.err = &pcm.DecodeError{Path: "x", Message: "bad"} },
+		} {
+			rip := blackRip(t)
+			dec := honestTracks(t, rip)
+			edit(dec)
+
+			checkSplit(t, rip, makeTracks(t, specs), dec)
+
+			assert.Empty(t, dec.diffCalls, name)
+		}
+
+		t.Run("the CRC cannot be compared", func(t *testing.T) {
+			text := strings.Replace(fixtureText(t, fixtureBlack), "Null samples used in CRC calculations       : Yes", "Null samples used in CRC calculations       : No", 1)
+			rip := buildRip(t, "Back in Black", []byte(signed(text)), cue)
+			dec := &fakeTracks{crc: 0xDEAD}
+
+			checkSplit(t, rip, makeTracks(t, specs), dec)
+
+			assert.Empty(t, dec.diffCalls)
+		})
+	})
+}
+
+func TestSplitImage(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Album.flac"), nil, 0o644))
+	cue := func(files ...string) *Cue { return &Cue{Files: files} }
+
+	assert.Equal(t, filepath.Join(dir, "Album.flac"), splitImage(dir, cue("Album.flac")))
+	assert.Equal(t, filepath.Join(dir, "Album.flac"), splitImage(dir, cue("album.FLAC")), "the name's case does not matter")
+	assert.Equal(t, "", splitImage(dir, cue("Missing.flac")), "not there")
+	assert.Equal(t, "", splitImage(dir, cue()), "no file named")
+	assert.Equal(t, "", splitImage(dir, cue("Album.flac", "Other.flac")), "an image rip has one")
+	assert.Equal(t, "", splitImage(dir, cue("sub/Album.flac")), "a path, not a file beside the log")
+	assert.Equal(t, "", splitImage(dir, cue(`C:\Rips\Album.flac`)), "a Windows path")
+	assert.Equal(t, "", splitImage(dir, cue("Album.wav")), "not FLAC")
+}
+
+func TestCheckSplitWhereTheyDifferWithFFmpeg(t *testing.T) {
+	// Real audio, split into real files and compared by ffmpeg, so that the
+	// position found is the sample that was changed.
+	ctx := context.Background()
+	const s = samplesPerSector
+
+	d := newTinyDisc(t, 0)
+	// The image is real, which the rest of these tests do not need.
+	testutil.MakePCMFlac(t, d.rip.dir, "Back in Black.flac", d.pcm)
+	bounds := []int{1000 * s, 2000 * s}
+
+	run := func(t *testing.T, other tinyDisc, hidden bool, b []int) *Result {
+		t.Helper()
+		_, r, err := CheckSplit(ctx, d.rip.logPath(), other.split(t, hidden, b), pcm.Decoder{})
+		require.NoError(t, err)
+		return r
+	}
+
+	t.Run("one sample changed in a track is found to the sample", func(t *testing.T) {
+		other := d
+		other.pcm = withSampleChanged(d.pcm, 2000*s+4321)
+
+		r := run(t, other, false, bounds)
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "the first difference from the rip's image is in track 03, ")
+		assert.Contains(t, c.Detail, "(sample 4321), and 1 sample differ in all, the last in track 03, ")
+		want(t, r, "split-lengths", StatusPass)
+	})
+
+	t.Run("a whole track of other audio", func(t *testing.T) {
+		other := d
+		other.pcm = append([]byte(nil), d.pcm...)
+		copy(other.pcm[1000*s*4:2000*s*4], testAudio(1000*s, 77))
+
+		r := run(t, other, false, bounds)
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "is in track 02, ")
+		assert.Contains(t, c.Detail, ", the last in track 02, ")
+		assert.Regexp(t, `and \d{5,} samples differ in all`, c.Detail)
+	})
+
+	t.Run("tracks that stop short of the image", func(t *testing.T) {
+		other := d
+		other.pcm = d.pcm[:len(d.pcm)-10*4] // the last 10 samples are not in the tracks
+
+		r := run(t, other, false, bounds)
+
+		c := want(t, r, "split-audio", StatusError)
+		assert.Contains(t, c.Detail, "the audio they have in common with the rip's image is the same")
+		assert.Contains(t, c.Detail, "the tracks are 10 samples shorter than the image")
+	})
+
+	t.Run("the audio before track 1, in a track of its own", func(t *testing.T) {
+		hidden := newTinyDisc(t, 300)
+		testutil.MakePCMFlac(t, hidden.rip.dir, "Back in Black.flac", hidden.pcm)
+		other := hidden
+		other.pcm = withSampleChanged(hidden.pcm, 123)
+		hb := []int{300 * s, 1300 * s, 2300 * s}
+
+		_, r, err := CheckSplit(ctx, hidden.rip.logPath(), other.split(t, true, hb), pcm.Decoder{})
+		require.NoError(t, err)
+
+		assert.Contains(t, want(t, r, "split-audio", StatusError).Detail, "is in track 00, 00:00:00 into it (sample 123)")
+	})
+
+	t.Run("a split that is right says nothing of any of this", func(t *testing.T) {
+		r := run(t, d, false, bounds)
+
+		assert.Equal(t, 0, r.Count(StatusWarning)+r.Count(StatusError), "%v", r.Findings())
+	})
 }

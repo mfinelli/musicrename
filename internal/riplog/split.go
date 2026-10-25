@@ -38,6 +38,9 @@ type TrackDecoder interface {
 	// them as one stretch of audio, and files that of each on its own. See
 	// pcm.Decoder.Fingerprints for what it returns on an error.
 	Fingerprints(ctx context.Context, paths ...string) (total pcm.Fingerprint, files []pcm.Fingerprint, err error)
+	// Diff compares the audio of two sets of files, each taken in order as one
+	// stretch of audio. See pcm.Decoder.Diff.
+	Diff(ctx context.Context, a, b []string) (pcm.Difference, error)
 }
 
 // A split album is a directory of FLAC files, one per track, named as the
@@ -151,6 +154,7 @@ func CheckSplit(ctx context.Context, logPath, dir string, dec TrackDecoder) (*Lo
 	if !ok {
 		return l, r, nil
 	}
+	image := splitImage(filepath.Dir(logPath), c)
 
 	// A length is what the decode finds if there was one, and what the file's
 	// header says if not.
@@ -158,7 +162,7 @@ func CheckSplit(ctx context.Context, logPath, dir string, dec TrackDecoder) (*Lo
 	for i, t := range tracks {
 		lengths[t.Number] = int64(infos[i].TotalSamples)
 	}
-	if decoded := checkSplitAudio(ctx, r, l, c, tracks, infos, dec); decoded != nil {
+	if decoded := checkSplitAudio(ctx, r, l, c, tracks, infos, image, disc, dec); decoded != nil {
 		for i, t := range tracks {
 			lengths[t.Number] = decoded[i]
 		}
@@ -367,7 +371,7 @@ func checkSplitFormat(r *Result, tracks []splitTrack) ([]streamInfo, bool) {
 // ripped, by the log's Copy CRC. It returns how many samples each track decoded
 // to, or nil if they were not decoded.
 func checkSplitAudio(ctx context.Context, r *Result, l *Log, c *Cue, tracks []splitTrack,
-	infos []streamInfo, dec TrackDecoder) []int64 {
+	infos []streamInfo, image string, disc int, dec TrackDecoder) []int64 {
 	const id, name = "split-audio", "Audio"
 
 	if dec == nil {
@@ -428,6 +432,11 @@ func checkSplitAudio(ctx context.Context, r *Result, l *Log, c *Cue, tracks []sp
 		if want := imageSamples(l, c); want > 0 && total.Samples() != want {
 			detail += fmt.Sprintf(" (%d samples, where the disc has %d)", total.Samples(), want)
 		}
+		// Say where they differ, if the rip's image is there to compare with. Not if
+		// a track is damaged: that is already named, and the rest follows from it.
+		if len(damaged) == 0 {
+			detail += "; " + whereTheyDiffer(ctx, dec, image, disc, tracks, files)
+		}
 		problems = append(problems, detail)
 	}
 	if len(problems) > 0 {
@@ -446,6 +455,71 @@ func checkSplitAudio(ctx context.Context, r *Result, l *Log, c *Cue, tracks []sp
 		r.add(id, name, StatusPass, "the tracks, in order, decode to CRC %s, the log's Copy CRC, and %s", total.CRC(), md5)
 	}
 	return decodedSamples(files)
+}
+
+// splitImage returns the path of the rip's image, the one FLAC file the cue
+// sheet names, if it is beside the log; or "".
+func splitImage(dir string, c *Cue) string {
+	if len(c.Files) != 1 || strings.ContainsAny(c.Files[0], `/\`) ||
+		!strings.EqualFold(filepath.Ext(c.Files[0]), ".flac") {
+		return ""
+	}
+	return findFile(dir, c.Files[0])
+}
+
+// whereTheyDiffer compares the tracks with the rip's image and says where they
+// differ, by track and position in it. The image is the audio EAC ripped, as the
+// log's CRC is, so it is what the tracks should be. files are what each track
+// decoded to, which say where each begins in the tracks as one stretch of audio.
+func whereTheyDiffer(ctx context.Context, dec TrackDecoder, image string, disc int, tracks []splitTrack, files []pcm.Fingerprint) string {
+	if image == "" {
+		return "the rip's image is not beside the log, so where they differ from it is not known"
+	}
+
+	paths := make([]string, len(tracks))
+	for i, t := range tracks {
+		paths[i] = t.Path
+	}
+	d, err := dec.Diff(ctx, []string{image}, paths)
+	var decodeErr *pcm.DecodeError
+	switch {
+	case errors.As(err, &decodeErr):
+		return fmt.Sprintf("the rip's image does not decode cleanly (%s), so where they differ from it is not known", decodeErr.Message)
+	case err != nil:
+		return fmt.Sprintf("where they differ from the rip's image could not be found: %v", err)
+	case d.Identical():
+		return "they are the same audio as the rip's image, which the log's CRC then disagrees with (riplog checks that)"
+	}
+
+	// Where in the tracks a sample of the image is.
+	locate := func(sample int64) string {
+		var start int64
+		for i, f := range files {
+			if sample < start+f.Samples() || i == len(files)-1 {
+				off := sample - start
+				return fmt.Sprintf("track %s, %s into it (sample %d)", trackLabel(disc, tracks[i].Number), msf(int(off/samplesPerSector)), off)
+			}
+			start += f.Samples()
+		}
+		return "no track"
+	}
+
+	var parts []string
+	if d.Differing > 0 {
+		parts = append(parts, fmt.Sprintf("the first difference from the rip's image is in %s, and %d %s differ in all, the last in %s",
+			locate(d.First), d.Differing, plural(d.Differing, "sample"), locate(d.Last)))
+	} else {
+		parts = append(parts, "the audio they have in common with the rip's image is the same")
+	}
+	if d.SamplesA != d.SamplesB {
+		how := "longer"
+		diff := d.SamplesB - d.SamplesA
+		if diff < 0 {
+			diff, how = -diff, "shorter"
+		}
+		parts = append(parts, fmt.Sprintf("the tracks are %s %s than the image", describeSize(diff), how))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // decodedSamples returns how many samples each file decoded to.

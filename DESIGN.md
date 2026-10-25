@@ -1253,7 +1253,11 @@ It checks that:
   so that together they hold the audio EAC ripped. This was confirmed for the
   tracks of a real rip laid end to end. Each track is also compared with what
   its own FLAC records of it, its length and the MD5 of its audio, so that
-  damage is traced to a track;
+  damage is traced to a track. When the CRC is not the log's and no track is
+  damaged, the tracks are compared with the rip's image, which the cue sheet
+  names and which is beside the log, to say where they differ: the track and the
+  place in it of the first and last differing sample, how many differ in all,
+  and how much longer or shorter the tracks are than the image;
 - each track is as long as the cue sheet says.
 
 The last is needed because the audio of a split can be exactly the rip's while

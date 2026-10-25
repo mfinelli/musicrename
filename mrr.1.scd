@@ -283,7 +283,9 @@ of a multi-disc album, whose discs share the directory, the disc being taken fro
 the log's name as in _Album (disc 1)_.log, and _00 Title_.flac for audio before
 track 1. There must be a file for each track of the log's table of contents. The
 tracks, decoded in order, must have the CRC the log records as its Copy CRC, and
-each must match the MD5 its own FLAC records. Each track must
+each must match the MD5 its own FLAC records. If the tracks do not have the log's
+CRC and the rip's image is beside the log, the tracks are compared with it, and
+the track and place in it of the first and last difference are reported. Each track must
 also be the length the cue sheet gives, with each pregap at the end of the track
 before it (at the start of the track it leads into is a warning), since a split
 can be cut a few samples off at every boundary and still hold exactly the audio
