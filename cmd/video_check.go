@@ -20,7 +20,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -115,7 +114,7 @@ func runVideoCheckSingle(out io.Writer, dir string, start time.Time) error {
 	checkPrintSummary(out, 1, "video", total, time.Since(start))
 
 	if result.HasWarnings() {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }
@@ -135,7 +134,7 @@ func runVideoCheckRoot(out io.Writer, root string, start time.Time) error {
 	checkPrintSummary(out, result.Checked, "video", total, time.Since(start))
 
 	if result.HasWarnings() {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }

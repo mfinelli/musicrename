@@ -170,7 +170,7 @@ func runRiplog(cmd *cobra.Command, args []string) error {
 	checkPrintSummary(out, len(logs), "log", findings, time.Since(start))
 
 	if failed {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }
