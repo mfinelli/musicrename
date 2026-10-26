@@ -19,7 +19,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -108,7 +107,7 @@ func runPlaylistCheck(cmd *cobra.Command, args []string) error {
 	checkPrintSummary(out, 1, "playlist tree", len(result.Warnings), time.Since(start))
 
 	if result.HasWarnings() {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }

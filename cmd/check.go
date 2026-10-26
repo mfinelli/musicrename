@@ -128,7 +128,7 @@ func runCheckLibrary(out io.Writer, root string, start time.Time) error {
 	checkPrintSummary(out, len(result.Albums), "album", total, time.Since(start))
 
 	if result.HasWarnings() {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }
@@ -151,7 +151,7 @@ func runCheckAlbum(out io.Writer, albumPath string, start time.Time) error {
 	checkPrintSummary(out, 1, "album", total, time.Since(start))
 
 	if result.HasWarnings() {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }
@@ -172,7 +172,7 @@ func runCheckTrack(out io.Writer, filePath string, start time.Time) error {
 	checkPrintSummary(out, 1, "track", total, time.Since(start))
 
 	if result.HasWarnings() {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }

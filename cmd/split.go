@@ -243,7 +243,7 @@ func runSplit(cmd *cobra.Command, args []string) error {
 	checkPrintSummary(out, len(logs), "split", failures, time.Since(start))
 
 	if failures > 0 {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }

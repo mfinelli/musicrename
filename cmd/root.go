@@ -18,9 +18,9 @@
 package cmd
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
+
+	"github.com/mfinelli/musicrename/internal/exitstatus"
 )
 
 var rootCmd = &cobra.Command{
@@ -44,9 +44,36 @@ Intended workflow:
 	Version:           "4.5.0",
 }
 
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
+// Execute runs the command line and returns the exit status for the process to
+// end with. A command that has something to say about its status returns it,
+// so that everything it deferred has run by the time the process ends.
+//
+// cobra reports the errors that commands return, except those that a command
+// has said it has reported (see quietExit).
+func Execute() int {
+	if err := rootCmd.Execute(); err != nil {
+		return exitstatus.Code(err)
 	}
+	return 0
+}
+
+// quietExit returns an error that ends the command with the status, which cobra
+// does not report: it cannot tell an error that has been reported from one that
+// has not, so it is told, here, that it is not to. Nothing else about how it
+// reports errors is changed.
+func quietExit(code int) error {
+	rootCmd.SilenceErrors = true
+	rootCmd.SilenceUsage = true
+	return exitstatus.New(code)
+}
+
+// exitFindings is what a command that audits something returns when it found
+// something, after it has printed what it found. It makes the process exit with
+// a non-zero status, which is how the check commands say that there are findings,
+// and nothing more: it is not an error to report.
+//
+// It is returned, and not acted on where it is found with os.Exit, so that the
+// command unwinds as it would for any other error, and what it deferred runs.
+func exitFindings() error {
+	return quietExit(1)
 }

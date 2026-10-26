@@ -1442,6 +1442,14 @@ heuristics.
 
 `check` commands report problems but do not silently repair them.
 
+### One exit point
+
+Only `main` ends the process. A command that has found something to report
+prints it and returns `exitFindings()`, which makes the exit status non-zero
+without cobra reporting an error of its own; one that has failed returns the
+error. `Execute` turns either into the exit status. Nothing below `main` calls
+`os.Exit`, so every deferred function runs before the process ends.
+
 ### No unnecessary persistent state
 
 Where possible, state is represented by the files being managed themselves
