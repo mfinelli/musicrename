@@ -4,7 +4,7 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
-## Unreleased
+## v4.6.0 — 2026-10-26
 
 - Add `compare` to compare audio between FLAC files, tracks, disc images, or rip
   logs, accounting for drive read offsets and unreadable samples.
