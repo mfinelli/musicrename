@@ -32,9 +32,18 @@ import (
 
 	"go.senan.xyz/taglib"
 
+	"github.com/mfinelli/musicrename/internal/lyrics"
 	"github.com/mfinelli/musicrename/internal/target"
 	"github.com/mfinelli/musicrename/internal/transcode"
 )
+
+// transcodeOmitTags are the tags that are not copied from a source file onto
+// its transcoded copy. They record where the library's lyrics came from, which
+// a device has no use for, and a Lyricsfile can be many times the size of the
+// lyrics themselves, which is just wasted space on a small card. A passthrough
+// copy is byte-for-byte identical to its source (see PrepareTrack) and so
+// keeps them.
+var transcodeOmitTags = []string{lyrics.SourceURLTag, lyrics.LyricsfileTag}
 
 // PrepareTrack produces a target-ready copy of the audio file at src,
 // written to dst: a plain byte-for-byte copy if src's extension is already
@@ -49,7 +58,7 @@ import (
 //
 // Tags are migrated (the same mechanism `check`/`inspect`/`lyrics` already
 // use, replacing dst's tags entirely, [taglib.Clear], rather than merging)
-// only on the transcode path. A transcode needs tags written regardless, since
+// only on the transcode path, and without the tags in transcodeOmitTags. A transcode needs tags written regardless, since
 // internal/transcode.Audio strips them outright (-map_metadata -1) and the
 // destination is already a different file by construction (there is no
 // byte-identity property to protect there).
@@ -88,6 +97,9 @@ func PrepareTrack(ctx context.Context, src, dst string, def target.Definition, a
 		tags, err := taglib.ReadTags(src)
 		if err != nil {
 			return fmt.Errorf("reading tags from %s: %w", src, err)
+		}
+		for _, key := range transcodeOmitTags {
+			delete(tags, key)
 		}
 		if err := taglib.WriteTags(dst, tags, taglib.Clear); err != nil {
 			return fmt.Errorf("writing tags to %s: %w", dst, err)

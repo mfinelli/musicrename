@@ -531,6 +531,11 @@ Current targets:
 Target-specific encoding policy is part of the target definition rather than
 being inferred from the source library.
 
+When audio is transcoded its tags are copied onto the new file, except
+`LRCLIB_URL` and `LYRICSFILE`: they only record where the library's lyrics came
+from, which a device has no use for, and a Lyricsfile can be many times the size
+of the lyrics themselves. Files copied byte-for-byte keep them.
+
 ### 8.3 Desired Selection
 
 An album may contain a target-specific manifest:
