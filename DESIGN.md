@@ -301,7 +301,20 @@ Lookup proceeds from increasingly relaxed matching:
 3. duration ±2 seconds
 4. fuzzy title/artist/album search
 
-Requests are rate-limited to 5 requests per second.
+Requests identify the tool with a `User-Agent` naming the project, its version,
+and a link to its repository, which LRCLIB's API documentation requires and
+which gets a higher rate allowance than an anonymous client. They are spaced at
+least 700 ms apart, which stays just under the roughly 90 requests per minute
+LRCLIB currently allows identified clients. Those figures are approximate and
+LRCLIB may change them, so the client also reacts to being limited: a `429` or
+`503` response is retried up to three times after waiting for the number of
+seconds in its `Retry-After` header (one second if it has none) plus a little
+random jitter. A `Retry-After` longer than a minute is not waited out. If `429`
+responses continue after the retries, the run stops with an error rather than
+moving on to the next track, because LRCLIB warns that continuing to send
+requests while being limited may result in a temporary ban. Tracks that already
+got lyrics keep them, and re-running skips those as usual. Other failures,
+including `500`, only fail the one track.
 
 Synced and unsynced lyrics are treated independently.
 

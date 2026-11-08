@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -80,6 +81,7 @@ func testFetchClient(base string) *lrclibClient {
 		http:    &http.Client{},
 		limiter: rate.NewLimiter(rate.Inf, 1),
 		base:    base,
+		sleep:   noSleep,
 	}
 }
 
@@ -508,6 +510,64 @@ func TestFetch(t *testing.T) {
 		require.NoError(t, err)
 		// The cancelled context causes the HTTP request to fail -> StatusFailed
 		assert.Equal(t, fmt.Sprintf("%d", summary.Embedded+summary.Failed+summary.Skipped+summary.NotFound), "1")
+	})
+}
+
+func TestFetchRateLimited(t *testing.T) {
+	t.Run("stops the run when LRCLIB keeps rate limiting", func(t *testing.T) {
+		var hits atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		var tracks []TrackInfo
+		for _, name := range []string{"01.flac", "02.flac", "03.flac"} {
+			path := testutil.MakeAudioFile(t, dir, name, nil)
+			tracks = append(tracks, TrackInfo{
+				Path: path, Title: name, Artist: "A", Album: "B", Duration: time.Second,
+			})
+		}
+
+		var reported []string
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, func(path string, _ LyricStatus) {
+			reported = append(reported, path)
+		})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrRateLimited)
+
+		// Only the first track was attempted: one request plus the retries,
+		// and no requests at all for the remaining tracks.
+		assert.Equal(t, int32(1+lrclibMaxRetries), hits.Load())
+		assert.Equal(t, Summary{Failed: 1}, summary)
+		assert.Equal(t, []string{tracks[0].Path}, reported)
+	})
+
+	t.Run("an ordinary failure does not stop the run", func(t *testing.T) {
+		var hits atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+
+		dir := t.TempDir()
+		var tracks []TrackInfo
+		for _, name := range []string{"01.flac", "02.flac"} {
+			path := testutil.MakeAudioFile(t, dir, name, nil)
+			tracks = append(tracks, TrackInfo{
+				Path: path, Title: name, Artist: "A", Album: "B", Duration: time.Second,
+			})
+		}
+
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		require.NoError(t, err)
+		assert.Equal(t, Summary{Failed: 2}, summary)
+		assert.Equal(t, int32(2), hits.Load())
 	})
 }
 

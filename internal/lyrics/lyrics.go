@@ -30,8 +30,12 @@
 //
 // Lyrics are fetched from the LRCLIB public API using a four-step strategy
 // that progressively relaxes the duration constraint before falling back to a
-// fuzzy title/artist/album search. Requests are rate-limited client-side to
-// five per second as a courtesy to the free public API.
+// fuzzy title/artist/album search. Requests identify the tool with a
+// User-Agent, as LRCLIB's API documentation requires, and are rate-limited
+// client-side to stay within the allowance for identified clients. A 429 or
+// 503 response is retried after waiting as long as the server's Retry-After
+// header asks; if LRCLIB keeps answering 429, Fetch stops the whole run with
+// ErrRateLimited instead of carrying on with the remaining tracks.
 //
 // The typical call sequence is:
 //
@@ -46,6 +50,7 @@ package lyrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -107,6 +112,11 @@ type Summary struct {
 // progress, if non-nil, is called after each track is processed with the
 // track's path and its outcome. The command layer passes a TTY-gated closure
 // for live terminal feedback; nil disables all progress output.
+//
+// Per-track failures are counted in the returned Summary and don't stop the
+// run. The one exception is LRCLIB rate limiting that persists after retrying:
+// the track that hit it is counted as failed, the run stops, and Fetch returns
+// the Summary so far along with an error wrapping ErrRateLimited.
 func Fetch(ctx context.Context, tracks []TrackInfo, force bool, progress func(string, LyricStatus)) (Summary, error) {
 	return fetch(ctx, newLrclibClient(), tracks, force, progress)
 }
@@ -152,7 +162,7 @@ func fetch(ctx context.Context, c *lrclibClient, tracks []TrackInfo, force bool,
 	var summary Summary
 
 	for _, track := range tracks {
-		status := processTrack(ctx, c, track, force)
+		status, err := processTrack(ctx, c, track, force)
 
 		switch status {
 		case StatusEmbedded:
@@ -168,25 +178,36 @@ func fetch(ctx context.Context, c *lrclibClient, tracks []TrackInfo, force bool,
 		if progress != nil {
 			progress(track.Path, status)
 		}
+
+		// Keep going after an ordinary failure, but never keep sending
+		// requests to a server that is telling us to slow down.
+		if err != nil {
+			return summary, err
+		}
 	}
 
 	return summary, nil
 }
 
 // processTrack handles the full lifecycle for a single track: skip check,
-// LRCLIB fetch, and tag write. It returns the final LyricStatus and never
-// returns an error (failures are captured as StatusFailed so the caller can
-// continue processing the remaining tracks).
-func processTrack(ctx context.Context, c *lrclibClient, track TrackInfo, force bool) LyricStatus {
+// LRCLIB fetch, and tag write. It returns the final LyricStatus. Failures are
+// captured as StatusFailed with a nil error so the caller can continue with
+// the remaining tracks; the only error returned is one wrapping
+// ErrRateLimited (alongside StatusFailed), which the caller should treat as a
+// reason to stop.
+func processTrack(ctx context.Context, c *lrclibClient, track TrackInfo, force bool) (LyricStatus, error) {
 	if status, skip := checkSkip(track.Path, force); skip {
-		return status
+		return status, nil
 	}
 
 	result, err := c.fetchForTrack(ctx, track.Title, track.Artist, track.Album, track.Duration)
 	if err != nil {
-		return StatusFailed
+		if errors.Is(err, ErrRateLimited) {
+			return StatusFailed, err
+		}
+		return StatusFailed, nil
 	}
-	return applyResult(track.Path, result)
+	return applyResult(track.Path, result), nil
 }
 
 // checkSkip reports whether processing should stop before ever contacting

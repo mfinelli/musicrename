@@ -8,6 +8,12 @@ my own reference.
 
 - `lyrics` now records which LRCLIB track the synced lyrics came from in a new
   `LRCLIB_URL` tag on FLAC files.
+- `lyrics` now identifies itself to LRCLIB with a `User-Agent`, as its API
+  documentation requires, and paces requests to stay within the rate limit for
+  identified clients (about 85 requests per minute, down from 5 per second).
+  `429` and `503` responses are retried after waiting for `Retry-After`; if
+  LRCLIB keeps rate limiting, `lyrics` now stops with an error instead of
+  continuing through the rest of the library.
 
 ## v4.6.0 — 2026-10-26
 

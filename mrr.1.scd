@@ -121,6 +121,12 @@ The search progressively relaxes the duration constraint (±1 s, ±2 s) before
 falling back to a fuzzy search; tracks with no result are skipped and reported
 in the summary.
 
+Requests identify mrr to LRCLIB and are spaced out to stay within its rate
+limits. If LRCLIB asks mrr to slow down, it waits as instructed and retries; if
+it keeps rate limiting, *mrr lyrics* stops early with an error instead of
+continuing. Tracks that already got lyrics keep them, and are skipped when it is
+run again later.
+
 Synced (LRC) lyrics are embedded in FLAC files only. Unsynced lyrics are
 embedded in MP3 and M4A via the normalized *LYRICS* tag. If only synced lyrics
 are available from LRCLIB for an MP3 or M4A track, that track is skipped.
