@@ -159,6 +159,50 @@ Existing lyrics tags are never overwritten unless *--force* is passed.
 	the matching strategy above entirely. Valid only in track mode (_path_
 	must be a single audio file).
 
+## mrr lyrics diff [_path_]
+
+Compares the lyrics embedded in audio files with what *mrr lyrics --force* would
+write to them now, without changing anything. Each file is looked up on LRCLIB
+the way *mrr lyrics* does it, and only what a refetch would write is compared:
+the plain lyrics and, for FLAC files, the synced lyrics and the word-synced
+Lyricsfile.
+
+Synced lyrics are compared as normalized text, apart from their timing, so that
+a retiming is reported as one (how many lines moved, and by how much) instead of
+every line having changed. The Lyricsfile is compared by what it says and not as
+text, since it is mostly timings. How the LRC or the YAML is formatted does not
+count as a difference.
+
+If _path_ is an audio file it is compared in full detail. Otherwise every album
+under _path_ is, and only the tracks that differ are listed. _path_ defaults to
+the current directory. A library takes one or more requests per track, at the
+pace LRCLIB asks for.
+
+Each track is marked *✓* if identical, *~* if changed, *+* if the file has no
+lyrics or lacks word-synced data that LRCLIB has, *✗* if LRCLIB has nothing to
+embed, and *!* if it could not be compared, which includes a Lyricsfile that is
+not valid YAML. Exits zero unless an error occurred. If LRCLIB keeps rate
+limiting, stops early with an error after printing what was compared.
+
+*--url*=_url-or-id_
+	Compare a single file with a specific LRCLIB track, by its URL or
+	numeric ID, instead of the one found by the matching strategy. Valid
+	only in track mode.
+
+*--full-context*
+	Show all of the lyrics in each diff, not only the lines around changes.
+
+*--raw*
+	Also show a line diff of the two Lyricsfile documents' text.
+
+*--skip-lyricsfile*
+	Compare as *mrr lyrics --skip-lyricsfile* would write: the Lyricsfile of
+	the record is ignored, and a stored one is reported as removed.
+
+*-v*, *--verbose*
+	Show the details of each track that differs, not only a line for it, and
+	list the lines that were retimed.
+
 ## mrr check [_path_]
 
 Audits a library or album for metadata and structural issues. Emits all

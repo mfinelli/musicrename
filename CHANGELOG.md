@@ -23,6 +23,12 @@ my own reference.
   transcoded files.
 - `lyrics` gains `--skip-lyricsfile`, which doesn't check or store a match's
   Lyricsfile, so a track whose document is not valid YAML still gets its lyrics.
+- Add `lyrics diff`, which shows what `lyrics --force` would change in the
+  lyrics of a file, album, or library without changing anything. Synced lyrics
+  are compared apart from their timing, so a retiming shows as one, and the
+  word-synced Lyricsfile is compared by what it says. Tracks that could gain
+  word-synced data are listed. `-v` adds details, `--full-context` shows whole
+  lyrics, and `--raw` also diffs the Lyricsfile text.
 
 ## v4.6.0 — 2026-10-26
 

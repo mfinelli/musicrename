@@ -209,11 +209,11 @@ func runLyricsTrackByID(ctx context.Context, out io.Writer, path string, id int,
 	return nil
 }
 
-// runLyricsAlbum handles album mode: a directory containing audio files directly.
-func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, opts lyrics.Options, start time.Time) error {
+// lyricsAlbumPaths returns the audio files directly inside dir, sorted.
+func lyricsAlbumPaths(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", dir, err)
+		return nil, fmt.Errorf("reading %s: %w", dir, err)
 	}
 
 	var paths []string
@@ -223,6 +223,52 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, opts lyrics.
 		}
 	}
 	sort.Strings(paths)
+	return paths, nil
+}
+
+// lyricsLibraryAlbum is one album found by scanning a library: where it is,
+// relative to the library root, and its audio files.
+type lyricsLibraryAlbum struct {
+	Rel   string
+	Paths []string
+}
+
+// lyricsLibraryAlbums scans the library at dir and returns its albums sorted
+// by location, each with its audio files sorted.
+func lyricsLibraryAlbums(dir string) ([]lyricsLibraryAlbum, error) {
+	albums, err := metadata.ScanLibrary(dir)
+	if err != nil {
+		return nil, fmt.Errorf("scanning library: %w", err)
+	}
+
+	sort.Slice(albums, func(i, j int) bool {
+		return albums[i].RootPath < albums[j].RootPath
+	})
+
+	out := make([]lyricsLibraryAlbum, 0, len(albums))
+	for _, album := range albums {
+		rel, err := filepath.Rel(dir, album.RootPath)
+		if err != nil {
+			rel = album.RootPath
+		}
+
+		paths := make([]string, 0, len(album.Tracks))
+		for _, t := range album.Tracks {
+			paths = append(paths, t.Path)
+		}
+		sort.Strings(paths)
+
+		out = append(out, lyricsLibraryAlbum{Rel: rel, Paths: paths})
+	}
+	return out, nil
+}
+
+// runLyricsAlbum handles album mode: a directory containing audio files directly.
+func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, opts lyrics.Options, start time.Time) error {
+	paths, err := lyricsAlbumPaths(dir)
+	if err != nil {
+		return err
+	}
 
 	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
@@ -244,14 +290,10 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, opts lyrics.
 
 // runLyricsLibrary handles library mode: a directory containing album subdirectories.
 func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, opts lyrics.Options, start time.Time) error {
-	albums, err := metadata.ScanLibrary(dir)
+	albums, err := lyricsLibraryAlbums(dir)
 	if err != nil {
-		return fmt.Errorf("scanning library: %w", err)
+		return err
 	}
-
-	sort.Slice(albums, func(i, j int) bool {
-		return albums[i].RootPath < albums[j].RootPath
-	})
 
 	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
@@ -264,26 +306,16 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, opts lyric
 	var total lyrics.Summary
 
 	for _, album := range albums {
-		relPath, err := filepath.Rel(dir, album.RootPath)
-		if err != nil {
-			relPath = album.RootPath
-		}
-		lipgloss.Fprintln(out, "  "+style.Name.Render(relPath))
+		lipgloss.Fprintln(out, "  "+style.Name.Render(album.Rel))
 
-		paths := make([]string, 0, len(album.Tracks))
-		for _, t := range album.Tracks {
-			paths = append(paths, t.Path)
-		}
-		sort.Strings(paths)
-
-		tracks, warnings := buildTrackInfos(paths)
+		tracks, warnings := buildTrackInfos(album.Paths)
 		for _, w := range warnings {
 			lipgloss.Fprintln(out, "    "+style.Warn.Render("⚠  "+w))
 		}
 
 		summary, err := lyrics.Fetch(ctx, tracks, opts, lyricsProgressCallback(out, "    "))
 		if err != nil {
-			return fmt.Errorf("processing %s: %w", relPath, err)
+			return fmt.Errorf("processing %s: %w", album.Rel, err)
 		}
 
 		total.Embedded += summary.Embedded

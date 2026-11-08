@@ -116,6 +116,18 @@ mrr lyrics --url https://lrclib.net/api/get/12345 \
   "~/music/b/beyonce/01 dangerously in love.flac"
 ```
 
+To see what a refetch would change before doing one, `lyrics diff` compares the
+lyrics in the files with what LRCLIB would give them now, without changing
+anything. Synced lyrics are compared apart from their timing, so a retiming
+shows up as one, and the word-synced Lyricsfile is compared by what it says. On
+an album or a library it lists only the tracks that differ, including the ones
+that could now gain word-synced data.
+
+```sh
+mrr lyrics diff ~/music/b/beyonce
+mrr lyrics diff --full-context "~/music/b/beyonce/01 dangerously in love.flac"
+```
+
 ### `check`
 
 Audits for metadata completeness, album consistency, audio quality tags

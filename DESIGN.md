@@ -370,6 +370,70 @@ additional artists appended to the track title) prevent the normal strategy from
 finding the correct match, even though the correct match is known and easily
 found by hand on lrclib.net.
 
+### 6.1 Comparing Lyrics
+
+`mrr lyrics diff` shows what `mrr lyrics --force` would change in a file's
+lyrics, without changing anything, so that a refetch of lyrics already curated
+does not have to be done blind. It is read-only.
+
+What a refetch would write is asked of the code that writes it: the same
+function builds the tags for a write and for a comparison, and the comparison is
+between those tags and the file's current ones. The two cannot drift apart. It
+also means only what a write would set is compared. A file's plain lyrics are
+not a difference from a record that has none, for instance, because a refetch
+leaves them alone, and the Lyricsfile is only part of a comparison when the
+synced lyrics are, since that is when a write replaces it. A file is looked up
+the way `lyrics` looks it up, including `--url` for a specific track, and the
+diff says whether the record found is the one named by the file's `LRCLIB_URL`
+tag (the same, a different one, or not recorded). That is information, not a
+difference: only the lyrics decide whether a file differs.
+
+Plain lyrics are compared as lines, ignoring line endings, trailing whitespace,
+and blank lines at either end, but not the blank lines between stanzas. In a
+line that was edited in place, the words that changed are highlighted, if the
+two versions are alike enough for that to mean anything.
+
+Synced lyrics are compared in their normalized form, the one that would be
+embedded, so that formatting the normalization removes does not count. The words
+of the lines are diffed apart from their timestamps, and the lines that match
+are then compared for time. This is because LRCLIB edits are often a retiming:
+with whole timestamps in the diff, an offset correction would show every line as
+changed and bury any real edit. A retiming is instead one summary, how many
+lines moved and by how much, "all by +300 ms" when they moved together (to
+within the two centiseconds an LRC timestamp has) and the median and largest
+change when not. Lines with no text, which only mark gaps, and lines with no
+timestamp are not compared, and a line with several timestamps counts once for
+each.
+
+A Lyricsfile is mostly millisecond timings, so a line diff of it is unreadable.
+The documents are read and compared for what they say: the version, the metadata
+fields, the text of the lines, how line and word times differ (summarized as for
+synced lyrics), lines split into words differently, lines that gained or lost
+word timings, and the plain lyrics. Documents that differ only in how the YAML
+is written are identical. The format is a draft, so only the fields above are
+read, and a difference that none of them shows is reported as being in fields
+the command does not read. `--raw` adds a line diff of the two documents' text
+for those cases. A file with no Lyricsfile whose record has one is its own
+result, "word-sync available", since finding those files is a main use of the
+command.
+
+Each file gets one result: identical, changed, word-sync available (the lyrics
+are the same and the record has word-synced data the file lacks), new (the file
+has no lyrics and LRCLIB has some), not found (nothing LRCLIB has could be
+embedded in this format), or failed. A Lyricsfile that is not valid YAML is a
+failure, as it is for `lyrics`, and `--skip-lyricsfile` compares as
+`lyrics --skip-lyricsfile` would write, which is how to compare such a file
+anyway.
+
+A single file is shown in full detail. For an album or a library, only the files
+that differ are listed, one line each, and the identical ones are only counted;
+`-v` adds the details of each, and the list of retimed lines. Each diff keeps
+three lines of context around a change, or all of the lyrics with
+`--full-context`. The exit status is zero unless something went wrong, since
+differences are what the command is for, not findings. A comparison costs one or
+more LRCLIB requests per file, paced as for `lyrics`, and persistent rate
+limiting stops the run the same way, after printing what was compared.
+
 ---
 
 ## 7. Music Videos
