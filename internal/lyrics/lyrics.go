@@ -18,8 +18,10 @@
 // Package lyrics fetches lyrics from LRCLIB and embeds them into audio file
 // tags. It supports FLAC, MP3, and M4A files with format-appropriate storage:
 //
-//   - FLAC: synced LRC text in LYRICS, plain text in UNSYNCEDLYRICS, and the
-//     lrclib.net page of the track the synced lyrics came from in LRCLIB_URL.
+//   - FLAC: synced LRC text in LYRICS, plain text in UNSYNCEDLYRICS, the
+//     lrclib.net page of the track the synced lyrics came from in LRCLIB_URL,
+//     and, when that track has word-level timings, its raw Lyricsfile YAML
+//     document in LYRICSFILE.
 //   - MP3:  plain text in USLT (via go-taglib's normalised LYRICS key).
 //   - M4A:  plain text in ©lyr (via go-taglib's normalised LYRICS key).
 //
@@ -57,6 +59,7 @@ import (
 	"time"
 
 	"go.senan.xyz/taglib"
+	"go.yaml.in/yaml/v3"
 )
 
 // SourceURLTag is the name of the custom tag that records which LRCLIB track
@@ -65,6 +68,16 @@ import (
 // written together with synced lyrics, which are only embedded in FLAC files,
 // so it only ever appears on FLAC files.
 const SourceURLTag = "LRCLIB_URL"
+
+// LyricsfileTag is the name of the custom tag that holds the raw Lyricsfile
+// YAML document (https://github.com/tranxuanthang/lyricsfile) of the LRCLIB
+// track a file's synced lyrics came from, for tracks that have word-level
+// timings. It is stored verbatim, as LRCLIB returned it, after checking only
+// that it parses as YAML, so that the data is on hand if a future player or
+// tool can use it. Like SourceURLTag it is written together with the synced
+// lyrics, so it only ever appears on FLAC files, and it is removed again if
+// the synced lyrics are replaced by ones from a record without word sync.
+const LyricsfileTag = "LYRICSFILE"
 
 // LyricStatus represents the outcome for a single track after processing.
 type LyricStatus uint8
@@ -243,7 +256,13 @@ func applyResult(path string, result *lrclibTrack) LyricStatus {
 		sourceURL = TrackURL(result.ID)
 	}
 
-	embedded, err := embedLyrics(path, result.SyncedLyrics, result.PlainLyrics, sourceURL)
+	embedded, err := embedLyrics(path, embedInput{
+		Synced:     result.SyncedLyrics,
+		Plain:      result.PlainLyrics,
+		SourceURL:  sourceURL,
+		WordSynced: result.HasWordSync,
+		Lyricsfile: result.Lyricsfile,
+	})
 	if err != nil {
 		return StatusFailed
 	}
@@ -285,36 +304,67 @@ func hasLyrics(path string) (bool, error) {
 	}
 }
 
+// embedInput is the LRCLIB data embedLyrics may write to a file's tags.
+type embedInput struct {
+	Synced    string // line-synced LRC text
+	Plain     string // plain, unsynced text
+	SourceURL string // lrclib.net page of the record, for SourceURLTag
+
+	// WordSynced reports whether the record has word-level timings, and
+	// Lyricsfile is its raw Lyricsfile YAML document, for LyricsfileTag.
+	WordSynced bool
+	Lyricsfile string
+}
+
 // embedLyrics writes synced and/or plain lyrics to the audio file at path.
 // Format-specific rules from the design doc:
 //
 //   - FLAC: synced LRC text -> LYRICS (after standardisation), plain -> UNSYNCEDLYRICS.
-//     When sourceURL is non-empty it is written to SourceURLTag in the same
-//     write as the synced lyrics, so the two can't disagree. Plain-only results
-//     don't get a SourceURLTag.
+//     Whenever synced lyrics are written, SourceURLTag and LyricsfileTag are
+//     written or removed in the same write, so that they always describe the
+//     same record as LYRICS and can't be left over from a different one:
+//     SourceURLTag is set when in.SourceURL is non-empty, and LyricsfileTag is
+//     set when in.WordSynced is true. A word-synced record whose Lyricsfile is
+//     empty or isn't valid YAML is an error and nothing at all is written, so
+//     that the file still has no lyrics and a later run retries it, instead of
+//     being skipped for already having lyrics but missing the word-sync data.
+//     Plain-only results don't touch either tag.
 //   - MP3/M4A: plain text -> LYRICS only. Tracks with only synced lyrics
-//     available are not embedded (returns false, nil).
+//     available are not embedded (returns false, nil), and the Lyricsfile is
+//     ignored, including when it is invalid.
 //
 // Returns (true, nil) when at least one tag was written, (false, nil) when
 // nothing was written, and (false, err) on failure.
-func embedLyrics(path, synced, plain, sourceURL string) (bool, error) {
+func embedLyrics(path string, in embedInput) (bool, error) {
 	tags := make(map[string][]string)
 
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".flac":
-		if synced != "" {
-			tags[taglib.Lyrics] = []string{standardizeLRC(synced)}
-			if sourceURL != "" {
-				tags[SourceURLTag] = []string{sourceURL}
+		if in.Synced != "" {
+			tags[taglib.Lyrics] = []string{standardizeLRC(in.Synced)}
+
+			// An empty value makes go-taglib delete the key, which is how
+			// a tag left over from the file's previous lyrics is removed.
+			tags[SourceURLTag] = []string{}
+			if in.SourceURL != "" {
+				tags[SourceURLTag] = []string{in.SourceURL}
+			}
+
+			tags[LyricsfileTag] = []string{}
+			if in.WordSynced {
+				if err := validateLyricsfile(in.Lyricsfile); err != nil {
+					return false, err
+				}
+				tags[LyricsfileTag] = []string{in.Lyricsfile}
 			}
 		}
-		if plain != "" {
-			tags["UNSYNCEDLYRICS"] = []string{plain}
+		if in.Plain != "" {
+			tags["UNSYNCEDLYRICS"] = []string{in.Plain}
 		}
 	default: // .mp3, .m4a
 		// Synced-only tracks are not embedded for these formats per design.
-		if plain != "" {
-			tags[taglib.Lyrics] = []string{plain}
+		if in.Plain != "" {
+			tags[taglib.Lyrics] = []string{in.Plain}
 		}
 	}
 
@@ -333,4 +383,26 @@ func embedLyrics(path, synced, plain, sourceURL string) (bool, error) {
 		return false, fmt.Errorf("write tags: %w", err)
 	}
 	return true, nil
+}
+
+// validateLyricsfile reports why doc can't be stored in LyricsfileTag: it's
+// empty, isn't valid YAML, has a duplicate key (which the Lyricsfile draft
+// specification forbids and the YAML decoder rejects), or isn't a mapping at
+// the top level. That is deliberately all it checks. The format is still a
+// draft that LRCLIB doesn't enforce completely, so rejecting a document for
+// breaking a rule of the specification could fail tracks whose lyrics are fine,
+// and the document is stored verbatim either way; checking the version and
+// the rest is for whatever later reads it.
+func validateLyricsfile(doc string) error {
+	if strings.TrimSpace(doc) == "" {
+		return errors.New("lyricsfile: record has word sync but no lyricsfile")
+	}
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(doc), &parsed); err != nil {
+		return fmt.Errorf("lyricsfile: invalid YAML: %w", err)
+	}
+	if len(parsed) == 0 {
+		return errors.New("lyricsfile: not a YAML mapping")
+	}
+	return nil
 }

@@ -134,6 +134,15 @@ are available from LRCLIB for an MP3 or M4A track, that track is skipped.
 When synced lyrics are embedded, the lrclib.net page of the track they came from
 is recorded in the *LRCLIB_URL* tag and *mrr inspect* will report it.
 
+If that track has word-level timings, its Lyricsfile
+(https://github.com/tranxuanthang/lyricsfile) YAML document is also stored,
+unchanged, in the *LYRICSFILE* tag, and *mrr inspect* reports whether it is
+there. Only FLAC files get it. If the document is missing or is not valid YAML,
+that track is reported as failed and nothing is embedded for it, so that running
+again retries it. Like *LRCLIB_URL*, it is replaced or removed together with the
+synced lyrics. Files that already have lyrics are skipped, so they only get it
+with *--force*.
+
 Existing lyrics tags are never overwritten unless *--force* is passed.
 
 *--force*

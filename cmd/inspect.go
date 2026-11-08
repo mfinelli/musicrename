@@ -95,12 +95,13 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	trackNum, _, _ := strings.Cut(getFirst(taglib.TrackNumber), "/")
 	discNum, _, _ := strings.Cut(getFirst(taglib.DiscNumber), "/")
 
-	var syncedLyrics, unsyncedLyrics, lyricsSource string
+	var syncedLyrics, unsyncedLyrics, lyricsSource, lyricsfile string
 	switch ext {
 	case ".flac":
 		syncedLyrics = getFirst(taglib.Lyrics)
 		unsyncedLyrics = getFirst("UNSYNCEDLYRICS")
 		lyricsSource = getFirst(lyrics.SourceURLTag)
+		lyricsfile = getFirst(lyrics.LyricsfileTag)
 	default: // .mp3, .m4a: plain text is stored in the LYRICS tag
 		unsyncedLyrics = getFirst(taglib.Lyrics)
 	}
@@ -172,6 +173,11 @@ func runInspect(cmd *cobra.Command, args []string) error {
 
 	if ext == ".flac" {
 		inspectPrintField(out, "Synced", inspectLyricsPreview(syncedLyrics))
+		wordSynced := ""
+		if lyricsfile != "" {
+			wordSynced = "yes"
+		}
+		inspectPrintField(out, "Word-synced", inspectDash(wordSynced))
 		inspectPrintField(out, "LRCLIB", inspectDash(lyricsSource))
 	}
 	inspectPrintField(out, "Unsynced", inspectLyricsPreview(unsyncedLyrics))

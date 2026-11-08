@@ -332,6 +332,24 @@ The LRCLIB track the synced lyrics came from is recorded in a custom
 (`https://lrclib.net/tracks/<id>`). A result with only plain lyrics does _not_
 write the tag.
 
+When that track has word-level timings (LRCLIB's `hasWordSync`), its
+[Lyricsfile](https://github.com/tranxuanthang/lyricsfile) YAML document is
+stored in a `LYRICSFILE` tag, FLAC only, so that the data is on hand for a
+future player or migration. The format is still a draft, so the document is
+stored verbatim, exactly as LRCLIB returned it, and the only check made before
+storing it is that it parses as YAML (a mapping, with no duplicate keys), since
+checking its version and timings is for whatever reads it later. If a
+word-synced record's document is missing or doesn't parse, the track fails and
+nothing is embedded for it, not even the lyrics that were fine: a file with only
+part of the data would count as already having lyrics and be skipped on every
+later run, whereas a failed track is retried. This check only applies when the
+document would be stored, so it never fails a track in another format. The tag
+is written in the same operation as the synced lyrics, like `LRCLIB_URL`, so the
+two always describe the same record: when synced lyrics are replaced by those of
+a record that is not word-synced, both tags are removed or replaced in that same
+write instead of being left over from the previous record. A result with only
+plain lyrics changes neither.
+
 Existing lyrics are preserved unless `--force` is used.
 
 LRC timestamps are normalized before being embedded, including normalization of

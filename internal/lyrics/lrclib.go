@@ -105,6 +105,13 @@ type lrclibTrack struct {
 	Instrumental bool    `json:"instrumental"`
 	PlainLyrics  string  `json:"plainLyrics"`
 	SyncedLyrics string  `json:"syncedLyrics"`
+
+	// HasWordSync reports whether Lyricsfile contains word-level timings.
+	// Lyricsfile is the raw Lyricsfile YAML document, which LRCLIB's API
+	// documentation says every record includes. See embedLyrics for how
+	// they're stored.
+	HasWordSync bool   `json:"hasWordSync"`
+	Lyricsfile  string `json:"lyricsfile"`
 }
 
 // lrclibClient wraps an HTTP client with a token-bucket rate limiter so that
