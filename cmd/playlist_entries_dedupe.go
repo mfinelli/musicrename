@@ -89,7 +89,7 @@ func runPlaylistEntriesDedupe(cmd *cobra.Command, args []string) error {
 
 	if check {
 		fmt.Fprintf(out, "%d duplicate entries found\n", removed)
-		os.Exit(1)
+		return exitFindings()
 	}
 
 	if dryRun {

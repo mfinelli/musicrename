@@ -190,7 +190,7 @@ func runSpectrum(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%d %s could not be analyzed", failed, pluralTracks(failed))
 	}
 	if flagged > 0 {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }

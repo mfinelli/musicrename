@@ -17,8 +17,14 @@
 
 package main
 
-import "github.com/mfinelli/musicrename/cmd"
+import (
+	"os"
 
+	"github.com/mfinelli/musicrename/cmd"
+)
+
+// main is the only place the process is ended: the commands return, and so
+// everything they deferred has run by now.
 func main() {
-	cmd.Execute()
+	os.Exit(cmd.Execute())
 }

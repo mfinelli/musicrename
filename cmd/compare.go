@@ -139,7 +139,7 @@ func runCompare(cmd *cobra.Command, args []string) error {
 	checkPrintSummary(out, 1, "comparison", res.Count(riplog.StatusWarning)+res.Count(riplog.StatusError), time.Since(start))
 
 	if res.Failed() {
-		os.Exit(1)
+		return exitFindings()
 	}
 	return nil
 }
