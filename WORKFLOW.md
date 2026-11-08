@@ -88,6 +88,13 @@ Homepage: <https://www.foobar2000.org/>
 Homepage: <https://picard.musicbrainz.org/>
 
 - Used for metadata tagging/lookup.
+- During first start wizard select the following settings:
+  - Don't check rename or move files (we use musicrename for this)
+  - Don't check any of the artwork options (we source artwork from elsewhere or
+    even potentially the same musicbrainz artwork only manually)
+  - Select to fetch detailed track relationships (performers, composers, etc)
+  - Don't check to convert unicode punctuation to ASCII
+  - Don't necessarily need to check for plugin or documentation updates
 - Requires a custom tagger script (adapted from the Navidrome project),
   saved/named "Navidrome" in Picard's scripting options:
 
