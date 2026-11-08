@@ -29,6 +29,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.senan.xyz/taglib"
 
+	"github.com/mfinelli/musicrename/internal/lyrics"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
 	"github.com/mfinelli/musicrename/internal/sanitize"
@@ -94,11 +95,12 @@ func runInspect(cmd *cobra.Command, args []string) error {
 	trackNum, _, _ := strings.Cut(getFirst(taglib.TrackNumber), "/")
 	discNum, _, _ := strings.Cut(getFirst(taglib.DiscNumber), "/")
 
-	var syncedLyrics, unsyncedLyrics string
+	var syncedLyrics, unsyncedLyrics, lyricsSource string
 	switch ext {
 	case ".flac":
 		syncedLyrics = getFirst(taglib.Lyrics)
 		unsyncedLyrics = getFirst("UNSYNCEDLYRICS")
+		lyricsSource = getFirst(lyrics.SourceURLTag)
 	default: // .mp3, .m4a: plain text is stored in the LYRICS tag
 		unsyncedLyrics = getFirst(taglib.Lyrics)
 	}
@@ -170,6 +172,7 @@ func runInspect(cmd *cobra.Command, args []string) error {
 
 	if ext == ".flac" {
 		inspectPrintField(out, "Synced", inspectLyricsPreview(syncedLyrics))
+		inspectPrintField(out, "LRCLIB", inspectDash(lyricsSource))
 	}
 	inspectPrintField(out, "Unsynced", inspectLyricsPreview(unsyncedLyrics))
 

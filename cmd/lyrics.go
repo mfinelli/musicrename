@@ -43,7 +43,9 @@ var lyricsCmd = &cobra.Command{
 file tags. Supports FLAC, MP3, and M4A files.
 
 For FLAC files, synced (LRC) lyrics are stored in the LYRICS tag and plain
-text in UNSYNCEDLYRICS. For MP3 and M4A files, plain text lyrics are stored
+text in UNSYNCEDLYRICS. The lrclib.net page of the track the synced lyrics came
+from is recorded in the LRCLIB_URL tag, so it can be opened in a browser to
+inspect it later. For MP3 and M4A files, plain text lyrics are stored
 in the LYRICS tag (USLT / ©lyr); synced-only results are skipped for these
 formats.
 

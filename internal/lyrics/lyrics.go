@@ -18,7 +18,8 @@
 // Package lyrics fetches lyrics from LRCLIB and embeds them into audio file
 // tags. It supports FLAC, MP3, and M4A files with format-appropriate storage:
 //
-//   - FLAC: synced LRC text in LYRICS, plain text in UNSYNCEDLYRICS.
+//   - FLAC: synced LRC text in LYRICS, plain text in UNSYNCEDLYRICS, and the
+//     lrclib.net page of the track the synced lyrics came from in LRCLIB_URL.
 //   - MP3:  plain text in USLT (via go-taglib's normalised LYRICS key).
 //   - M4A:  plain text in ©lyr (via go-taglib's normalised LYRICS key).
 //
@@ -52,6 +53,13 @@ import (
 
 	"go.senan.xyz/taglib"
 )
+
+// SourceURLTag is the name of the custom tag that records which LRCLIB track
+// a file's synced lyrics came from, as the lrclib.net page for that track
+// (see TrackURL) so that it can be opened in a browser to inspect. It is
+// written together with synced lyrics, which are only embedded in FLAC files,
+// so it only ever appears on FLAC files.
+const SourceURLTag = "LRCLIB_URL"
 
 // LyricStatus represents the outcome for a single track after processing.
 type LyricStatus uint8
@@ -207,7 +215,14 @@ func applyResult(path string, result *lrclibTrack) LyricStatus {
 		return StatusNotFound
 	}
 
-	embedded, err := embedLyrics(path, result.SyncedLyrics, result.PlainLyrics)
+	// An ID of zero means the response didn't identify the track (LRCLIB
+	// IDs start at one), in which case there's nothing to link to.
+	var sourceURL string
+	if result.ID > 0 {
+		sourceURL = TrackURL(result.ID)
+	}
+
+	embedded, err := embedLyrics(path, result.SyncedLyrics, result.PlainLyrics, sourceURL)
 	if err != nil {
 		return StatusFailed
 	}
@@ -253,18 +268,24 @@ func hasLyrics(path string) (bool, error) {
 // Format-specific rules from the design doc:
 //
 //   - FLAC: synced LRC text -> LYRICS (after standardisation), plain -> UNSYNCEDLYRICS.
+//     When sourceURL is non-empty it is written to SourceURLTag in the same
+//     write as the synced lyrics, so the two can't disagree. Plain-only results
+//     don't get a SourceURLTag.
 //   - MP3/M4A: plain text -> LYRICS only. Tracks with only synced lyrics
 //     available are not embedded (returns false, nil).
 //
 // Returns (true, nil) when at least one tag was written, (false, nil) when
 // nothing was written, and (false, err) on failure.
-func embedLyrics(path, synced, plain string) (bool, error) {
+func embedLyrics(path, synced, plain, sourceURL string) (bool, error) {
 	tags := make(map[string][]string)
 
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".flac":
 		if synced != "" {
 			tags[taglib.Lyrics] = []string{standardizeLRC(synced)}
+			if sourceURL != "" {
+				tags[SourceURLTag] = []string{sourceURL}
+			}
 		}
 		if plain != "" {
 			tags["UNSYNCEDLYRICS"] = []string{plain}

@@ -314,6 +314,11 @@ Synced and unsynced lyrics are treated independently.
 For MP3 and M4A, synced lyrics are not converted into unsynced lyrics merely to
 make them fit the format.
 
+The LRCLIB track the synced lyrics came from is recorded in a custom
+`LRCLIB_URL` tag as the track's lrclib.net page
+(`https://lrclib.net/tracks/<id>`). A result with only plain lyrics does _not_
+write the tag.
+
 Existing lyrics are preserved unless `--force` is used.
 
 LRC timestamps are normalized before being embedded, including normalization of

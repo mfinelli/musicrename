@@ -93,7 +93,10 @@ mrr rename --dry-run ~/music
 Fetches lyrics from [LRCLIB](https://lrclib.net) and embeds them into audio
 tags. Queries by title, artist, album, and duration; progressively relaxes the
 duration constraint before falling back to a fuzzy search. Synced (LRC) lyrics
-are embedded in FLAC files; unsynced lyrics are embedded in MP3 and M4A.
+are embedded in FLAC files; unsynced lyrics are embedded in MP3 and M4A. For
+FLAC files the lrclib.net page of the track the synced lyrics came from is also
+recorded in a `LRCLIB_URL` tag, which `inspect` shows, so you can open it in a
+browser and see where the lyrics came from.
 
 ```sh
 mrr lyrics --force ~/music/b/beyonce

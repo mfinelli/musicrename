@@ -82,3 +82,17 @@ func TestParseID(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestTrackURL(t *testing.T) {
+	t.Run("builds the lrclib.net track page", func(t *testing.T) {
+		assert.Equal(t, "https://lrclib.net/tracks/764609", TrackURL(764609))
+	})
+
+	t.Run("round-trips through ParseID", func(t *testing.T) {
+		for _, id := range []int{1, 42, 764609} {
+			got, err := ParseID(TrackURL(id))
+			require.NoError(t, err)
+			assert.Equal(t, id, got)
+		}
+	})
+}

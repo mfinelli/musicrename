@@ -23,6 +23,17 @@ import (
 	"strings"
 )
 
+// trackURLBase is the lrclib.net page for a track, which unlike the API
+// endpoints is meant to be opened in a browser.
+const trackURLBase = "https://lrclib.net/tracks/"
+
+// TrackURL returns the lrclib.net page for the track with the given ID, e.g.
+// "https://lrclib.net/tracks/764609". ParseID accepts it, so a stored URL can
+// be passed straight back to --url.
+func TrackURL(id int) string {
+	return trackURLBase + strconv.Itoa(id)
+}
+
 // ParseID extracts a numeric LRCLIB track ID from s. s may be:
 //
 //   - a bare numeric ID ("12345")

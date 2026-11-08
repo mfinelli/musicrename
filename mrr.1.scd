@@ -125,6 +125,9 @@ Synced (LRC) lyrics are embedded in FLAC files only. Unsynced lyrics are
 embedded in MP3 and M4A via the normalized *LYRICS* tag. If only synced lyrics
 are available from LRCLIB for an MP3 or M4A track, that track is skipped.
 
+When synced lyrics are embedded, the lrclib.net page of the track they came from
+is recorded in the *LRCLIB_URL* tag and *mrr inspect* will report it.
+
 Existing lyrics tags are never overwritten unless *--force* is passed.
 
 *--force*
