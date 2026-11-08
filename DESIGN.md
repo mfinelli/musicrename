@@ -350,6 +350,14 @@ a record that is not word-synced, both tags are removed or replaced in that same
 write instead of being left over from the previous record. A result with only
 plain lyrics changes neither.
 
+`--skip-lyricsfile` leaves the Lyricsfile out: it is neither checked nor stored,
+so a word-synced match whose document is not valid YAML still gets its lyrics
+embedded, which is otherwise the only way past such a record short of `--url`
+with a different one. It does not leave an existing `LYRICSFILE` tag alone when
+the synced lyrics are replaced, since that would keep a document that describes
+lyrics which are gone; the tag is removed, exactly as when the new record has no
+word sync.
+
 Existing lyrics are preserved unless `--force` is used.
 
 LRC timestamps are normalized before being embedded, including normalization of

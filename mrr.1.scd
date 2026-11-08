@@ -139,14 +139,20 @@ If that track has word-level timings, its Lyricsfile
 unchanged, in the *LYRICSFILE* tag, and *mrr inspect* reports whether it is
 there. Only FLAC files get it. If the document is missing or is not valid YAML,
 that track is reported as failed and nothing is embedded for it, so that running
-again retries it. Like *LRCLIB_URL*, it is replaced or removed together with the
-synced lyrics. Files that already have lyrics are skipped, so they only get it
-with *--force*.
+again retries it, unless *--skip-lyricsfile* is passed. Like *LRCLIB_URL*, it is
+replaced or removed together with the synced lyrics. Files that already have
+lyrics are skipped, so they only get it with *--force*.
 
 Existing lyrics tags are never overwritten unless *--force* is passed.
 
 *--force*
 	Re-fetch and overwrite existing lyrics tags.
+
+*--skip-lyricsfile*
+	Do not store the track's Lyricsfile in the *LYRICSFILE* tag. It is not
+	checked either, so a track whose document is not valid YAML still gets
+	its lyrics embedded. If the synced lyrics of a file are replaced (see
+	*--force*), any *LYRICSFILE* tag it has is removed with them.
 
 *--url*=_url-or-id_
 	Fetch a specific LRCLIB track directly by its URL or numeric ID, skipping

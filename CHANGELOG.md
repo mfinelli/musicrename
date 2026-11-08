@@ -21,6 +21,8 @@ my own reference.
   and has nothing embedded, so a later run retries it. `inspect` shows whether
   it is there. `sync sdcard` no longer copies `LRCLIB_URL` or `LYRICSFILE` into
   transcoded files.
+- `lyrics` gains `--skip-lyricsfile`, which doesn't check or store a match's
+  Lyricsfile, so a track whose document is not valid YAML still gets its lyrics.
 
 ## v4.6.0 — 2026-10-26
 

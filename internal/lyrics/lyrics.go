@@ -41,7 +41,7 @@
 //
 // The typical call sequence is:
 //
-//	summary, err := lyrics.Fetch(ctx, tracks, false, func(path string, status lyrics.LyricStatus) {
+//	summary, err := lyrics.Fetch(ctx, tracks, lyrics.Options{}, func(path string, status lyrics.LyricStatus) {
 //	    fmt.Printf("\r  → %s", filepath.Base(path))
 //	})
 //
@@ -106,6 +106,21 @@ type TrackInfo struct {
 	Duration time.Duration
 }
 
+// Options controls how Fetch and FetchByID treat the files they are given.
+// The zero value is the default behavior.
+type Options struct {
+	// Force re-fetches and overwrites the lyrics of files that already have
+	// some, instead of skipping them.
+	Force bool
+
+	// SkipLyricsfile leaves a record's Lyricsfile out entirely. It is not
+	// checked, so even one that isn't valid YAML can't fail the track, and
+	// it is not stored. Any LyricsfileTag the file already has is removed
+	// along with the lyrics it described, exactly as if the new record had
+	// no word sync, so that the tag never outlives its lyrics.
+	SkipLyricsfile bool
+}
+
 // Summary holds aggregate counts from a Fetch run, suitable for the
 // end-of-run summary line printed by the cobra command.
 type Summary struct {
@@ -119,8 +134,8 @@ type Summary struct {
 // primary entry point for the lyrics package.
 //
 // For each track the four-step LRCLIB fetch strategy is attempted. Existing
-// lyrics tags are left untouched unless force is true, in which case they are
-// always re-fetched and overwritten.
+// lyrics tags are left untouched unless opts.Force is true, in which case they
+// are always re-fetched and overwritten.
 //
 // progress, if non-nil, is called after each track is processed with the
 // track's path and its outcome. The command layer passes a TTY-gated closure
@@ -130,8 +145,8 @@ type Summary struct {
 // run. The one exception is LRCLIB rate limiting that persists after retrying:
 // the track that hit it is counted as failed, the run stops, and Fetch returns
 // the Summary so far along with an error wrapping ErrRateLimited.
-func Fetch(ctx context.Context, tracks []TrackInfo, force bool, progress func(string, LyricStatus)) (Summary, error) {
-	return fetch(ctx, newLrclibClient(), tracks, force, progress)
+func Fetch(ctx context.Context, tracks []TrackInfo, opts Options, progress func(string, LyricStatus)) (Summary, error) {
+	return fetch(ctx, newLrclibClient(), tracks, opts, progress)
 }
 
 // FetchByID fetches a single, specific LRCLIB track by its numeric ID (see
@@ -142,19 +157,19 @@ func Fetch(ctx context.Context, tracks []TrackInfo, force bool, progress func(st
 // to the title) prevent Fetch's matching strategy from finding the right
 // result, but the person already knows which LRCLIB track is correct.
 //
-// Existing lyrics tags are left untouched unless force is true, exactly as
+// Existing lyrics tags are left untouched unless opts.Force is true, exactly as
 // in Fetch. If id doesn't exist on LRCLIB at all, that's reported as an
 // error (the caller supplied a specific, presumably verified, ID); if id
 // exists but has nothing embeddable for path's format, that's StatusNotFound,
 // matching Fetch's behaviour for the equivalent case.
-func FetchByID(ctx context.Context, path string, id int, force bool) (LyricStatus, error) {
-	return fetchByID(ctx, newLrclibClient(), path, id, force)
+func FetchByID(ctx context.Context, path string, id int, opts Options) (LyricStatus, error) {
+	return fetchByID(ctx, newLrclibClient(), path, id, opts)
 }
 
 // fetchByID is the internal implementation, accepting an explicit client so
 // that tests can inject a test server without network access.
-func fetchByID(ctx context.Context, c *lrclibClient, path string, id int, force bool) (LyricStatus, error) {
-	if status, skip := checkSkip(path, force); skip {
+func fetchByID(ctx context.Context, c *lrclibClient, path string, id int, opts Options) (LyricStatus, error) {
+	if status, skip := checkSkip(path, opts.Force); skip {
 		return status, nil
 	}
 
@@ -166,16 +181,16 @@ func fetchByID(ctx context.Context, c *lrclibClient, path string, id int, force 
 		return StatusFailed, fmt.Errorf("lrclib: no track with id %d", id)
 	}
 
-	return applyResult(path, result), nil
+	return applyResult(path, result, opts), nil
 }
 
 // fetch is the internal implementation, accepting an explicit client so that
 // tests can inject a test server without network access.
-func fetch(ctx context.Context, c *lrclibClient, tracks []TrackInfo, force bool, progress func(string, LyricStatus)) (Summary, error) {
+func fetch(ctx context.Context, c *lrclibClient, tracks []TrackInfo, opts Options, progress func(string, LyricStatus)) (Summary, error) {
 	var summary Summary
 
 	for _, track := range tracks {
-		status, err := processTrack(ctx, c, track, force)
+		status, err := processTrack(ctx, c, track, opts)
 
 		switch status {
 		case StatusEmbedded:
@@ -208,8 +223,8 @@ func fetch(ctx context.Context, c *lrclibClient, tracks []TrackInfo, force bool,
 // the remaining tracks; the only error returned is one wrapping
 // ErrRateLimited (alongside StatusFailed), which the caller should treat as a
 // reason to stop.
-func processTrack(ctx context.Context, c *lrclibClient, track TrackInfo, force bool) (LyricStatus, error) {
-	if status, skip := checkSkip(track.Path, force); skip {
+func processTrack(ctx context.Context, c *lrclibClient, track TrackInfo, opts Options) (LyricStatus, error) {
+	if status, skip := checkSkip(track.Path, opts.Force); skip {
 		return status, nil
 	}
 
@@ -220,7 +235,7 @@ func processTrack(ctx context.Context, c *lrclibClient, track TrackInfo, force b
 		}
 		return StatusFailed, nil
 	}
-	return applyResult(track.Path, result), nil
+	return applyResult(track.Path, result, opts), nil
 }
 
 // checkSkip reports whether processing should stop before ever contacting
@@ -244,7 +259,7 @@ func checkSkip(path string, force bool) (status LyricStatus, skip bool) {
 
 // applyResult embeds a fetched LRCLIB result (if any) into path's tags and
 // returns the final LyricStatus, shared by Fetch and FetchByID.
-func applyResult(path string, result *lrclibTrack) LyricStatus {
+func applyResult(path string, result *lrclibTrack, opts Options) LyricStatus {
 	if result == nil {
 		return StatusNotFound
 	}
@@ -260,7 +275,7 @@ func applyResult(path string, result *lrclibTrack) LyricStatus {
 		Synced:     result.SyncedLyrics,
 		Plain:      result.PlainLyrics,
 		SourceURL:  sourceURL,
-		WordSynced: result.HasWordSync,
+		WordSynced: result.HasWordSync && !opts.SkipLyricsfile,
 		Lyricsfile: result.Lyricsfile,
 	})
 	if err != nil {

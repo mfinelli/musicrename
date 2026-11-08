@@ -472,7 +472,7 @@ func TestFetch(t *testing.T) {
 		}}
 
 		var gotStatus LyricStatus
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, func(_ string, s LyricStatus) {
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, func(_ string, s LyricStatus) {
 			gotStatus = s
 		})
 		require.NoError(t, err)
@@ -497,7 +497,7 @@ func TestFetch(t *testing.T) {
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
 		var gotStatus LyricStatus
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, func(_ string, s LyricStatus) {
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, func(_ string, s LyricStatus) {
 			gotStatus = s
 		})
 		require.NoError(t, err)
@@ -516,7 +516,7 @@ func TestFetch(t *testing.T) {
 		}, 0))
 
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, true, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{Force: true}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Embedded: 1}, summary)
 
@@ -536,7 +536,7 @@ func TestFetch(t *testing.T) {
 		}, 0))
 
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
-		_, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, true, nil)
+		_, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{Force: true}, nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, "https://lrclib.net/tracks/1", readTag(t, path, SourceURLTag))
@@ -550,7 +550,7 @@ func TestFetch(t *testing.T) {
 
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Embedded: 1}, summary)
 		assert.Empty(t, readTag(t, path, SourceURLTag))
@@ -570,7 +570,7 @@ func TestFetch(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "Unknown", Artist: "Nobody", Album: "Nothing", Duration: time.Second}}
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{NotFound: 1}, summary)
 	})
@@ -584,7 +584,7 @@ func TestFetch(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{NotFound: 1}, summary)
 	})
@@ -598,7 +598,7 @@ func TestFetch(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, nil)
 		require.NoError(t, err) // Fetch itself does not error; failures are per-track
 		assert.Equal(t, Summary{Failed: 1}, summary)
 	})
@@ -631,7 +631,7 @@ func TestFetch(t *testing.T) {
 			{Path: path2, Title: "Missing", Artist: "A", Album: "B", Duration: time.Second},
 		}
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, 1, summary.Embedded)
 		assert.Equal(t, 1, summary.NotFound)
@@ -646,7 +646,7 @@ func TestFetch(t *testing.T) {
 
 		var cbPath string
 		var cbStatus LyricStatus
-		_, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, func(p string, s LyricStatus) {
+		_, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, func(p string, s LyricStatus) {
 			cbPath = p
 			cbStatus = s
 		})
@@ -662,7 +662,7 @@ func TestFetch(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
-		_, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		_, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, nil)
 		assert.NoError(t, err)
 	})
 
@@ -670,7 +670,7 @@ func TestFetch(t *testing.T) {
 		srv := makeLrclibServer(t, apiResp)
 		defer srv.Close()
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), nil, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), nil, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{}, summary)
 	})
@@ -685,7 +685,7 @@ func TestFetch(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 		tracks := []TrackInfo{{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}}
 
-		summary, err := fetch(ctx, testFetchClient(srv.URL), tracks, false, nil)
+		summary, err := fetch(ctx, testFetchClient(srv.URL), tracks, Options{}, nil)
 		require.NoError(t, err)
 		// The cancelled context causes the HTTP request to fail -> StatusFailed
 		assert.Equal(t, fmt.Sprintf("%d", summary.Embedded+summary.Failed+summary.Skipped+summary.NotFound), "1")
@@ -712,7 +712,7 @@ func TestFetchRateLimited(t *testing.T) {
 		}
 
 		var reported []string
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, func(path string, _ LyricStatus) {
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, func(path string, _ LyricStatus) {
 			reported = append(reported, path)
 		})
 
@@ -743,7 +743,7 @@ func TestFetchRateLimited(t *testing.T) {
 			})
 		}
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), tracks, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Failed: 2}, summary)
 		assert.Equal(t, int32(2), hits.Load())
@@ -777,7 +777,7 @@ func TestFetchByID(t *testing.T) {
 
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, Options{})
 		require.NoError(t, err)
 		assert.Equal(t, StatusEmbedded, status)
 
@@ -796,7 +796,7 @@ func TestFetchByID(t *testing.T) {
 			taglib.Lyrics: {"existing lyrics"},
 		}, 0))
 
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, Options{})
 		require.NoError(t, err)
 		assert.Equal(t, StatusSkipped, status)
 		assert.Empty(t, readTag(t, path, SourceURLTag))
@@ -811,7 +811,7 @@ func TestFetchByID(t *testing.T) {
 			taglib.Lyrics: {"old lyrics"},
 		}, 0))
 
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, true)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, Options{Force: true})
 		require.NoError(t, err)
 		assert.Equal(t, StatusEmbedded, status)
 
@@ -828,7 +828,7 @@ func TestFetchByID(t *testing.T) {
 
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.mp3", nil)
 
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, Options{})
 		require.NoError(t, err)
 		assert.Equal(t, StatusNotFound, status)
 	})
@@ -841,7 +841,7 @@ func TestFetchByID(t *testing.T) {
 
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 999999, false)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 999999, Options{})
 		assert.Error(t, err)
 		assert.Equal(t, StatusFailed, status)
 	})
@@ -854,7 +854,7 @@ func TestFetchByID(t *testing.T) {
 
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
 
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, false)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), path, 42, Options{})
 		assert.Error(t, err)
 		assert.Equal(t, StatusFailed, status)
 	})
@@ -881,7 +881,7 @@ func TestFetchWordSynced(t *testing.T) {
 		defer srv.Close()
 
 		tr := track(t, "track.flac")
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Embedded: 1}, summary)
 
@@ -899,7 +899,7 @@ func TestFetchWordSynced(t *testing.T) {
 
 		tr := track(t, "track.flac")
 		var got LyricStatus
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, false, func(_ string, s LyricStatus) { got = s })
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, Options{}, func(_ string, s LyricStatus) { got = s })
 		require.NoError(t, err, "a bad document fails the track, not the whole run")
 		assert.Equal(t, StatusFailed, got)
 		assert.Equal(t, Summary{Failed: 1}, summary)
@@ -921,7 +921,7 @@ func TestFetchWordSynced(t *testing.T) {
 		defer srv.Close()
 
 		first, second := track(t, "one.flac"), track(t, "two.flac")
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{first, second}, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{first, second}, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Failed: 2}, summary)
 	})
@@ -933,7 +933,7 @@ func TestFetchWordSynced(t *testing.T) {
 		defer srv.Close()
 
 		tr := track(t, "track.mp3")
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Embedded: 1}, summary)
 		assert.Empty(t, readTag(t, tr.Path, LyricsfileTag))
@@ -952,7 +952,7 @@ func TestFetchWordSynced(t *testing.T) {
 			LyricsfileTag: {wordSyncedYAML},
 		}, 0))
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, true, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, Options{Force: true}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Embedded: 1}, summary)
 		assert.Equal(t, "https://lrclib.net/tracks/8", readTag(t, tr.Path, SourceURLTag))
@@ -968,7 +968,7 @@ func TestFetchWordSynced(t *testing.T) {
 			taglib.Lyrics: {"[00:01.00]existing"},
 		}, 0))
 
-		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, false, nil)
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, Options{}, nil)
 		require.NoError(t, err)
 		assert.Equal(t, Summary{Skipped: 1}, summary)
 		assert.Empty(t, readTag(t, tr.Path, LyricsfileTag))
@@ -979,7 +979,7 @@ func TestFetchWordSynced(t *testing.T) {
 		defer srv.Close()
 
 		tr := track(t, "track.flac")
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), tr.Path, 7, false)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), tr.Path, 7, Options{})
 		require.NoError(t, err)
 		assert.Equal(t, StatusEmbedded, status)
 		assert.Equal(t, wordSyncedYAML, readTag(t, tr.Path, LyricsfileTag))
@@ -992,10 +992,115 @@ func TestFetchWordSynced(t *testing.T) {
 		defer srv.Close()
 
 		tr := track(t, "track.flac")
-		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), tr.Path, 7, false)
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), tr.Path, 7, Options{})
 		require.NoError(t, err)
 		assert.Equal(t, StatusFailed, status)
 		lyricsTag, _ := readLyricsTags(t, tr.Path)
 		assert.Empty(t, lyricsTag)
+	})
+}
+
+func TestFetchSkipLyricsfile(t *testing.T) {
+	syncedLRC := "[00:01.00] Hello\n[00:05.00] World"
+
+	wordSynced := lrclibResponse{
+		ID: 7, TrackName: "Test Track", ArtistName: "Test Artist",
+		AlbumName: "Test Album", Duration: 1,
+		PlainLyrics: "Hello\nWorld", SyncedLyrics: syncedLRC,
+		HasWordSync: true, Lyricsfile: wordSyncedYAML,
+	}
+	skip := Options{SkipLyricsfile: true}
+	track := func(t *testing.T, name string) TrackInfo {
+		t.Helper()
+		path := testutil.MakeAudioFile(t, t.TempDir(), name, nil)
+		return TrackInfo{Path: path, Title: "T", Artist: "A", Album: "B", Duration: time.Second}
+	}
+
+	t.Run("embeds the lyrics but not the Lyricsfile of a word-synced match", func(t *testing.T) {
+		srv := makeLrclibServer(t, wordSynced)
+		defer srv.Close()
+
+		tr := track(t, "track.flac")
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, skip, nil)
+		require.NoError(t, err)
+		assert.Equal(t, Summary{Embedded: 1}, summary)
+
+		lyricsTag, unsyncedTag := readLyricsTags(t, tr.Path)
+		assert.Equal(t, "[00:01.00]Hello\n[00:05.00]World", lyricsTag)
+		assert.Equal(t, "Hello\nWorld", unsyncedTag)
+		assert.Equal(t, "https://lrclib.net/tracks/7", readTag(t, tr.Path, SourceURLTag))
+		assert.Empty(t, readTag(t, tr.Path, LyricsfileTag))
+	})
+
+	t.Run("an invalid Lyricsfile no longer fails the track", func(t *testing.T) {
+		bad := wordSynced
+		bad.Lyricsfile = "version: '1.0'\nlines: [unclosed\n"
+		srv := makeLrclibServer(t, bad)
+		defer srv.Close()
+
+		// Without the option it fails and writes nothing...
+		failing := track(t, "failing.flac")
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{failing}, Options{}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, Summary{Failed: 1}, summary)
+
+		// ...and with it, the line-synced lyrics are embedded as usual.
+		tr := track(t, "track.flac")
+		summary, err = fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, skip, nil)
+		require.NoError(t, err)
+		assert.Equal(t, Summary{Embedded: 1}, summary)
+		lyricsTag, _ := readLyricsTags(t, tr.Path)
+		assert.NotEmpty(t, lyricsTag)
+		assert.Empty(t, readTag(t, tr.Path, LyricsfileTag))
+	})
+
+	t.Run("with --force it removes the Lyricsfile of the lyrics it replaces", func(t *testing.T) {
+		srv := makeLrclibServer(t, wordSynced)
+		defer srv.Close()
+
+		tr := track(t, "track.flac")
+		require.NoError(t, taglib.WriteTags(tr.Path, map[string][]string{
+			taglib.Lyrics: {"[00:01.00]old"},
+			SourceURLTag:  {"https://lrclib.net/tracks/3"},
+			LyricsfileTag: {"version: '1.0'\nmetadata:\n  title: old\n  artist: old\n"},
+		}, 0))
+
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr},
+			Options{Force: true, SkipLyricsfile: true}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, Summary{Embedded: 1}, summary)
+
+		// The old document described the old lyrics, which are gone.
+		assert.Empty(t, readTag(t, tr.Path, LyricsfileTag))
+		assert.Equal(t, "https://lrclib.net/tracks/7", readTag(t, tr.Path, SourceURLTag))
+	})
+
+	t.Run("without --force an existing file is skipped and keeps its Lyricsfile", func(t *testing.T) {
+		srv := makeLrclibServer(t, wordSynced)
+		defer srv.Close()
+
+		tr := track(t, "track.flac")
+		require.NoError(t, taglib.WriteTags(tr.Path, map[string][]string{
+			taglib.Lyrics: {"[00:01.00]existing"},
+			LyricsfileTag: {wordSyncedYAML},
+		}, 0))
+
+		summary, err := fetch(context.Background(), testFetchClient(srv.URL), []TrackInfo{tr}, skip, nil)
+		require.NoError(t, err)
+		assert.Equal(t, Summary{Skipped: 1}, summary)
+		assert.Equal(t, wordSyncedYAML, readTag(t, tr.Path, LyricsfileTag))
+	})
+
+	t.Run("FetchByID honors it too", func(t *testing.T) {
+		srv := makeLrclibByIDServer(t, 7, wordSynced)
+		defer srv.Close()
+
+		tr := track(t, "track.flac")
+		status, err := fetchByID(context.Background(), testFetchClient(srv.URL), tr.Path, 7, skip)
+		require.NoError(t, err)
+		assert.Equal(t, StatusEmbedded, status)
+		assert.Empty(t, readTag(t, tr.Path, LyricsfileTag))
+		lyricsTag, _ := readLyricsTags(t, tr.Path)
+		assert.NotEmpty(t, lyricsTag)
 	})
 }

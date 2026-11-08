@@ -60,6 +60,11 @@ If path is omitted it defaults to the current working directory.
 
 Existing lyrics tags are never overwritten unless --force is passed.
 
+--skip-lyricsfile leaves the Lyricsfile out: it is neither checked nor stored,
+so a word-synced match whose document is not valid YAML still gets its lyrics
+embedded, and any LYRICSFILE tag a file has is removed along with the lyrics it
+described when they are replaced.
+
 --url accepts a specific LRCLIB track URL or numeric ID and embeds that
 exact track directly, bypassing the matching strategy above entirely. It is
 valid only in track mode (path must be a single audio file).`,
@@ -74,6 +79,7 @@ valid only in track mode (path must be a single audio file).`,
 
 func init() {
 	lyricsCmd.Flags().Bool("force", false, "Re-fetch and overwrite existing lyrics")
+	lyricsCmd.Flags().Bool("skip-lyricsfile", false, "Don't store the Lyricsfile (word-synced lyrics) of a match")
 	lyricsCmd.Flags().String("url", "", "Fetch a specific LRCLIB track by URL (track mode only)")
 	rootCmd.AddCommand(lyricsCmd)
 }
@@ -92,6 +98,8 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 	}
 
 	force, _ := cmd.Flags().GetBool("force")
+	skipLyricsfile, _ := cmd.Flags().GetBool("skip-lyricsfile")
+	opts := lyrics.Options{Force: force, SkipLyricsfile: skipLyricsfile}
 	rawURL, _ := cmd.Flags().GetString("url")
 	out := cmd.OutOrStdout()
 	ctx := context.Background()
@@ -114,7 +122,7 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("--url: %w", err)
 		}
-		return runLyricsTrackByID(ctx, out, abs, id, force, start)
+		return runLyricsTrackByID(ctx, out, abs, id, opts, start)
 	}
 
 	if !info.IsDir() {
@@ -123,7 +131,7 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
 				abs, metadata.DottedExtList(metadata.AudioExtensions))
 		}
-		return runLyricsTrack(ctx, out, abs, force, start)
+		return runLyricsTrack(ctx, out, abs, opts, start)
 	}
 
 	isAlbum, err := lyricsIsAlbumRoot(abs)
@@ -132,9 +140,9 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 	}
 
 	if isAlbum {
-		return runLyricsAlbum(ctx, out, abs, force, start)
+		return runLyricsAlbum(ctx, out, abs, opts, start)
 	}
-	return runLyricsLibrary(ctx, out, abs, force, start)
+	return runLyricsLibrary(ctx, out, abs, opts, start)
 }
 
 // lyricsIsAlbumRoot reports whether dir directly contains at least one audio file.
@@ -152,7 +160,7 @@ func lyricsIsAlbumRoot(dir string) (bool, error) {
 }
 
 // runLyricsTrack handles track mode: a single audio file.
-func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool, start time.Time) error {
+func runLyricsTrack(ctx context.Context, out io.Writer, path string, opts lyrics.Options, start time.Time) error {
 	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
@@ -161,7 +169,7 @@ func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool,
 		lipgloss.Fprintln(out, "  "+style.Warn.Render("⚠  "+w))
 	}
 
-	summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "  "))
+	summary, err := lyrics.Fetch(ctx, tracks, opts, lyricsProgressCallback(out, "  "))
 	if err != nil {
 		return err
 	}
@@ -174,11 +182,11 @@ func runLyricsTrack(ctx context.Context, out io.Writer, path string, force bool,
 // runLyricsTrackByID handles the --url form of track mode: a single audio
 // file paired with a specific LRCLIB track ID, bypassing the usual
 // title/artist/album/duration matching strategy entirely.
-func runLyricsTrackByID(ctx context.Context, out io.Writer, path string, id int, force bool, start time.Time) error {
+func runLyricsTrackByID(ctx context.Context, out io.Writer, path string, id int, opts lyrics.Options, start time.Time) error {
 	lipgloss.Fprintln(out, style.Header.Render("Fetching lyrics..."))
 	fmt.Fprintln(out)
 
-	status, err := lyrics.FetchByID(ctx, path, id, force)
+	status, err := lyrics.FetchByID(ctx, path, id, opts)
 	if err != nil {
 		return err
 	}
@@ -202,7 +210,7 @@ func runLyricsTrackByID(ctx context.Context, out io.Writer, path string, id int,
 }
 
 // runLyricsAlbum handles album mode: a directory containing audio files directly.
-func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool, start time.Time) error {
+func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, opts lyrics.Options, start time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", dir, err)
@@ -224,7 +232,7 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool, 
 		lipgloss.Fprintln(out, "  "+style.Warn.Render("⚠  "+w))
 	}
 
-	summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "  "))
+	summary, err := lyrics.Fetch(ctx, tracks, opts, lyricsProgressCallback(out, "  "))
 	if err != nil {
 		return err
 	}
@@ -235,7 +243,7 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, force bool, 
 }
 
 // runLyricsLibrary handles library mode: a directory containing album subdirectories.
-func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool, start time.Time) error {
+func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, opts lyrics.Options, start time.Time) error {
 	albums, err := metadata.ScanLibrary(dir)
 	if err != nil {
 		return fmt.Errorf("scanning library: %w", err)
@@ -273,7 +281,7 @@ func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, force bool
 			lipgloss.Fprintln(out, "    "+style.Warn.Render("⚠  "+w))
 		}
 
-		summary, err := lyrics.Fetch(ctx, tracks, force, lyricsProgressCallback(out, "    "))
+		summary, err := lyrics.Fetch(ctx, tracks, opts, lyricsProgressCallback(out, "    "))
 		if err != nil {
 			return fmt.Errorf("processing %s: %w", relPath, err)
 		}
