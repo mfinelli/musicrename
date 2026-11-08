@@ -30,6 +30,7 @@ import (
 
 	"go.senan.xyz/taglib"
 
+	"github.com/mfinelli/musicrename/internal/lyrics"
 	"github.com/mfinelli/musicrename/internal/target"
 	"github.com/mfinelli/musicrename/internal/testutil"
 )
@@ -107,6 +108,58 @@ func TestPrepareTrack(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"Track One"}, tags[taglib.Title])
 		assert.Equal(t, []string{"Test Artist"}, tags[taglib.Artist])
+	})
+
+	t.Run("transcode: lyrics provenance tags are not copied, other tags are", func(t *testing.T) {
+		dir := t.TempDir()
+		src := testutil.MakeAudioFile(t, dir, "01 track.flac", map[string]string{
+			"TITLE": "Track One", "ARTIST": "Test Artist",
+		})
+		require.NoError(t, taglib.WriteTags(src, map[string][]string{
+			taglib.Lyrics:        {"[00:01.00]Hello"},
+			lyrics.SourceURLTag:  {"https://lrclib.net/tracks/42"},
+			lyrics.LyricsfileTag: {"version: '1.0'\nmetadata:\n  title: t\n  artist: a\n"},
+		}, 0))
+		dst := filepath.Join(dir, "01 track.mp3")
+
+		def := target.Definition{
+			AcceptedFormats: []string{".mp3"},
+			TranscodeFormat: target.FormatMP3,
+		}
+		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil, nil))
+
+		tags, err := taglib.ReadTags(dst)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"Track One"}, tags[taglib.Title])
+		assert.Equal(t, []string{"Test Artist"}, tags[taglib.Artist])
+		assert.NotEmpty(t, tags[taglib.Lyrics], "the lyrics themselves still make it to the device")
+		assert.Empty(t, tags[lyrics.SourceURLTag])
+		assert.Empty(t, tags[lyrics.LyricsfileTag])
+
+		// The source file is not touched.
+		srcTags, err := taglib.ReadTags(src)
+		require.NoError(t, err)
+		assert.NotEmpty(t, srcTags[lyrics.SourceURLTag])
+		assert.NotEmpty(t, srcTags[lyrics.LyricsfileTag])
+	})
+
+	t.Run("passthrough keeps lyrics provenance tags, being a plain copy", func(t *testing.T) {
+		dir := t.TempDir()
+		src := testutil.MakeAudioFile(t, dir, "01 track.flac", map[string]string{"TITLE": "Track One"})
+		require.NoError(t, taglib.WriteTags(src, map[string][]string{
+			lyrics.SourceURLTag:  {"https://lrclib.net/tracks/42"},
+			lyrics.LyricsfileTag: {"version: '1.0'\nmetadata:\n  title: t\n  artist: a\n"},
+		}, 0))
+		dst := filepath.Join(dir, "out", "01 track.flac")
+
+		def := target.Definition{AcceptedFormats: []string{".flac"}}
+		require.NoError(t, PrepareTrack(context.Background(), src, dst, def, nil, nil))
+
+		assert.Equal(t, fileMD5(t, src), fileMD5(t, dst))
+		tags, err := taglib.ReadTags(dst)
+		require.NoError(t, err)
+		assert.NotEmpty(t, tags[lyrics.SourceURLTag])
+		assert.NotEmpty(t, tags[lyrics.LyricsfileTag])
 	})
 
 	t.Run("embeds artwork when the target embeds and art is given", func(t *testing.T) {

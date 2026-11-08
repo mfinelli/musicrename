@@ -121,6 +121,12 @@ The search progressively relaxes the duration constraint (±1 s, ±2 s) before
 falling back to a fuzzy search; tracks with no result are skipped and reported
 in the summary.
 
+Requests identify mrr to LRCLIB and are spaced out to stay within its rate
+limits. If LRCLIB asks mrr to slow down, it waits as instructed and retries; if
+it keeps rate limiting, *mrr lyrics* stops early with an error instead of
+continuing. Tracks that already got lyrics keep them, and are skipped when it is
+run again later.
+
 Synced (LRC) lyrics are embedded in FLAC files only. Unsynced lyrics are
 embedded in MP3 and M4A via the normalized *LYRICS* tag. If only synced lyrics
 are available from LRCLIB for an MP3 or M4A track, that track is skipped.
@@ -128,15 +134,74 @@ are available from LRCLIB for an MP3 or M4A track, that track is skipped.
 When synced lyrics are embedded, the lrclib.net page of the track they came from
 is recorded in the *LRCLIB_URL* tag and *mrr inspect* will report it.
 
+If that track has word-level timings, its Lyricsfile
+(https://github.com/tranxuanthang/lyricsfile) YAML document is also stored,
+unchanged, in the *LYRICSFILE* tag, and *mrr inspect* reports whether it is
+there. Only FLAC files get it. If the document is missing or is not valid YAML,
+that track is reported as failed and nothing is embedded for it, so that running
+again retries it, unless *--skip-lyricsfile* is passed. Like *LRCLIB_URL*, it is
+replaced or removed together with the synced lyrics. Files that already have
+lyrics are skipped, so they only get it with *--force*.
+
 Existing lyrics tags are never overwritten unless *--force* is passed.
 
 *--force*
 	Re-fetch and overwrite existing lyrics tags.
 
+*--skip-lyricsfile*
+	Do not store the track's Lyricsfile in the *LYRICSFILE* tag. It is not
+	checked either, so a track whose document is not valid YAML still gets
+	its lyrics embedded. If the synced lyrics of a file are replaced (see
+	*--force*), any *LYRICSFILE* tag it has is removed with them.
+
 *--url*=_url-or-id_
 	Fetch a specific LRCLIB track directly by its URL or numeric ID, skipping
 	the matching strategy above entirely. Valid only in track mode (_path_
 	must be a single audio file).
+
+## mrr lyrics diff [_path_]
+
+Compares the lyrics embedded in audio files with what *mrr lyrics --force* would
+write to them now, without changing anything. Each file is looked up on LRCLIB
+the way *mrr lyrics* does it, and only what a refetch would write is compared:
+the plain lyrics and, for FLAC files, the synced lyrics and the word-synced
+Lyricsfile.
+
+Synced lyrics are compared as normalized text, apart from their timing, so that
+a retiming is reported as one (how many lines moved, and by how much) instead of
+every line having changed. The Lyricsfile is compared by what it says and not as
+text, since it is mostly timings. How the LRC or the YAML is formatted does not
+count as a difference.
+
+If _path_ is an audio file it is compared in full detail. Otherwise every album
+under _path_ is, and only the tracks that differ are listed. _path_ defaults to
+the current directory. A library takes one or more requests per track, at the
+pace LRCLIB asks for.
+
+Each track is marked *✓* if identical, *~* if changed, *+* if the file has no
+lyrics or lacks word-synced data that LRCLIB has, *✗* if LRCLIB has nothing to
+embed, and *!* if it could not be compared, which includes a Lyricsfile that is
+not valid YAML. Exits zero unless an error occurred. If LRCLIB keeps rate
+limiting, stops early with an error after printing what was compared.
+
+*--url*=_url-or-id_
+	Compare a single file with a specific LRCLIB track, by its URL or
+	numeric ID, instead of the one found by the matching strategy. Valid
+	only in track mode.
+
+*--full-context*
+	Show all of the lyrics in each diff, not only the lines around changes.
+
+*--raw*
+	Also show a line diff of the two Lyricsfile documents' text.
+
+*--skip-lyricsfile*
+	Compare as *mrr lyrics --skip-lyricsfile* would write: the Lyricsfile of
+	the record is ignored, and a stored one is reported as removed.
+
+*-v*, *--verbose*
+	Show the details of each track that differs, not only a line for it, and
+	list the lines that were retimed.
 
 ## mrr check [_path_]
 

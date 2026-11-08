@@ -21,6 +21,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/mfinelli/musicrename/internal/lyrics"
 )
 
 var rootCmd = &cobra.Command{
@@ -42,6 +44,13 @@ Intended workflow:
   mrr sums     # generate md5 checksums`,
 	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
 	Version:           "4.6.0",
+}
+
+func init() {
+	// The version literal above is the only place the release tooling
+	// updates, so LRCLIB's User-Agent takes it from here rather than
+	// keeping its own copy.
+	lyrics.Version = rootCmd.Version
 }
 
 func Execute() {

@@ -20,16 +20,78 @@ package lyrics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
 const lrclibBase = "https://lrclib.net/api"
+
+// Version is the tool's version, included in the User-Agent sent to LRCLIB.
+// It lives in cmd/root.go's version literal (which the release tooling
+// updates), and that package can't be imported from here, so the command layer
+// copies it into this variable at startup, before any request is made. While
+// it is empty the version is simply left out of the User-Agent.
+var Version string
+
+// userAgent returns the User-Agent header value that identifies this tool to
+// LRCLIB. Its API documentation requires clients to send one naming the
+// application, its version, and a link to its homepage (unidentified clients
+// get a much lower rate limit), e.g. "musicrename v4.6.0
+// (https://github.com/mfinelli/musicrename)".
+func userAgent() string {
+	const project = "(https://github.com/mfinelli/musicrename)"
+	if Version == "" {
+		return "musicrename " + project
+	}
+	return "musicrename v" + Version + " " + project
+}
+
+const (
+	// lrclibRequestInterval is the minimum time between requests. LRCLIB
+	// currently allows roughly 90 requests per minute to an identified
+	// client; 700 ms is about 85 per minute, which stays just under that
+	// and is also near the 200-500 ms between requests that the API
+	// documentation recommends for batch operations. The documented figures
+	// are approximate and may change, so the retry handling below is the
+	// safety net rather than this constant.
+	lrclibRequestInterval = 700 * time.Millisecond
+
+	// lrclibMaxRetries is how many times a request that was answered with
+	// 429 or 503 is retried before giving up.
+	lrclibMaxRetries = 3
+
+	// lrclibDefaultRetryWait is used when a 429/503 response has no usable
+	// Retry-After header (the API documentation says 503s are usually one
+	// second).
+	lrclibDefaultRetryWait = time.Second
+
+	// lrclibMaxRetryWait is the longest wait the client will sit through. A
+	// larger Retry-After means something is wrong enough that stopping is
+	// better than leaving a terminal hanging silently for minutes.
+	lrclibMaxRetryWait = time.Minute
+
+	// lrclibRetryJitter is the fraction of the wait added at random on top
+	// of it, as the API documentation asks, so that many throttled clients
+	// don't all retry at the same moment.
+	lrclibRetryJitter = 0.3
+)
+
+// ErrRateLimited is returned (wrapped) when LRCLIB keeps answering 429 Too
+// Many Requests after the client has waited as instructed and retried, or
+// asks for a longer wait than the client is willing to sit through. Fetch
+// stops the whole run when it sees this, rather than carrying on to the next
+// track: the API documentation warns that continuing to send requests while
+// being limited may result in a temporary ban.
+var ErrRateLimited = errors.New("lrclib: rate limit exceeded")
 
 // lrclibTrack is the JSON representation of a single track returned by the
 // LRCLIB API. Both /get and /search use this same shape (search returns a
@@ -43,47 +105,143 @@ type lrclibTrack struct {
 	Instrumental bool    `json:"instrumental"`
 	PlainLyrics  string  `json:"plainLyrics"`
 	SyncedLyrics string  `json:"syncedLyrics"`
+
+	// HasWordSync reports whether Lyricsfile contains word-level timings.
+	// Lyricsfile is the raw Lyricsfile YAML document, which LRCLIB's API
+	// documentation says every record includes. See embedLyrics for how
+	// they're stored.
+	HasWordSync bool   `json:"hasWordSync"`
+	Lyricsfile  string `json:"lyricsfile"`
 }
 
 // lrclibClient wraps an HTTP client with a token-bucket rate limiter so that
 // all LRCLIB requests, regardless of which step of the fetch strategy they
-// come from, are subject to the same global limit.
+// come from, are subject to the same global limit. All requests go through
+// doGet, which also identifies the client and handles 429/503 responses.
 type lrclibClient struct {
 	http    *http.Client
 	limiter *rate.Limiter
 	base    string // overridable in tests
+
+	// sleep waits for d or until ctx is done, returning ctx's error in the
+	// latter case. nil means a real, context-aware sleep; tests replace it
+	// so that retries don't actually wait.
+	sleep func(ctx context.Context, d time.Duration) error
 }
 
-// newLrclibClient returns a client configured to respect LRCLIB's recommended
-// rate of no more than five requests per second.
+// newLrclibClient returns a client configured to respect LRCLIB's rate
+// limits: one request per lrclibRequestInterval, identified by
+// userAgent(), with 429 and 503 responses retried as the server asks.
 func newLrclibClient() *lrclibClient {
 	return &lrclibClient{
 		http:    &http.Client{Timeout: 10 * time.Second},
-		limiter: rate.NewLimiter(rate.Limit(5), 1),
+		limiter: rate.NewLimiter(rate.Every(lrclibRequestInterval), 1),
 		base:    lrclibBase,
 	}
+}
+
+// doGet issues a GET request for rawURL and returns the response, which the
+// caller must close. Every LRCLIB request goes through here so that they all
+// share the same behavior:
+//
+//   - each attempt waits on the rate limiter first;
+//   - each request carries the User-Agent header LRCLIB requires;
+//   - a 429 or 503 response is retried, up to lrclibMaxRetries times, after
+//     waiting for the number of seconds in its Retry-After header (one second
+//     if it has none) plus a little random jitter;
+//   - when retries run out, a 429 becomes an error wrapping ErrRateLimited;
+//     a 503 is returned as-is for the caller to report. A Retry-After longer
+//     than lrclibMaxRetryWait is not waited out and fails immediately the
+//     same way.
+//
+// Any other status, including other errors such as 500, is returned
+// immediately: only throttling is worth retrying.
+func (c *lrclibClient) doGet(ctx context.Context, rawURL string) (*http.Response, error) {
+	for attempt := 0; ; attempt++ {
+		if err := c.limiter.Wait(ctx); err != nil {
+			return nil, fmt.Errorf("rate limiter: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("build request: %w", err)
+		}
+		req.Header.Set("User-Agent", userAgent())
+
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		throttled := resp.StatusCode == http.StatusTooManyRequests ||
+			resp.StatusCode == http.StatusServiceUnavailable
+		if !throttled {
+			return resp, nil
+		}
+
+		wait := retryAfter(resp)
+		tooLong := wait > lrclibMaxRetryWait
+		if attempt >= lrclibMaxRetries || tooLong {
+			if resp.StatusCode != http.StatusTooManyRequests {
+				return resp, nil
+			}
+			resp.Body.Close()
+			if tooLong {
+				return nil, fmt.Errorf("%w: server asked to wait %s", ErrRateLimited, wait)
+			}
+			return nil, fmt.Errorf("%w: still limited after %d retries", ErrRateLimited, lrclibMaxRetries)
+		}
+
+		// Drain a little of the body so the connection can be reused, then
+		// wait out the throttling before trying again.
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+
+		wait += time.Duration(rand.Float64() * lrclibRetryJitter * float64(wait))
+		if err := c.sleepFor(ctx, wait); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// sleepFor waits for d using the client's sleep function, defaulting to a
+// timer that stops early if ctx is done.
+func (c *lrclibClient) sleepFor(ctx context.Context, d time.Duration) error {
+	if c.sleep != nil {
+		return c.sleep(ctx, d)
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// retryAfter returns how long resp's Retry-After header asks the client to
+// wait. LRCLIB's documentation specifies a number of seconds; a missing,
+// malformed, or negative value falls back to lrclibDefaultRetryWait.
+func retryAfter(resp *http.Response) time.Duration {
+	secs, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
+	if err != nil || secs < 0 {
+		return lrclibDefaultRetryWait
+	}
+	return time.Duration(secs) * time.Second
 }
 
 // get calls the LRCLIB /get endpoint with the provided metadata and a
 // specific duration in seconds. It returns nil, nil when the server responds
 // with 404 (no match for that exact combination).
 func (c *lrclibClient) get(ctx context.Context, trackName, artistName, albumName string, durationSecs int) (*lrclibTrack, error) {
-	if err := c.limiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("rate limiter: %w", err)
-	}
-
 	params := url.Values{}
 	params.Set("track_name", trackName)
 	params.Set("artist_name", artistName)
 	params.Set("album_name", albumName)
 	params.Set("duration", strconv.Itoa(durationSecs))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/get?"+params.Encode(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	resp, err := c.http.Do(req)
+	resp, err := c.doGet(ctx, c.base+"/get?"+params.Encode())
 	if err != nil {
 		return nil, fmt.Errorf("get request: %w", err)
 	}
@@ -107,21 +265,12 @@ func (c *lrclibClient) get(ctx context.Context, trackName, artistName, albumName
 // no duration constraint. It returns the first result, or nil, nil when the
 // server returns an empty list.
 func (c *lrclibClient) search(ctx context.Context, trackName, artistName, albumName string) (*lrclibTrack, error) {
-	if err := c.limiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("rate limiter: %w", err)
-	}
-
 	params := url.Values{}
 	params.Set("track_name", trackName)
 	params.Set("artist_name", artistName)
 	params.Set("album_name", albumName)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/search?"+params.Encode(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	resp, err := c.http.Do(req)
+	resp, err := c.doGet(ctx, c.base+"/search?"+params.Encode())
 	if err != nil {
 		return nil, fmt.Errorf("search request: %w", err)
 	}
@@ -147,17 +296,7 @@ func (c *lrclibClient) search(ctx context.Context, trackName, artistName, albumN
 // matching entirely. It returns nil, nil when the server responds with 404
 // (no track with that ID).
 func (c *lrclibClient) getByID(ctx context.Context, id int) (*lrclibTrack, error) {
-	if err := c.limiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("rate limiter: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.base+"/get/"+strconv.Itoa(id), nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	resp, err := c.http.Do(req)
+	resp, err := c.doGet(ctx, c.base+"/get/"+strconv.Itoa(id))
 	if err != nil {
 		return nil, fmt.Errorf("get request: %w", err)
 	}

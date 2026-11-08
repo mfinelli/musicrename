@@ -8,6 +8,27 @@ my own reference.
 
 - `lyrics` now records which LRCLIB track the synced lyrics came from in a new
   `LRCLIB_URL` tag on FLAC files.
+- `lyrics` now identifies itself to LRCLIB with a `User-Agent`, as its API
+  documentation requires, and paces requests to stay within the rate limit for
+  identified clients (about 85 requests per minute, down from 5 per second).
+  `429` and `503` responses are retried after waiting for `Retry-After`; if
+  LRCLIB keeps rate limiting, `lyrics` now stops with an error instead of
+  continuing through the rest of the library.
+- `lyrics` now stores the Lyricsfile (word-synced lyrics) document of the LRCLIB
+  track in a new `LYRICSFILE` tag on FLAC files when the track has word-level
+  timings, so the data is on hand for a future player or migration. It is kept
+  unchanged and must at least be valid YAML; a track whose document is not fails
+  and has nothing embedded, so a later run retries it. `inspect` shows whether
+  it is there. `sync sdcard` no longer copies `LRCLIB_URL` or `LYRICSFILE` into
+  transcoded files.
+- `lyrics` gains `--skip-lyricsfile`, which doesn't check or store a match's
+  Lyricsfile, so a track whose document is not valid YAML still gets its lyrics.
+- Add `lyrics diff`, which shows what `lyrics --force` would change in the
+  lyrics of a file, album, or library without changing anything. Synced lyrics
+  are compared apart from their timing, so a retiming shows as one, and the
+  word-synced Lyricsfile is compared by what it says. Tracks that could gain
+  word-synced data are listed. `-v` adds details, `--full-context` shows whole
+  lyrics, and `--raw` also diffs the Lyricsfile text.
 
 ## v4.6.0 — 2026-10-26
 

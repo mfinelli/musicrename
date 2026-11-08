@@ -301,7 +301,20 @@ Lookup proceeds from increasingly relaxed matching:
 3. duration ±2 seconds
 4. fuzzy title/artist/album search
 
-Requests are rate-limited to 5 requests per second.
+Requests identify the tool with a `User-Agent` naming the project, its version,
+and a link to its repository, which LRCLIB's API documentation requires and
+which gets a higher rate allowance than an anonymous client. They are spaced at
+least 700 ms apart, which stays just under the roughly 90 requests per minute
+LRCLIB currently allows identified clients. Those figures are approximate and
+LRCLIB may change them, so the client also reacts to being limited: a `429` or
+`503` response is retried up to three times after waiting for the number of
+seconds in its `Retry-After` header (one second if it has none) plus a little
+random jitter. A `Retry-After` longer than a minute is not waited out. If `429`
+responses continue after the retries, the run stops with an error rather than
+moving on to the next track, because LRCLIB warns that continuing to send
+requests while being limited may result in a temporary ban. Tracks that already
+got lyrics keep them, and re-running skips those as usual. Other failures,
+including `500`, only fail the one track.
 
 Synced and unsynced lyrics are treated independently.
 
@@ -319,6 +332,32 @@ The LRCLIB track the synced lyrics came from is recorded in a custom
 (`https://lrclib.net/tracks/<id>`). A result with only plain lyrics does _not_
 write the tag.
 
+When that track has word-level timings (LRCLIB's `hasWordSync`), its
+[Lyricsfile](https://github.com/tranxuanthang/lyricsfile) YAML document is
+stored in a `LYRICSFILE` tag, FLAC only, so that the data is on hand for a
+future player or migration. The format is still a draft, so the document is
+stored verbatim, exactly as LRCLIB returned it, and the only check made before
+storing it is that it parses as YAML (a mapping, with no duplicate keys), since
+checking its version and timings is for whatever reads it later. If a
+word-synced record's document is missing or doesn't parse, the track fails and
+nothing is embedded for it, not even the lyrics that were fine: a file with only
+part of the data would count as already having lyrics and be skipped on every
+later run, whereas a failed track is retried. This check only applies when the
+document would be stored, so it never fails a track in another format. The tag
+is written in the same operation as the synced lyrics, like `LRCLIB_URL`, so the
+two always describe the same record: when synced lyrics are replaced by those of
+a record that is not word-synced, both tags are removed or replaced in that same
+write instead of being left over from the previous record. A result with only
+plain lyrics changes neither.
+
+`--skip-lyricsfile` leaves the Lyricsfile out: it is neither checked nor stored,
+so a word-synced match whose document is not valid YAML still gets its lyrics
+embedded, which is otherwise the only way past such a record short of `--url`
+with a different one. It does not leave an existing `LYRICSFILE` tag alone when
+the synced lyrics are replaced, since that would keep a document that describes
+lyrics which are gone; the tag is removed, exactly as when the new record has no
+word sync.
+
 Existing lyrics are preserved unless `--force` is used.
 
 LRC timestamps are normalized before being embedded, including normalization of
@@ -330,6 +369,70 @@ in track mode (a single file). This covers cases where on-disk tags (e.g.
 additional artists appended to the track title) prevent the normal strategy from
 finding the correct match, even though the correct match is known and easily
 found by hand on lrclib.net.
+
+### 6.1 Comparing Lyrics
+
+`mrr lyrics diff` shows what `mrr lyrics --force` would change in a file's
+lyrics, without changing anything, so that a refetch of lyrics already curated
+does not have to be done blind. It is read-only.
+
+What a refetch would write is asked of the code that writes it: the same
+function builds the tags for a write and for a comparison, and the comparison is
+between those tags and the file's current ones. The two cannot drift apart. It
+also means only what a write would set is compared. A file's plain lyrics are
+not a difference from a record that has none, for instance, because a refetch
+leaves them alone, and the Lyricsfile is only part of a comparison when the
+synced lyrics are, since that is when a write replaces it. A file is looked up
+the way `lyrics` looks it up, including `--url` for a specific track, and the
+diff says whether the record found is the one named by the file's `LRCLIB_URL`
+tag (the same, a different one, or not recorded). That is information, not a
+difference: only the lyrics decide whether a file differs.
+
+Plain lyrics are compared as lines, ignoring line endings, trailing whitespace,
+and blank lines at either end, but not the blank lines between stanzas. In a
+line that was edited in place, the words that changed are highlighted, if the
+two versions are alike enough for that to mean anything.
+
+Synced lyrics are compared in their normalized form, the one that would be
+embedded, so that formatting the normalization removes does not count. The words
+of the lines are diffed apart from their timestamps, and the lines that match
+are then compared for time. This is because LRCLIB edits are often a retiming:
+with whole timestamps in the diff, an offset correction would show every line as
+changed and bury any real edit. A retiming is instead one summary, how many
+lines moved and by how much, "all by +300 ms" when they moved together (to
+within the two centiseconds an LRC timestamp has) and the median and largest
+change when not. Lines with no text, which only mark gaps, and lines with no
+timestamp are not compared, and a line with several timestamps counts once for
+each.
+
+A Lyricsfile is mostly millisecond timings, so a line diff of it is unreadable.
+The documents are read and compared for what they say: the version, the metadata
+fields, the text of the lines, how line and word times differ (summarized as for
+synced lyrics), lines split into words differently, lines that gained or lost
+word timings, and the plain lyrics. Documents that differ only in how the YAML
+is written are identical. The format is a draft, so only the fields above are
+read, and a difference that none of them shows is reported as being in fields
+the command does not read. `--raw` adds a line diff of the two documents' text
+for those cases. A file with no Lyricsfile whose record has one is its own
+result, "word-sync available", since finding those files is a main use of the
+command.
+
+Each file gets one result: identical, changed, word-sync available (the lyrics
+are the same and the record has word-synced data the file lacks), new (the file
+has no lyrics and LRCLIB has some), not found (nothing LRCLIB has could be
+embedded in this format), or failed. A Lyricsfile that is not valid YAML is a
+failure, as it is for `lyrics`, and `--skip-lyricsfile` compares as
+`lyrics --skip-lyricsfile` would write, which is how to compare such a file
+anyway.
+
+A single file is shown in full detail. For an album or a library, only the files
+that differ are listed, one line each, and the identical ones are only counted;
+`-v` adds the details of each, and the list of retimed lines. Each diff keeps
+three lines of context around a change, or all of the lyrics with
+`--full-context`. The exit status is zero unless something went wrong, since
+differences are what the command is for, not findings. A comparison costs one or
+more LRCLIB requests per file, paced as for `lyrics`, and persistent rate
+limiting stops the run the same way, after printing what was compared.
 
 ---
 
@@ -499,6 +602,11 @@ Current targets:
 
 Target-specific encoding policy is part of the target definition rather than
 being inferred from the source library.
+
+When audio is transcoded its tags are copied onto the new file, except
+`LRCLIB_URL` and `LYRICSFILE`: they only record where the library's lyrics came
+from, which a device has no use for, and a Lyricsfile can be many times the size
+of the lyrics themselves. Files copied byte-for-byte keep them.
 
 ### 8.3 Desired Selection
 

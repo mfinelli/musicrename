@@ -96,7 +96,13 @@ duration constraint before falling back to a fuzzy search. Synced (LRC) lyrics
 are embedded in FLAC files; unsynced lyrics are embedded in MP3 and M4A. For
 FLAC files the lrclib.net page of the track the synced lyrics came from is also
 recorded in a `LRCLIB_URL` tag, which `inspect` shows, so you can open it in a
-browser and see where the lyrics came from.
+browser and see where the lyrics came from. If that track has word-level
+timings, its [Lyricsfile](https://github.com/tranxuanthang/lyricsfile) YAML is
+also stored unchanged in a `LYRICSFILE` tag, as long as it is valid YAML, which
+`inspect` reports. Nothing reads it yet; it is kept so the data is there if a
+player or a later version of `mrr` can use it. Pass `--skip-lyricsfile` to leave
+it out; that also lets a track whose document is not valid YAML, which would
+otherwise fail, get its lyrics.
 
 ```sh
 mrr lyrics --force ~/music/b/beyonce
@@ -108,6 +114,18 @@ specific LRCLIB track URL found by hand, along with a single track path:
 ```sh
 mrr lyrics --url https://lrclib.net/api/get/12345 \
   "~/music/b/beyonce/01 dangerously in love.flac"
+```
+
+To see what a refetch would change before doing one, `lyrics diff` compares the
+lyrics in the files with what LRCLIB would give them now, without changing
+anything. Synced lyrics are compared apart from their timing, so a retiming
+shows up as one, and the word-synced Lyricsfile is compared by what it says. On
+an album or a library it lists only the tracks that differ, including the ones
+that could now gain word-synced data.
+
+```sh
+mrr lyrics diff ~/music/b/beyonce
+mrr lyrics diff --full-context "~/music/b/beyonce/01 dangerously in love.flac"
 ```
 
 ### `check`
