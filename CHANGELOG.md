@@ -14,6 +14,13 @@ my own reference.
   `429` and `503` responses are retried after waiting for `Retry-After`; if
   LRCLIB keeps rate limiting, `lyrics` now stops with an error instead of
   continuing through the rest of the library.
+- `lyrics` now stores the Lyricsfile (word-synced lyrics) document of the LRCLIB
+  track in a new `LYRICSFILE` tag on FLAC files when the track has word-level
+  timings, so the data is on hand for a future player or migration. It is kept
+  unchanged and must at least be valid YAML; a track whose document is not fails
+  and has nothing embedded, so a later run retries it. `inspect` shows whether
+  it is there. `sync sdcard` no longer copies `LRCLIB_URL` or `LYRICSFILE` into
+  transcoded files.
 
 ## v4.6.0 — 2026-10-26
 

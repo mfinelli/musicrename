@@ -96,12 +96,11 @@ duration constraint before falling back to a fuzzy search. Synced (LRC) lyrics
 are embedded in FLAC files; unsynced lyrics are embedded in MP3 and M4A. For
 FLAC files the lrclib.net page of the track the synced lyrics came from is also
 recorded in a `LRCLIB_URL` tag, which `inspect` shows, so you can open it in a
-browser and see where the lyrics came from.
-If that track has word-level timings, its
-[Lyricsfile](https://github.com/tranxuanthang/lyricsfile) YAML is also stored
-unchanged in a `LYRICSFILE` tag, as long as it is valid YAML, which `inspect`
-reports. Nothing reads it yet; it is kept so the data is there if a player or a
-later version of `mrr` can use it.
+browser and see where the lyrics came from. If that track has word-level
+timings, its [Lyricsfile](https://github.com/tranxuanthang/lyricsfile) YAML is
+also stored unchanged in a `LYRICSFILE` tag, as long as it is valid YAML, which
+`inspect` reports. Nothing reads it yet; it is kept so the data is there if a
+player or a later version of `mrr` can use it.
 
 ```sh
 mrr lyrics --force ~/music/b/beyonce
