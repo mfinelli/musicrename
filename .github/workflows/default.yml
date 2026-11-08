@@ -16,8 +16,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg just rsgain scdoc
-      - run: sudo apt-get install -y libtag1-dev  # NOTE: libtag-dev on 26.04
+      - run: sudo apt-get install -y ffmpeg just libtag-dev rsgain scdoc
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
