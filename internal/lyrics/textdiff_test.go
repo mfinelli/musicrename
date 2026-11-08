@@ -133,7 +133,7 @@ func TestDiffSeq(t *testing.T) {
 		}
 		edits := diffSeq(a, b)
 		require.Len(t, edits, 2*n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			assert.Equal(t, OpDelete, edits[i].Kind)
 			assert.Equal(t, OpInsert, edits[n+i].Kind)
 		}

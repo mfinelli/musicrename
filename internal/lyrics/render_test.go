@@ -273,7 +273,7 @@ func TestRenderDetails(t *testing.T) {
 	t.Run("labels are bold and each line starts with the indent", func(t *testing.T) {
 		var buf bytes.Buffer
 		RenderDetails(&buf, diffAgainst("t.flac", emb, rec, opts), markerPalette(), "    ", RenderOptions{})
-		for _, ln := range strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n") {
+		for ln := range strings.SplitSeq(strings.TrimSuffix(buf.String(), "\n"), "\n") {
 			assert.True(t, strings.HasPrefix(ln, "    "), ln)
 		}
 		assert.Contains(t, buf.String(), "<bold>Plain:</bold>")

@@ -49,7 +49,7 @@ type lrcEntry struct {
 // compare. The result is in time order.
 func parseLRC(lrc string) []lrcEntry {
 	var entries []lrcEntry
-	for _, line := range strings.Split(lrc, "\n") {
+	for line := range strings.SplitSeq(lrc, "\n") {
 		line = strings.TrimRight(line, "\r")
 
 		var stamps []time.Duration

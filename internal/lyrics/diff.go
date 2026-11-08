@@ -227,8 +227,7 @@ func failedDiff(path string, err error) TrackDiff {
 	// A failed request's error repeats the whole URL, which says nothing a
 	// person reading the reason needs; the cause (no such host, connection
 	// refused, a timeout) is what matters.
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
 		err = urlErr.Err
 	}
 	return TrackDiff{Path: path, Status: DiffFailed, Reason: err.Error()}
