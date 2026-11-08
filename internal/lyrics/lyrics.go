@@ -264,20 +264,7 @@ func applyResult(path string, result *lrclibTrack, opts Options) LyricStatus {
 		return StatusNotFound
 	}
 
-	// An ID of zero means the response didn't identify the track (LRCLIB
-	// IDs start at one), in which case there's nothing to link to.
-	var sourceURL string
-	if result.ID > 0 {
-		sourceURL = TrackURL(result.ID)
-	}
-
-	embedded, err := embedLyrics(path, embedInput{
-		Synced:     result.SyncedLyrics,
-		Plain:      result.PlainLyrics,
-		SourceURL:  sourceURL,
-		WordSynced: result.HasWordSync && !opts.SkipLyricsfile,
-		Lyricsfile: result.Lyricsfile,
-	})
+	embedded, err := embedLyrics(path, inputFor(result, opts))
 	if err != nil {
 		return StatusFailed
 	}
@@ -289,34 +276,72 @@ func applyResult(path string, result *lrclibTrack, opts Options) LyricStatus {
 	return StatusEmbedded
 }
 
+// inputFor builds what embedLyrics should write for a fetched LRCLIB result.
+func inputFor(result *lrclibTrack, opts Options) embedInput {
+	// An ID of zero means the response didn't identify the track (LRCLIB
+	// IDs start at one), in which case there's nothing to link to.
+	var sourceURL string
+	if result.ID > 0 {
+		sourceURL = TrackURL(result.ID)
+	}
+
+	return embedInput{
+		Synced:     result.SyncedLyrics,
+		Plain:      result.PlainLyrics,
+		SourceURL:  sourceURL,
+		WordSynced: result.HasWordSync && !opts.SkipLyricsfile,
+		Lyricsfile: result.Lyricsfile,
+	}
+}
+
 // hasLyrics reports whether path already has lyrics embedded in its tags.
 // For FLAC, either LYRICS or UNSYNCEDLYRICS counts. For MP3 and M4A, the
 // normalised LYRICS key (USLT / ©lyr) is checked.
 func hasLyrics(path string) (bool, error) {
+	e, err := readEmbedded(path)
+	if err != nil {
+		return false, err
+	}
+	return e.Plain != "" || e.Synced != "", nil
+}
+
+// embeddedLyrics is what a file's tags currently hold, by role rather than by
+// tag name, so that callers don't each need to know how the formats differ.
+type embeddedLyrics struct {
+	Plain      string // plain, unsynced lyrics
+	Synced     string // line-synced LRC text (FLAC only)
+	Lyricsfile string // raw Lyricsfile YAML (FLAC only), see LyricsfileTag
+	SourceURL  string // lrclib.net page of the source record (FLAC only)
+}
+
+// readEmbedded reads the lyrics-related tags of path. For FLAC, Synced is
+// LYRICS and Plain is UNSYNCEDLYRICS; for MP3 and M4A, Plain is the normalised
+// LYRICS key (USLT / ©lyr) and the other fields are always empty, since those
+// formats don't store them.
+func readEmbedded(path string) (embeddedLyrics, error) {
 	f, err := taglib.OpenReadOnly(path)
 	if err != nil {
-		return false, fmt.Errorf("open: %w", err)
+		return embeddedLyrics{}, fmt.Errorf("open: %w", err)
 	}
 	defer f.Close()
 
 	tags := f.Tags()
-	if tags == nil {
-		return false, nil
+	first := func(key string) string {
+		if vals := tags[key]; len(vals) > 0 {
+			return vals[0]
+		}
+		return ""
 	}
 
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".flac":
-		if vals := tags[taglib.Lyrics]; len(vals) > 0 && vals[0] != "" {
-			return true, nil
-		}
-		if vals := tags["UNSYNCEDLYRICS"]; len(vals) > 0 && vals[0] != "" {
-			return true, nil
-		}
-		return false, nil
-	default: // .mp3, .m4a
-		vals := tags[taglib.Lyrics]
-		return len(vals) > 0 && vals[0] != "", nil
+	if strings.ToLower(filepath.Ext(path)) == ".flac" {
+		return embeddedLyrics{
+			Plain:      first("UNSYNCEDLYRICS"),
+			Synced:     first(taglib.Lyrics),
+			Lyricsfile: first(LyricsfileTag),
+			SourceURL:  first(SourceURLTag),
+		}, nil
 	}
+	return embeddedLyrics{Plain: first(taglib.Lyrics)}, nil
 }
 
 // embedInput is the LRCLIB data embedLyrics may write to a file's tags.
@@ -329,6 +354,50 @@ type embedInput struct {
 	// Lyricsfile is its raw Lyricsfile YAML document, for LyricsfileTag.
 	WordSynced bool
 	Lyricsfile string
+}
+
+// planTags returns the tags embedLyrics would write for in to the file at
+// path, or an error if in can't be embedded (see embedLyrics). A tag whose
+// value is an empty slice is one that would be removed. The map is empty when
+// there is nothing to write for path's format.
+//
+// It is separate from embedLyrics, which just writes the result, so that
+// anything wanting to know what a write would do (the lyrics diff command) asks
+// the same code that does the writing and can't drift from it.
+func planTags(path string, in embedInput) (map[string][]string, error) {
+	tags := make(map[string][]string)
+
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".flac":
+		if in.Synced != "" {
+			tags[taglib.Lyrics] = []string{standardizeLRC(in.Synced)}
+
+			// An empty value makes go-taglib delete the key, which is how
+			// a tag left over from the file's previous lyrics is removed.
+			tags[SourceURLTag] = []string{}
+			if in.SourceURL != "" {
+				tags[SourceURLTag] = []string{in.SourceURL}
+			}
+
+			tags[LyricsfileTag] = []string{}
+			if in.WordSynced {
+				if err := validateLyricsfile(in.Lyricsfile); err != nil {
+					return nil, err
+				}
+				tags[LyricsfileTag] = []string{in.Lyricsfile}
+			}
+		}
+		if in.Plain != "" {
+			tags["UNSYNCEDLYRICS"] = []string{in.Plain}
+		}
+	default: // .mp3, .m4a
+		// Synced-only tracks are not embedded for these formats per design.
+		if in.Plain != "" {
+			tags[taglib.Lyrics] = []string{in.Plain}
+		}
+	}
+
+	return tags, nil
 }
 
 // embedLyrics writes synced and/or plain lyrics to the audio file at path.
@@ -351,38 +420,10 @@ type embedInput struct {
 // Returns (true, nil) when at least one tag was written, (false, nil) when
 // nothing was written, and (false, err) on failure.
 func embedLyrics(path string, in embedInput) (bool, error) {
-	tags := make(map[string][]string)
-
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".flac":
-		if in.Synced != "" {
-			tags[taglib.Lyrics] = []string{standardizeLRC(in.Synced)}
-
-			// An empty value makes go-taglib delete the key, which is how
-			// a tag left over from the file's previous lyrics is removed.
-			tags[SourceURLTag] = []string{}
-			if in.SourceURL != "" {
-				tags[SourceURLTag] = []string{in.SourceURL}
-			}
-
-			tags[LyricsfileTag] = []string{}
-			if in.WordSynced {
-				if err := validateLyricsfile(in.Lyricsfile); err != nil {
-					return false, err
-				}
-				tags[LyricsfileTag] = []string{in.Lyricsfile}
-			}
-		}
-		if in.Plain != "" {
-			tags["UNSYNCEDLYRICS"] = []string{in.Plain}
-		}
-	default: // .mp3, .m4a
-		// Synced-only tracks are not embedded for these formats per design.
-		if in.Plain != "" {
-			tags[taglib.Lyrics] = []string{in.Plain}
-		}
+	tags, err := planTags(path, in)
+	if err != nil {
+		return false, err
 	}
-
 	if len(tags) == 0 {
 		return false, nil
 	}

@@ -1104,3 +1104,121 @@ func TestFetchSkipLyricsfile(t *testing.T) {
 		assert.NotEmpty(t, lyricsTag)
 	})
 }
+
+func TestPlanTags(t *testing.T) {
+	synced := "[00:01.00] Hello\n[00:05.00] World"
+	plain := "Hello\nWorld"
+	const url = "https://lrclib.net/tracks/42"
+
+	t.Run("FLAC with a word-synced record", func(t *testing.T) {
+		tags, err := planTags("track.flac", embedInput{
+			Synced: synced, Plain: plain, SourceURL: url,
+			WordSynced: true, Lyricsfile: wordSyncedYAML,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, map[string][]string{
+			taglib.Lyrics:    {"[00:01.00]Hello\n[00:05.00]World"},
+			"UNSYNCEDLYRICS": {plain},
+			SourceURLTag:     {url},
+			LyricsfileTag:    {wordSyncedYAML},
+		}, tags)
+	})
+
+	t.Run("FLAC without word sync marks the Lyricsfile for removal", func(t *testing.T) {
+		tags, err := planTags("track.flac", embedInput{Synced: synced, SourceURL: url})
+		require.NoError(t, err)
+
+		// An empty slice, not an absent key, is what removes a tag.
+		got, ok := tags[LyricsfileTag]
+		assert.True(t, ok)
+		assert.Empty(t, got)
+		assert.Equal(t, []string{url}, tags[SourceURLTag])
+	})
+
+	t.Run("FLAC without a source URL marks it for removal", func(t *testing.T) {
+		tags, err := planTags("track.flac", embedInput{Synced: synced})
+		require.NoError(t, err)
+		got, ok := tags[SourceURLTag]
+		assert.True(t, ok)
+		assert.Empty(t, got)
+	})
+
+	t.Run("FLAC with plain lyrics only touches nothing else", func(t *testing.T) {
+		tags, err := planTags("track.flac", embedInput{Plain: plain, SourceURL: url, WordSynced: true, Lyricsfile: wordSyncedYAML})
+		require.NoError(t, err)
+		assert.Equal(t, map[string][]string{"UNSYNCEDLYRICS": {plain}}, tags)
+	})
+
+	t.Run("MP3 and M4A only get plain lyrics", func(t *testing.T) {
+		for _, name := range []string{"track.mp3", "track.m4a", "TRACK.MP3"} {
+			tags, err := planTags(name, embedInput{
+				Synced: synced, Plain: plain, SourceURL: url,
+				WordSynced: true, Lyricsfile: wordSyncedYAML,
+			})
+			require.NoError(t, err, name)
+			assert.Equal(t, map[string][]string{taglib.Lyrics: {plain}}, tags, name)
+		}
+	})
+
+	t.Run("MP3 with synced lyrics only plans nothing", func(t *testing.T) {
+		tags, err := planTags("track.mp3", embedInput{Synced: synced})
+		require.NoError(t, err)
+		assert.Empty(t, tags)
+	})
+
+	t.Run("an invalid Lyricsfile is an error for FLAC only", func(t *testing.T) {
+		in := embedInput{Synced: synced, WordSynced: true, Lyricsfile: "a: [unclosed\n"}
+
+		_, err := planTags("track.flac", in)
+		assert.Error(t, err)
+
+		_, err = planTags("track.mp3", in)
+		assert.NoError(t, err)
+	})
+}
+
+func TestReadEmbedded(t *testing.T) {
+	t.Run("FLAC reads each role from its own tag", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
+		require.NoError(t, taglib.WriteTags(path, map[string][]string{
+			taglib.Lyrics:    {"[00:01.00]Hello"},
+			"UNSYNCEDLYRICS": {"Hello"},
+			SourceURLTag:     {"https://lrclib.net/tracks/42"},
+			LyricsfileTag:    {wordSyncedYAML},
+		}, 0))
+
+		got, err := readEmbedded(path)
+		require.NoError(t, err)
+		assert.Equal(t, embeddedLyrics{
+			Plain:      "Hello",
+			Synced:     "[00:01.00]Hello",
+			Lyricsfile: wordSyncedYAML,
+			SourceURL:  "https://lrclib.net/tracks/42",
+		}, got)
+	})
+
+	t.Run("MP3 and M4A put LYRICS in Plain and nothing else", func(t *testing.T) {
+		for _, name := range []string{"track.mp3", "track.m4a"} {
+			path := testutil.MakeAudioFile(t, t.TempDir(), name, nil)
+			require.NoError(t, taglib.WriteTags(path, map[string][]string{
+				taglib.Lyrics: {"Hello"},
+			}, 0))
+
+			got, err := readEmbedded(path)
+			require.NoError(t, err, name)
+			assert.Equal(t, embeddedLyrics{Plain: "Hello"}, got, name)
+		}
+	})
+
+	t.Run("a file with no lyrics reads as empty", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", nil)
+		got, err := readEmbedded(path)
+		require.NoError(t, err)
+		assert.Equal(t, embeddedLyrics{}, got)
+	})
+
+	t.Run("a missing file is an error", func(t *testing.T) {
+		_, err := readEmbedded("/nonexistent/track.flac")
+		assert.Error(t, err)
+	})
+}
