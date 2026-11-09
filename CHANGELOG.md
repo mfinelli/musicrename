@@ -4,7 +4,7 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
-## Unreleased
+## v4.7.0 — 2026-11-09
 
 - `lyrics` now records which LRCLIB track the synced lyrics came from in a new
   `LRCLIB_URL` tag on FLAC files.
