@@ -1512,18 +1512,17 @@ func newTinyDisc(t *testing.T, start int) tinyDisc {
 	text := withTOC(t, fixtureText(t, fixtureBlack), tracks)
 	text = strings.ReplaceAll(text, blackCopyCRC, fmt.Sprintf("%08X", crc32.ChecksumIEEE(data)))
 
-	frames := func(n int) string { return msf(n) }
 	var cue strings.Builder
 	cue.WriteString("FILE \"Back in Black.flac\" WAVE\r\n")
 	for i, tr := range tracks {
 		fmt.Fprintf(&cue, "  TRACK %02d AUDIO\r\n", tr.Number)
 		switch {
 		case i == 0 && start > 0:
-			fmt.Fprintf(&cue, "    INDEX 00 %s\r\n", frames(0))
+			fmt.Fprintf(&cue, "    INDEX 00 %s\r\n", msf(0))
 		case tr.Number == 3:
-			fmt.Fprintf(&cue, "    INDEX 00 %s\r\n", frames(tr.Start-100))
+			fmt.Fprintf(&cue, "    INDEX 00 %s\r\n", msf(tr.Start-100))
 		}
-		fmt.Fprintf(&cue, "    INDEX 01 %s\r\n", frames(tr.Start))
+		fmt.Fprintf(&cue, "    INDEX 01 %s\r\n", msf(tr.Start))
 	}
 
 	return tinyDisc{
@@ -1987,7 +1986,13 @@ func TestCheckSplitWhereTheyDifferWithFFmpeg(t *testing.T) {
 
 func TestHiddenTrackRule(t *testing.T) {
 	t.Run("what the option says", func(t *testing.T) {
-		for raw, want := range map[string]HiddenTrack{"auto": HiddenAuto, "": HiddenAuto, "AUTO": HiddenAuto, "yes": HiddenYes, "Yes": HiddenYes, " no ": HiddenNo} {
+		cases := map[string]HiddenTrack{
+			"auto": HiddenAuto, "": HiddenAuto, "AUTO": HiddenAuto,
+			"yes": HiddenYes, "Yes": HiddenYes,
+			// The whitespace around "no" is what ParseHiddenTrack trims.
+			" no ": HiddenNo, //nolint:gocritic // the whitespace is the point
+		}
+		for raw, want := range cases {
 			got, err := ParseHiddenTrack(raw)
 			require.NoError(t, err, raw)
 			assert.Equal(t, want, got, raw)

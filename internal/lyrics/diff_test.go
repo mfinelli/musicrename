@@ -200,7 +200,7 @@ func TestDiff_Statuses(t *testing.T) {
 	t.Run("no match on LRCLIB is NotFound", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/search" {
-				w.Write([]byte("[]"))
+				_, _ = w.Write([]byte("[]"))
 				return
 			}
 			w.WriteHeader(http.StatusNotFound)

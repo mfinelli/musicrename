@@ -47,7 +47,7 @@ func MakeVideoFile(t *testing.T, dir, name string, width, height int, videoCodec
 	}
 	args = append(args, "-t", "1", path)
 
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ffmpeg", args...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("MakeVideoFile: ffmpeg failed: %v\n%s", err, out)
 	}
@@ -67,8 +67,8 @@ func MakeVideoFileWithTone(t *testing.T, dir, name, videoCodec, audioCodec strin
 	t.Helper()
 
 	path := filepath.Join(dir, name)
-	out, err := exec.Command(
-		"ffmpeg", "-y",
+	out, err := exec.CommandContext(
+		t.Context(), "ffmpeg", "-y",
 		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
 		"-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=5",
 		"-map", "1:v", "-map", "0:a",

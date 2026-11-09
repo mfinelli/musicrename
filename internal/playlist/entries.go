@@ -102,7 +102,7 @@ func ReadNavidromeID(path string) (id string, ok bool, err error) {
 //
 // A present-but-empty directive (e.g. "#TARGETS:" with nothing after it)
 // returns (empty slice, true, nil): an explicit, deliberate empty list is
-// kept distinct from "no directive at all."
+// kept distinct from having no directive at all.
 func ReadTargets(path string) (names []string, ok bool, err error) {
 	lines, err := readLines(path)
 	if err != nil {

@@ -80,8 +80,7 @@ var (
 )
 
 // manualOverrides contains hardcoded replacements that bypass the standard
-// pipeline. Format: [Original String] -> [Context Type] -> [Replacement
-// String]
+// pipeline, keyed as original string, then context type, then replacement.
 var manualOverrides = map[string]map[OverrideType]string{
 	"AC/DC": {
 		// Use Unicode fraction slash (U+2044) to preserve visual separation

@@ -111,21 +111,21 @@ func ResizeFile(srcPath, dstPath string, maxDimension int) error {
 	return nil
 }
 
-// fitDimensions returns the largest (w, h) no larger than max in either
+// fitDimensions returns the largest (w, h) no larger than limit in either
 // dimension that preserves the srcW:srcH aspect ratio, without ever
-// upscaling (if srcW and srcH already both fit within max, they are
+// upscaling (if srcW and srcH already both fit within limit, they are
 // returned unchanged).
-func fitDimensions(srcW, srcH, max int) (w, h int) {
-	if srcW <= max && srcH <= max {
+func fitDimensions(srcW, srcH, limit int) (w, h int) {
+	if srcW <= limit && srcH <= limit {
 		return srcW, srcH
 	}
 
 	if srcW >= srcH {
-		w = max
-		h = srcH * max / srcW
+		w = limit
+		h = srcH * limit / srcW
 	} else {
-		h = max
-		w = srcW * max / srcH
+		h = limit
+		w = srcW * limit / srcH
 	}
 	if w < 1 {
 		w = 1

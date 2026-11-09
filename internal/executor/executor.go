@@ -34,6 +34,7 @@
 package executor
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -193,10 +194,9 @@ func moveWithFallback(oldPath, newPath string) error {
 		return nil
 	}
 
-	if linkErr, ok := err.(*os.LinkError); ok {
-		if linkErr.Err == syscall.EXDEV {
-			return copyAndDelete(oldPath, newPath)
-		}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) && errors.Is(linkErr.Err, syscall.EXDEV) {
+		return copyAndDelete(oldPath, newPath)
 	}
 
 	return err

@@ -59,10 +59,10 @@ func TestScan(t *testing.T) {
 			switch {
 			case strings.Contains(r.URL.Path, "startScan"):
 				atomic.AddInt32(&startCalls, 1)
-				fmt.Fprint(w, scanResponse(false, 42))
+				_, _ = fmt.Fprint(w, scanResponse(false, 42))
 			case strings.Contains(r.URL.Path, "getScanStatus"):
 				atomic.AddInt32(&statusCalls, 1)
-				fmt.Fprint(w, scanResponse(false, 42))
+				_, _ = fmt.Fprint(w, scanResponse(false, 42))
 			}
 		}))
 		defer srv.Close()
@@ -81,13 +81,13 @@ func TestScan(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "startScan"):
-				fmt.Fprint(w, scanResponse(true, 0))
+				_, _ = fmt.Fprint(w, scanResponse(true, 0))
 			case strings.Contains(r.URL.Path, "getScanStatus"):
 				n := statusCalls.Add(1)
 				if n < 3 {
-					fmt.Fprint(w, scanResponse(true, int64(n)*10))
+					_, _ = fmt.Fprint(w, scanResponse(true, int64(n)*10))
 				} else {
-					fmt.Fprint(w, scanResponse(false, 100))
+					_, _ = fmt.Fprint(w, scanResponse(false, 100))
 				}
 			}
 		}))
@@ -106,7 +106,7 @@ func TestScan(t *testing.T) {
 
 	t.Run("nil progress callback is safe", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, scanResponse(false, 0))
+			_, _ = fmt.Fprint(w, scanResponse(false, 0))
 		}))
 		defer srv.Close()
 
@@ -115,7 +115,7 @@ func TestScan(t *testing.T) {
 
 	t.Run("propagates a StartScan failure", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"failed","error":{"code":50,"message":"not authorized"}}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"failed","error":{"code":50,"message":"not authorized"}}}`)
 		}))
 		defer srv.Close()
 
@@ -127,9 +127,9 @@ func TestScan(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "startScan"):
-				fmt.Fprint(w, scanResponse(true, 0))
+				_, _ = fmt.Fprint(w, scanResponse(true, 0))
 			case strings.Contains(r.URL.Path, "getScanStatus"):
-				fmt.Fprint(w, `{"subsonic-response":{"status":"failed","error":{"code":0,"message":"boom"}}}`)
+				_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"failed","error":{"code":0,"message":"boom"}}}`)
 			}
 		}))
 		defer srv.Close()

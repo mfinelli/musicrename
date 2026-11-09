@@ -135,7 +135,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	fmt.Fprintln(out, "Validating credentials...")
 
-	if err := navidrome.Ping(url, username, password); err != nil {
+	if err := navidrome.Ping(cmd.Context(), url, username, password); err != nil {
 		return fmt.Errorf("could not authenticate: %w", err)
 	}
 

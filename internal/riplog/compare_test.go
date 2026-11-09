@@ -502,7 +502,7 @@ func TestCompareFilesWithFFmpeg(t *testing.T) {
 			{"-c:a", "flac", "-ac", "1", mono},
 		} {
 			full := append([]string{"-v", "error", "-y", "-f", "s16le", "-ar", "44100", "-ac", "2", "-i", src}, args...)
-			require.NoError(t, exec.Command("ffmpeg", full...).Run())
+			require.NoError(t, exec.CommandContext(t.Context(), "ffmpeg", full...).Run())
 		}
 
 		for name, other := range map[string]string{"an MP3": mp3, "24-bit": wide, "mono": mono} {

@@ -109,10 +109,10 @@ func isCommentLine(line string) bool {
 // strips any whitespace between the last line-level timestamp and the lyric text.
 func applyTimestamps(line string, offsetMs int) string {
 	result := timestampRe.ReplaceAllStringFunc(line, func(match string) string {
-		open := match[0]
-		close := match[len(match)-1]
+		first := match[0]
+		last := match[len(match)-1]
 		inner := match[1 : len(match)-1]
-		return string(open) + normalizeTimestampWithOffset(inner, offsetMs) + string(close)
+		return string(first) + normalizeTimestampWithOffset(inner, offsetMs) + string(last)
 	})
 	return spaceAfterTimestampRe.ReplaceAllString(result, "$1")
 }
@@ -160,14 +160,14 @@ func normalizeTimestampWithOffset(ts string, offsetMs int) string {
 
 	h := int(total / time.Hour)
 	total -= time.Duration(h) * time.Hour
-	min := int(total / time.Minute)
-	total -= time.Duration(min) * time.Minute
+	mins := int(total / time.Minute)
+	total -= time.Duration(mins) * time.Minute
 	sec := int(total / time.Second)
 	total -= time.Duration(sec) * time.Second
 	cs := int(total.Milliseconds()) / 10 // centiseconds 0–99
 
 	if h > 0 {
-		return fmt.Sprintf("%02d:%02d:%02d.%02d", h, min, sec, cs)
+		return fmt.Sprintf("%02d:%02d:%02d.%02d", h, mins, sec, cs)
 	}
-	return fmt.Sprintf("%02d:%02d.%02d", min, sec, cs)
+	return fmt.Sprintf("%02d:%02d.%02d", mins, sec, cs)
 }

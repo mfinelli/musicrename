@@ -48,19 +48,19 @@ playlist must already exist; this command never creates a new file (use
 
 func init() {
 	playlistTargetsCmd.Flags().String("set", "", "Comma-separated target names to set (may be empty)")
-	playlistTargetsCmd.RegisterFlagCompletionFunc("set", completion.CommaSeparated(target.Names))
+	_ = playlistTargetsCmd.RegisterFlagCompletionFunc("set", completion.CommaSeparated(target.Names))
 	playlistTargetsCmd.Flags().Bool("clear", false, "Remove the #TARGETS: directive entirely")
 	playlistCmd.AddCommand(playlistTargetsCmd)
 }
 
 func runPlaylistTargets(cmd *cobra.Command, args []string) error {
 	setGiven := cmd.Flags().Changed("set")
-	clear, _ := cmd.Flags().GetBool("clear")
+	clearGiven, _ := cmd.Flags().GetBool("clear")
 
 	switch {
-	case setGiven && clear:
+	case setGiven && clearGiven:
 		return fmt.Errorf("--set and --clear are mutually exclusive")
-	case !setGiven && !clear:
+	case !setGiven && !clearGiven:
 		return fmt.Errorf("exactly one of --set or --clear is required")
 	}
 

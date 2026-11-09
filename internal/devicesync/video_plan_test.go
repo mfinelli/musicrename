@@ -33,13 +33,14 @@ import (
 )
 
 // setupVideoFixture places a real video fixture at libraryRootRoot/videos/
-// rel, writes its source sums.md5, and selects it for targetName which is
-// everything VideoPlan needs to find one desired video.
-func setupVideoFixture(t *testing.T, root, targetName string, width, height int) (rel, videoDir string) {
+// b/beyonce/crazy in love/crazy in love.mp4, writes its source sums.md5, and
+// selects it for targetName, which is everything VideoPlan needs to find one
+// desired video. It returns the directory holding the video.
+func setupVideoFixture(t *testing.T, root, targetName string, width, height int) (videoDir string) {
 	t.Helper()
 
 	videos := filepath.Join(root, "videos")
-	rel = filepath.Join("b", "beyonce", "crazy in love", "crazy in love.mp4")
+	rel := filepath.Join("b", "beyonce", "crazy in love", "crazy in love.mp4")
 	videoDir = filepath.Dir(filepath.Join(videos, rel))
 	require.NoError(t, os.MkdirAll(videoDir, 0755))
 
@@ -51,7 +52,7 @@ func setupVideoFixture(t *testing.T, root, targetName string, width, height int)
 	}))
 	require.NoError(t, playlist.WriteManifest(videos, targetName, []string{filepath.ToSlash(rel)}))
 
-	return rel, videoDir
+	return videoDir
 }
 
 func TestVideoPlan(t *testing.T) {
@@ -117,7 +118,7 @@ func TestVideoPlan(t *testing.T) {
 	t.Run("regenerates when the source video's content changes", func(t *testing.T) {
 		root := t.TempDir()
 		device := t.TempDir()
-		_, videoDir := setupVideoFixture(t, root, "ipod", 640, 360)
+		videoDir := setupVideoFixture(t, root, "ipod", 640, 360)
 
 		plan1, err := VideoPlan(root, device, "ipod")
 		require.NoError(t, err)

@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"charm.land/huh/v2"
@@ -219,7 +220,7 @@ func runSyncDevice(cmd *cobra.Command, targetName string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("syncing: %w", err)
 	}
-	warnings := append(plan.Warnings, result.Warnings...)
+	warnings := append(slices.Clone(plan.Warnings), result.Warnings...)
 
 	fmt.Fprintln(out)
 	if verbose {

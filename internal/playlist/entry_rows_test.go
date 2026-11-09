@@ -30,7 +30,7 @@ import (
 	"github.com/mfinelli/musicrename/internal/metadata"
 )
 
-func makeEntryRowAudioFile(t *testing.T, dir, name string, tags map[string]string) string {
+func makeEntryRowAudioFile(t *testing.T, dir, name string, tags map[string]string) {
 	t.Helper()
 
 	path := filepath.Join(dir, name)
@@ -48,10 +48,8 @@ func makeEntryRowAudioFile(t *testing.T, dir, name string, tags map[string]strin
 	}
 	args = append(args, path)
 
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ffmpeg", args...).CombinedOutput()
 	require.NoErrorf(t, err, "ffmpeg failed: %s", out)
-
-	return path
 }
 
 func TestResolveEntryRows(t *testing.T) {

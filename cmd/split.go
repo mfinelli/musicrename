@@ -98,7 +98,7 @@ there is an error, and with --strict when there is a warning.`,
 func init() {
 	splitCmd.Flags().Bool("check", false, "Check an existing split against the rip's log, instead of making one")
 	splitCmd.Flags().String("hidden-track", "auto", "What audio before track 1 is: auto, yes (a track 00) or no (part of track 1)")
-	splitCmd.RegisterFlagCompletionFunc("hidden-track", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = splitCmd.RegisterFlagCompletionFunc("hidden-track", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return riplog.HiddenTrackValues(), cobra.ShellCompDirectiveNoFileComp
 	})
 	splitCmd.Flags().Bool("strict", false, "Treat warnings as failures for the exit status")

@@ -38,8 +38,8 @@ func ProbeText(t *testing.T, path, showEntries string, ofOpts ...string) string 
 
 	of := append([]string{"noprint_wrappers=1"}, ofOpts...)
 
-	out, err := exec.Command(
-		"ffprobe", "-v", "error",
+	out, err := exec.CommandContext(
+		t.Context(), "ffprobe", "-v", "error",
 		"-show_entries", showEntries,
 		"-of", "default="+strings.Join(of, ":"),
 		path,

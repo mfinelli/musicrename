@@ -52,7 +52,7 @@ directory.`,
 func init() {
 	playlistCreateCmd.Flags().String("targets", "",
 		"Comma-separated target names (e.g. ipod,sdcard); omit the flag entirely for every target")
-	playlistCreateCmd.RegisterFlagCompletionFunc("targets", completion.CommaSeparated(target.Names))
+	_ = playlistCreateCmd.RegisterFlagCompletionFunc("targets", completion.CommaSeparated(target.Names))
 	playlistCmd.AddCommand(playlistCreateCmd)
 }
 

@@ -193,8 +193,10 @@ func (c *lrclibClient) doGet(ctx context.Context, rawURL string) (*http.Response
 		}
 
 		// Drain a little of the body so the connection can be reused, then
-		// wait out the throttling before trying again.
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		// wait out the throttling before trying again. Whatever is drained
+		// (or not) is discarded either way, so a read error here is nothing
+		// to act on: the retry follows regardless.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		resp.Body.Close()
 
 		wait += time.Duration(rand.Float64() * lrclibRetryJitter * float64(wait))

@@ -63,10 +63,10 @@ plain: |
 
 // lfReplace returns lfBase with old replaced by new, failing if old isn't in
 // it, so a test can't silently compare a document with itself.
-func lfReplace(t *testing.T, old, new string) string {
+func lfReplace(t *testing.T, old, replacement string) string {
 	t.Helper()
 	require.Contains(t, lfBase, old)
-	return strings.Replace(lfBase, old, new, 1)
+	return strings.Replace(lfBase, old, replacement, 1)
 }
 
 func TestParseLyricsfile(t *testing.T) {

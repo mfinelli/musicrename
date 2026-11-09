@@ -19,6 +19,7 @@ package video
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -275,10 +276,9 @@ func moveVideoFile(src, dst string) error {
 		return nil
 	}
 
-	if linkErr, ok := err.(*os.LinkError); ok {
-		if linkErr.Err == syscall.EXDEV {
-			return copyAndDeleteFile(src, dst)
-		}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) && errors.Is(linkErr.Err, syscall.EXDEV) {
+		return copyAndDeleteFile(src, dst)
 	}
 
 	return err

@@ -248,7 +248,7 @@ func TestLevelRange(t *testing.T) {
 		}
 		g := &grid{sampleRate: 44100, window: window, cols: b.finish()}
 
-		lo, hi := g.levelRange(110)
+		lo, hi := g.levelRange()
 
 		assert.InDelta(t, -60, hi, 1e-6)
 		assert.InDelta(t, -170, lo, 1e-6)
@@ -266,7 +266,7 @@ func TestLevelRange(t *testing.T) {
 		b.add(spike)
 		g := &grid{sampleRate: 44100, window: window, cols: b.finish()}
 
-		_, hi := g.levelRange(110)
+		_, hi := g.levelRange()
 
 		assert.Less(t, hi, -50.0)
 	})
@@ -276,7 +276,7 @@ func TestLevelRange(t *testing.T) {
 		b.add(nil)
 		g := &grid{sampleRate: 44100, window: window, cols: b.finish()}
 
-		lo, hi := g.levelRange(110)
+		lo, hi := g.levelRange()
 
 		assert.Equal(t, 0.0, hi)
 		assert.Equal(t, -110.0, lo)

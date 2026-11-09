@@ -200,9 +200,9 @@ func buildGrid(r io.Reader, info StreamInfo, channel int, silenceDB float64) (*g
 
 // levelRange returns the dB levels to map onto the color scale: the top is
 // the 99.9th percentile of all non-silent levels in the grid (so one stray
-// spike does not squash everything else), and the bottom is dynamicRange dB
+// spike does not squash everything else), and the bottom is dynamicRangeDB dB
 // below it.
-func (g *grid) levelRange(dynamicRange float64) (lo, hi float64) {
+func (g *grid) levelRange() (lo, hi float64) {
 	var levels []float64
 	for c := range g.cols {
 		for r := range gridRows {
@@ -212,11 +212,11 @@ func (g *grid) levelRange(dynamicRange float64) (lo, hi float64) {
 		}
 	}
 	if len(levels) == 0 {
-		return -dynamicRange, 0
+		return -dynamicRangeDB, 0
 	}
 	sort.Float64s(levels)
 	hi = levels[int(0.999*float64(len(levels)-1))]
-	return hi - dynamicRange, hi
+	return hi - dynamicRangeDB, hi
 }
 
 // openGrid decodes path through src and builds a grid of one channel.
