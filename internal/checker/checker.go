@@ -159,14 +159,18 @@ func CheckTrack(filePath string) (*AlbumResult, error) {
 func checkAlbum(album *metadata.Album, libraryRoot string) (*AlbumResult, error) {
 	ar := &AlbumResult{AlbumPath: album.RootPath}
 
+	audio := make([]trackAudio, 0, len(album.Tracks))
 	mbids := make([]string, 0, len(album.Tracks))
 	for _, track := range album.Tracks {
 		checkTrackTags(track, ar)
-		mbids = append(mbids, checkTrackAudio(track, ar))
+		a := checkTrackAudio(track, ar)
+		audio = append(audio, a)
+		mbids = append(mbids, a.MBID)
 	}
 
 	checkAlbumTags(album, ar)
 	checkAlbumMusicBrainzID(mbids, ar)
+	checkAlbumReplayGain(audio, ar)
 	checkArtwork(album, ar)
 	checkIntegrity(album, ar)
 	checkUnknownFiles(album, ar)
@@ -205,12 +209,22 @@ func checkTrackTags(track *metadata.Track, ar *AlbumResult) {
 	}
 }
 
+// trackAudio is what checkTrackAudio read from a track that the checks across
+// an album need, since the checks of one track can't see the others.
+type trackAudio struct {
+	// MBID is the track's MUSICBRAINZ_ALBUMID tag value, "" if absent.
+	MBID string
+	// AlbumGain and AlbumPeak are its REPLAYGAIN_ALBUM_GAIN and
+	// REPLAYGAIN_ALBUM_PEAK values, "" if absent.
+	AlbumGain, AlbumPeak string
+}
+
 // checkTrackAudio performs a second read-only pass over each audio file to
 // check for tags and properties not captured by the primary metadata scan.
 //
 // Specifically it checks for:
-//   - missing REPLAYGAIN_TRACK_GAIN tag
-//   - missing REPLAYGAIN_ALBUM_GAIN tag
+//   - missing REPLAYGAIN_TRACK_GAIN and REPLAYGAIN_TRACK_PEAK tags
+//   - missing REPLAYGAIN_ALBUM_GAIN and REPLAYGAIN_ALBUM_PEAK tags
 //   - embedded artwork (detected via Properties().Images)
 //
 // This is a deliberate design choice: metadata.Track stays focused on the
@@ -218,34 +232,39 @@ func checkTrackTags(track *metadata.Track, ar *AlbumResult) {
 // read here in a separate pass rather than expanding the shared data model.
 // The WASM call is read-only and inexpensive relative to the overall check run.
 //
-// mbid returns the track's MUSICBRAINZ_ALBUMID tag value ("" if absent or
-// the file couldn't be opened), for checkAlbumMusicBrainzID's cross-track
-// comparison. It's read here alongside everything else rather than as its own
-// separate pass, since the file is already open for the checks above.
-func checkTrackAudio(track *metadata.Track, ar *AlbumResult) (mbid string) {
+// It returns the tags of the track that checkAlbumMusicBrainzID and
+// checkAlbumReplayGain compare across the album, read here alongside everything
+// else rather than as their own separate pass, since the file is already open
+// for the checks above. A file that couldn't be opened gives the zero value.
+func checkTrackAudio(track *metadata.Track, ar *AlbumResult) (audio trackAudio) {
 	file, err := taglib.OpenReadOnly(track.Path)
 	if err != nil {
 		// The primary scan phase already records a warning for unreadable
 		// files; skip silently here to avoid duplicating it.
-		return ""
+		return trackAudio{}
 	}
 	defer file.Close()
 
 	if tags := file.Tags(); tags != nil {
-		if len(tags["REPLAYGAIN_TRACK_GAIN"]) == 0 {
-			ar.Warnings = append(ar.Warnings, Warning{
-				Path:    track.Path,
-				Message: "missing REPLAYGAIN_TRACK_GAIN tag",
-			})
+		for _, key := range []string{
+			"REPLAYGAIN_TRACK_GAIN", "REPLAYGAIN_TRACK_PEAK",
+			"REPLAYGAIN_ALBUM_GAIN", "REPLAYGAIN_ALBUM_PEAK",
+		} {
+			if len(tags[key]) == 0 {
+				ar.Warnings = append(ar.Warnings, Warning{
+					Path:    track.Path,
+					Message: "missing " + key + " tag",
+				})
+			}
 		}
-		if len(tags["REPLAYGAIN_ALBUM_GAIN"]) == 0 {
-			ar.Warnings = append(ar.Warnings, Warning{
-				Path:    track.Path,
-				Message: "missing REPLAYGAIN_ALBUM_GAIN tag",
-			})
+		if vals := tags["REPLAYGAIN_ALBUM_GAIN"]; len(vals) > 0 {
+			audio.AlbumGain = vals[0]
+		}
+		if vals := tags["REPLAYGAIN_ALBUM_PEAK"]; len(vals) > 0 {
+			audio.AlbumPeak = vals[0]
 		}
 		if vals := tags[taglib.MusicBrainzAlbumID]; len(vals) > 0 {
-			mbid = vals[0]
+			audio.MBID = vals[0]
 		}
 	}
 
@@ -256,7 +275,7 @@ func checkTrackAudio(track *metadata.Track, ar *AlbumResult) (mbid string) {
 		})
 	}
 
-	return mbid
+	return audio
 }
 
 // checkTrackFilename warns when the file's current basename does not match
@@ -408,6 +427,45 @@ func checkAlbumMusicBrainzID(mbids []string, ar *AlbumResult) {
 			})
 			return
 		}
+	}
+}
+
+// checkAlbumReplayGain warns when the tracks of an album don't all carry the
+// same REPLAYGAIN_ALBUM_GAIN, or the same REPLAYGAIN_ALBUM_PEAK. An album's
+// values are one number each for the whole album, so tracks that disagree were
+// not scanned together (a track was added or replaced after the scan, say) and
+// none of the album values can be trusted until the album is scanned again.
+//
+// Only populated values are compared: a track with no value is already
+// reported as missing it by checkTrackAudio.
+func checkAlbumReplayGain(audio []trackAudio, ar *AlbumResult) {
+	disagree := func(value func(trackAudio) string) bool {
+		first := ""
+		for _, a := range audio {
+			v := strings.TrimSpace(value(a))
+			if v == "" {
+				continue
+			}
+			if first == "" {
+				first = v
+			} else if v != first {
+				return true
+			}
+		}
+		return false
+	}
+
+	if disagree(func(a trackAudio) string { return a.AlbumGain }) {
+		ar.Warnings = append(ar.Warnings, Warning{
+			Path:    ar.AlbumPath,
+			Message: "inconsistent REPLAYGAIN_ALBUM_GAIN tags across tracks",
+		})
+	}
+	if disagree(func(a trackAudio) string { return a.AlbumPeak }) {
+		ar.Warnings = append(ar.Warnings, Warning{
+			Path:    ar.AlbumPath,
+			Message: "inconsistent REPLAYGAIN_ALBUM_PEAK tags across tracks",
+		})
 	}
 }
 

@@ -216,7 +216,10 @@ Checks include:
 - Inconsistent *MUSICBRAINZ_ALBUMID* across tracks (present on some but not
   others, or two different non-empty values). An album with the tag on none
   of its tracks is not itself a finding.
-- Missing *REPLAYGAIN_TRACK_GAIN* or *REPLAYGAIN_ALBUM_GAIN* tags
+- Missing *REPLAYGAIN_TRACK_GAIN*, *REPLAYGAIN_TRACK_PEAK*,
+  *REPLAYGAIN_ALBUM_GAIN*, or *REPLAYGAIN_ALBUM_PEAK* tags
+- *REPLAYGAIN_ALBUM_GAIN* or *REPLAYGAIN_ALBUM_PEAK* not the same on every track
+  of an album (the tracks were not scanned together)
 - Embedded artwork inside audio files
 - Missing or duplicate primary artwork (*folder.jpg* / *folder.png* /
   *folder.webp* / *folder.mp4*). One static image plus one animated file is

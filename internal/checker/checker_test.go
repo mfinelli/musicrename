@@ -357,6 +357,70 @@ func TestCheckAlbumMusicBrainzID(t *testing.T) {
 	})
 }
 
+func TestCheckAlbumReplayGain(t *testing.T) {
+	tr := func(gain, peak string) trackAudio { return trackAudio{AlbumGain: gain, AlbumPeak: peak} }
+
+	t.Run("no tracks produces no warnings", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain(nil, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("tracks that agree produce no warnings", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{
+			tr("-7.31 dB", "0.987654"), tr("-7.31 dB", "0.987654"), tr("-7.31 dB", "0.987654"),
+		}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("two different album gains produce one warning on the album", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{tr("-7.31 dB", "0.9"), tr("-6.00 dB", "0.9")}, ar)
+		require.Len(t, ar.Warnings, 1)
+		assert.Equal(t, "/a", ar.Warnings[0].Path)
+		assert.Contains(t, ar.Warnings[0].Message, "REPLAYGAIN_ALBUM_GAIN")
+	})
+
+	t.Run("two different album peaks produce one warning on the album", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{tr("-7.31 dB", "0.987654"), tr("-7.31 dB", "0.5")}, ar)
+		require.Len(t, ar.Warnings, 1)
+		assert.Contains(t, ar.Warnings[0].Message, "REPLAYGAIN_ALBUM_PEAK")
+	})
+
+	t.Run("gain and peak both disagreeing are two warnings", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{tr("-7.31 dB", "0.9"), tr("-6.00 dB", "0.5")}, ar)
+		assert.Len(t, ar.Warnings, 2)
+	})
+
+	t.Run("only one warning however many tracks disagree", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{tr("a", "p"), tr("b", "p"), tr("c", "p"), tr("d", "p")}, ar)
+		assert.Len(t, ar.Warnings, 1)
+	})
+
+	t.Run("a track missing the value is not a disagreement", func(t *testing.T) {
+		// It is reported as missing by checkTrackAudio, on the track.
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{tr("-7.31 dB", "0.9"), tr("", ""), tr("-7.31 dB", "0.9")}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("surrounding whitespace is not a disagreement", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{tr("-7.31 dB", "0.9"), tr(" -7.31 dB ", "0.9 ")}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("a single track can't disagree with itself", func(t *testing.T) {
+		ar := &AlbumResult{AlbumPath: "/a"}
+		checkAlbumReplayGain([]trackAudio{tr("-7.31 dB", "0.9")}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+}
+
 func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 	t.Run("missing REPLAYGAIN_TRACK_GAIN produces warning", func(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
@@ -384,12 +448,68 @@ func TestCheckTrackAudio_ReplayGain(t *testing.T) {
 		assert.NotNil(t, findWarning(ar, "REPLAYGAIN_ALBUM_GAIN"))
 	})
 
+	t.Run("missing REPLAYGAIN_TRACK_PEAK produces warning", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":                 "Track",
+			"ARTIST":                "Artist",
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
+			// Intentionally no REPLAYGAIN_TRACK_PEAK.
+		})
+		ar := &AlbumResult{}
+		checkTrackAudio(&metadata.Track{Path: path}, ar)
+		assert.NotNil(t, findWarning(ar, "REPLAYGAIN_TRACK_PEAK"))
+		assert.Nil(t, findWarning(ar, "REPLAYGAIN_ALBUM_PEAK"))
+	})
+
+	t.Run("missing REPLAYGAIN_ALBUM_PEAK produces warning", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"TITLE":                 "Track",
+			"ARTIST":                "Artist",
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			// Intentionally no REPLAYGAIN_ALBUM_PEAK.
+		})
+		ar := &AlbumResult{}
+		checkTrackAudio(&metadata.Track{Path: path}, ar)
+		assert.NotNil(t, findWarning(ar, "REPLAYGAIN_ALBUM_PEAK"))
+		assert.Nil(t, findWarning(ar, "REPLAYGAIN_TRACK_PEAK"))
+	})
+
+	t.Run("a track with none of the tags is warned about each of the four", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{"TITLE": "Track"})
+		ar := &AlbumResult{}
+		checkTrackAudio(&metadata.Track{Path: path}, ar)
+		for _, key := range []string{
+			"REPLAYGAIN_TRACK_GAIN", "REPLAYGAIN_TRACK_PEAK",
+			"REPLAYGAIN_ALBUM_GAIN", "REPLAYGAIN_ALBUM_PEAK",
+		} {
+			assert.NotNil(t, findWarning(ar, "missing "+key+" tag"), key)
+		}
+	})
+
+	t.Run("returns the album values for the checks across the album", func(t *testing.T) {
+		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
+		})
+		audio := checkTrackAudio(&metadata.Track{Path: path}, &AlbumResult{})
+		assert.Equal(t, "+1.00 dB", audio.AlbumGain)
+		assert.Equal(t, "0.999999", audio.AlbumPeak)
+	})
+
 	t.Run("both ReplayGain tags present produces no ReplayGain warnings", func(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
 			"TITLE":                 "Track",
 			"ARTIST":                "Artist",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
 		})
 		track := &metadata.Track{Path: path}
 		ar := &AlbumResult{}
@@ -407,11 +527,13 @@ func TestCheckTrackAudio_MusicBrainzAlbumID(t *testing.T) {
 			"MUSICBRAINZ_ALBUMID":   "d1d196ec-bb2b-4636-81a0-b8f5c5774514",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
 		})
 		track := &metadata.Track{Path: path}
 		ar := &AlbumResult{}
-		mbid := checkTrackAudio(track, ar)
-		assert.Equal(t, "d1d196ec-bb2b-4636-81a0-b8f5c5774514", mbid)
+		audio := checkTrackAudio(track, ar)
+		assert.Equal(t, "d1d196ec-bb2b-4636-81a0-b8f5c5774514", audio.MBID)
 	})
 
 	t.Run("returns an empty string when the tag is absent", func(t *testing.T) {
@@ -420,11 +542,13 @@ func TestCheckTrackAudio_MusicBrainzAlbumID(t *testing.T) {
 			"ARTIST":                "Artist",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
 			// Intentionally no MUSICBRAINZ_ALBUMID.
 		})
 		track := &metadata.Track{Path: path}
 		ar := &AlbumResult{}
-		assert.Empty(t, checkTrackAudio(track, ar))
+		assert.Empty(t, checkTrackAudio(track, ar).MBID)
 	})
 }
 
@@ -747,6 +871,8 @@ func TestCheckLibrary(t *testing.T) {
 			"TRACKNUMBER":           "1",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
 		})
 
 		result, err := CheckLibrary(lib)
@@ -806,6 +932,7 @@ func TestCheckAlbum(t *testing.T) {
 			"TITLE": "Track", "ARTIST": "Artist", "TRACKNUMBER": "1", "DATE": "2000",
 			"ALBUMARTIST": "Artist", "ALBUM": "Album",
 			"REPLAYGAIN_TRACK_GAIN": "+0.5 dB", "REPLAYGAIN_ALBUM_GAIN": "+1.0 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654", "REPLAYGAIN_ALBUM_PEAK": "0.999999",
 		})
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "folder.jpg"), []byte(""), 0o644))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, hasher.SumsFilename), []byte(""), 0o644))
@@ -814,6 +941,26 @@ func TestCheckAlbum(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, findWarning(ar, "filename does not match spec"))
 		assert.Nil(t, findWarning(ar, "album directory does not match spec"))
+	})
+
+	t.Run("mismatched album ReplayGain across real tracks surfaces end to end", func(t *testing.T) {
+		dir := t.TempDir()
+		tags := func(n, albumGain, albumPeak string) map[string]string {
+			return map[string]string{
+				"TITLE": "Track " + n, "ARTIST": "Artist", "TRACKNUMBER": n, "DATE": "2000",
+				"REPLAYGAIN_TRACK_GAIN": "-5.00 dB", "REPLAYGAIN_TRACK_PEAK": "0.900000",
+				"REPLAYGAIN_ALBUM_GAIN": albumGain, "REPLAYGAIN_ALBUM_PEAK": albumPeak,
+			}
+		}
+		testutil.MakeAudioFile(t, dir, "01 track.flac", tags("1", "-7.31 dB", "0.987654"))
+		testutil.MakeAudioFile(t, dir, "02 track.flac", tags("2", "-6.10 dB", "0.987654"))
+
+		ar, err := CheckAlbum(dir, "")
+		require.NoError(t, err)
+		w := findWarning(ar, "inconsistent REPLAYGAIN_ALBUM_GAIN")
+		require.NotNil(t, w)
+		assert.Equal(t, dir, w.Path)
+		assert.Nil(t, findWarning(ar, "inconsistent REPLAYGAIN_ALBUM_PEAK"))
 	})
 
 	t.Run("mismatched MUSICBRAINZ_ALBUMID across real tracks surfaces end to end", func(t *testing.T) {
@@ -844,6 +991,8 @@ func TestCheckTrack(t *testing.T) {
 			"TRACKNUMBER":           "1",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
 		})
 		ar, err := CheckTrack(path)
 		require.NoError(t, err)
@@ -886,6 +1035,8 @@ func TestCheckTrack(t *testing.T) {
 			"TRACKNUMBER":           "1",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
 		})
 		ar, err := CheckTrack(path)
 		require.NoError(t, err)
@@ -904,6 +1055,8 @@ func TestCheckTrack(t *testing.T) {
 			"TRACKNUMBER":           "1",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
 		})
 		ar, err := CheckTrack(path)
 		require.NoError(t, err)

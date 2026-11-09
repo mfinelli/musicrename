@@ -260,8 +260,11 @@ Checks include:
 
 ### Audio quality
 
-- missing ReplayGain track gain
-- missing ReplayGain album gain
+- missing ReplayGain track gain or peak
+- missing ReplayGain album gain or peak
+- album gain or peak that is not the same on every track of an album, which
+  means the tracks were not scanned together; a track with no value is only
+  reported as missing it
 - embedded artwork
 
 ### Artwork
