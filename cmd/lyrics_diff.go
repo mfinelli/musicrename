@@ -176,7 +176,7 @@ func runLyricsDiff(cmd *cobra.Command, args []string) error {
 		return r.track(ctx, abs)
 	}
 
-	isAlbum, err := lyricsIsAlbumRoot(abs)
+	isAlbum, err := metadata.IsAlbumRoot(abs)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", abs, err)
 	}
@@ -228,7 +228,7 @@ func (r *lyricsDiffRun) trackByID(ctx context.Context, path string, id int) erro
 
 // album handles album mode: a directory containing audio files directly.
 func (r *lyricsDiffRun) album(ctx context.Context, dir string) error {
-	paths, err := lyricsAlbumPaths(dir)
+	paths, err := metadata.AudioFiles(dir)
 	if err != nil {
 		return err
 	}
@@ -246,7 +246,7 @@ func (r *lyricsDiffRun) album(ctx context.Context, dir string) error {
 
 // library handles library mode: a directory containing album subdirectories.
 func (r *lyricsDiffRun) library(ctx context.Context, dir string) error {
-	albums, err := lyricsLibraryAlbums(dir)
+	albums, err := metadata.LibraryAlbums(dir)
 	if err != nil {
 		return err
 	}
