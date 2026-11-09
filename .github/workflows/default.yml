@@ -22,14 +22,10 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go mod download
-      - run: '[[ -z $(go fmt ./...) ]]'
       - run: make
       - run: go test -v -count=1 ./...
-      - run: go vet ./...
       - run: just check-testutil
-      - uses: dominikh/staticcheck-action@v1
-        with:
-          install-go: false
+      - uses: golangci/golangci-lint-action@v9
 
   docker:
     runs-on: ubuntu-latest

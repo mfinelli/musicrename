@@ -75,7 +75,7 @@ func MakeAudioFile(t *testing.T, dir, name string, tags map[string]string) strin
 	}
 	args = append(args, path)
 
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ffmpeg", args...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("MakeAudioFile: ffmpeg failed: %v\n%s", err, out)
 	}
@@ -121,7 +121,7 @@ func MakeToneFileAt(t *testing.T, dir, name string, volumeDB float64) string {
 	}
 	args = append(args, "-c:a", codec, path)
 
-	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ffmpeg", args...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("MakeToneFile: ffmpeg failed: %v\n%s", err, out)
 	}
@@ -147,7 +147,7 @@ func MakePCMFlac(t *testing.T, dir, name string, pcm []byte, outputArgs ...strin
 	args = append(args, outputArgs...)
 	args = append(args, path)
 
-	cmd := exec.Command("ffmpeg", args...)
+	cmd := exec.CommandContext(t.Context(), "ffmpeg", args...)
 	cmd.Stdin = bytes.NewReader(pcm)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("MakePCMFlac: ffmpeg failed: %v\n%s", err, out)

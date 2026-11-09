@@ -115,11 +115,11 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
 				// Same targets, different (unsorted) order: must not
 				// register as a change.
-				fmt.Fprint(w, singlePlaylistJSONWithComment(
+				_, _ = fmt.Fprint(w, singlePlaylistJSONWithComment(
 					"id-1", "Road Trip", "[musicrename:targets=sdcard,ipod]",
 					[]string{"main/a/artist/album/01 track.flac"},
 				))
@@ -140,9 +140,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/01 track.flac"}))
+				_, _ = fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/01 track.flac"}))
 			}
 		}))
 		defer srv.Close()
@@ -182,9 +182,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "New Name"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "New Name"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSONWithComment(
+				_, _ = fmt.Fprint(w, singlePlaylistJSONWithComment(
 					"id-1", "New Name", "[musicrename:targets=sdcard]",
 					[]string{"main/a/artist/album/02 new.flac"},
 				))
@@ -222,11 +222,11 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
 				// Comment has no #musicrename:targets suffix at all now
 				// as if it were removed by hand in the Navidrome app.
-				fmt.Fprint(w, singlePlaylistJSONWithComment(
+				_, _ = fmt.Fprint(w, singlePlaylistJSONWithComment(
 					"id-1", "Road Trip", "", []string{"main/a/artist/album/01 track.flac"},
 				))
 			}
@@ -260,9 +260,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSONWithComment(
+				_, _ = fmt.Fprint(w, singlePlaylistJSONWithComment(
 					"id-1", "Road Trip", "[musicrename:sort=artist,album,track]",
 					[]string{"main/a/artist/album/02 new.flac"},
 				))
@@ -294,9 +294,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSONWithComment(
+				_, _ = fmt.Fprint(w, singlePlaylistJSONWithComment(
 					"id-1", "Road Trip", "", []string{"main/a/artist/album/01 track.flac"},
 				))
 			}
@@ -326,9 +326,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSONWithComment(
+				_, _ = fmt.Fprint(w, singlePlaylistJSONWithComment(
 					"id-1", "Road Trip", "[musicrename:sort=artist,album;targets=ipod,sdcard]",
 					[]string{"main/a/artist/album/01 track.flac"},
 				))
@@ -362,9 +362,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/01 track.flac"}))
+				_, _ = fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/01 track.flac"}))
 			}
 		}))
 		defer srv.Close()
@@ -390,7 +390,7 @@ func TestPullAll(t *testing.T) {
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Path, "getPlaylists") {
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{})) // empty: nothing remote
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{})) // empty: nothing remote
 			}
 		}))
 		defer srv.Close()
@@ -414,7 +414,7 @@ func TestPullAll(t *testing.T) {
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Path, "getPlaylists") {
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{}))
 			}
 		}))
 		defer srv.Close()
@@ -436,9 +436,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/missing.flac"}))
+				_, _ = fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/missing.flac"}))
 			}
 		}))
 		defer srv.Close()
@@ -461,9 +461,9 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{"id-1": "Road Trip"}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
-				fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/01 track.flac"}))
+				_, _ = fmt.Fprint(w, singlePlaylistJSON("id-1", "Road Trip", []string{"main/a/artist/album/01 track.flac"}))
 			}
 		}))
 		defer srv.Close()
@@ -483,15 +483,15 @@ func TestPullAll(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.Contains(r.URL.Path, "getPlaylists"):
-				fmt.Fprint(w, listPlaylistsJSON(map[string]string{
+				_, _ = fmt.Fprint(w, listPlaylistsJSON(map[string]string{
 					"id-bad": "Broken", "id-good": "Good",
 				}))
 			case strings.Contains(r.URL.Path, "getPlaylist"):
 				id := r.URL.Query().Get("id")
 				if id == "id-bad" {
-					fmt.Fprint(w, genericErrorJSON())
+					_, _ = fmt.Fprint(w, genericErrorJSON())
 				} else {
-					fmt.Fprint(w, singlePlaylistJSON("id-good", "Good", []string{"main/a/artist/album/01 track.flac"}))
+					_, _ = fmt.Fprint(w, singlePlaylistJSON("id-good", "Good", []string{"main/a/artist/album/01 track.flac"}))
 				}
 			}
 		}))
@@ -507,7 +507,7 @@ func TestPullAll(t *testing.T) {
 	t.Run("GetPlaylists failure aborts the whole pull", func(t *testing.T) {
 		root := t.TempDir()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, genericErrorJSON())
+			_, _ = fmt.Fprint(w, genericErrorJSON())
 		}))
 		defer srv.Close()
 
@@ -551,7 +551,7 @@ func TestPullOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, singlePlaylistJSONWithComment(
+			_, _ = fmt.Fprint(w, singlePlaylistJSONWithComment(
 				"id-1", "New", "[musicrename:targets=ipod]", []string{"main/a/artist/album/02 new.flac"},
 			))
 		}))
@@ -576,7 +576,7 @@ func TestPullOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, notFoundJSON())
+			_, _ = fmt.Fprint(w, notFoundJSON())
 		}))
 		defer srv.Close()
 
@@ -595,7 +595,7 @@ func TestPullOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, notFoundJSON())
+			_, _ = fmt.Fprint(w, notFoundJSON())
 		}))
 		defer srv.Close()
 
@@ -613,7 +613,7 @@ func TestPullOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, genericErrorJSON())
+			_, _ = fmt.Fprint(w, genericErrorJSON())
 		}))
 		defer srv.Close()
 
@@ -639,7 +639,7 @@ func TestPullOne(t *testing.T) {
 		require.NotEmpty(t, oldHash)
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, singlePlaylistJSON("id-1", "New", []string{"main/a/artist/album/02 new.flac"}))
+			_, _ = fmt.Fprint(w, singlePlaylistJSON("id-1", "New", []string{"main/a/artist/album/02 new.flac"}))
 		}))
 		defer srv.Close()
 
@@ -663,7 +663,7 @@ func TestPullOne(t *testing.T) {
 		require.NoError(t, hasher.Hash(playlistsDir, nil))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, notFoundJSON())
+			_, _ = fmt.Fprint(w, notFoundJSON())
 		}))
 		defer srv.Close()
 
@@ -685,7 +685,7 @@ func TestPullOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, singlePlaylistJSON("id-1", "New", nil))
+			_, _ = fmt.Fprint(w, singlePlaylistJSON("id-1", "New", nil))
 		}))
 		defer srv.Close()
 

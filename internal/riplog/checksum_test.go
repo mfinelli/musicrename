@@ -156,7 +156,8 @@ func TestParseChecksum(t *testing.T) {
 	})
 
 	t.Run("a log with no checksum line", func(t *testing.T) {
-		l := parse(t, good[:strings.Index(good, "\n\n==== Log checksum")])
+		before, _, _ := strings.Cut(good, "\n\n==== Log checksum")
+		l := parse(t, before)
 
 		assert.Empty(t, l.Checksum)
 		assert.Empty(t, l.ComputedChecksum)

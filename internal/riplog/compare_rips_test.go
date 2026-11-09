@@ -44,10 +44,10 @@ var (
 )
 
 // replaceOnce replaces what is in text, which must be there.
-func replaceOnce(t *testing.T, text, old, new string) string {
+func replaceOnce(t *testing.T, text, old, replacement string) string {
 	t.Helper()
 	require.Contains(t, text, old)
-	return strings.Replace(text, old, new, 1)
+	return strings.Replace(text, old, replacement, 1)
 }
 
 // logWith is the text of a log of the disc d, from a drive with the given settings.
@@ -535,7 +535,13 @@ func TestShiftReason(t *testing.T) {
 }
 
 func TestParseOffsetAndYesNo(t *testing.T) {
-	for raw, want := range map[string]int{"6": 6, "+6": 6, "-30": -30, " 667 ": 667, "0": 0} {
+	cases := map[string]int{
+		"6": 6, "+6": 6, "-30": -30,
+		// The whitespace around 667 is what parseOffset trims.
+		" 667 ": 667, //nolint:gocritic // the whitespace is the point
+		"0":     0,
+	}
+	for raw, want := range cases {
 		got, err := parseOffset(raw)
 		require.NoError(t, err, raw)
 		assert.Equal(t, want, got, raw)

@@ -25,16 +25,16 @@ import "golang.org/x/sys/unix"
 // an unprivileged user at path, via a single Statfs syscall.
 //
 // unix.Statfs_t's field names (Bavail, Bsize) are the same on Linux and
-// macOS, but their underlying integer types differ by platform (e.g.
-// Bsize is int64 on some Linux architectures, uint32 on Darwin) so the
-// explicit conversions below, not a per-OS build-tag split, are what makes
-// this safe to build for both from one file. This mirrors a pattern
-// already used this same way in other real cross-platform Go tools (e.g.,
-// the lf file manager's df_statfs.go).
+// macOS, but Bsize's underlying integer type differs by platform (int64 on
+// most Linux architectures, int32 on some and uint32 on Darwin), so the
+// explicit conversion below, not a per-OS build-tag split, is what makes this
+// safe to build for both from one file. This mirrors a pattern already used
+// this same way in other real cross-platform Go tools (e.g., the lf file
+// manager's df_statfs.go).
 func statfsAvailable(path string) (int64, error) {
 	var stat unix.Statfs_t
 	if err := unix.Statfs(path, &stat); err != nil {
 		return 0, err
 	}
-	return int64(uint64(stat.Bavail) * uint64(stat.Bsize)), nil
+	return int64(stat.Bavail * uint64(stat.Bsize)), nil
 }

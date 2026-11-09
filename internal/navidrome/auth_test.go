@@ -75,42 +75,42 @@ func TestPing(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/rest/ping", r.URL.Path)
 			assert.Equal(t, "mario", r.URL.Query().Get("u"))
-			w.Write([]byte(`{"subsonic-response":{"status":"ok"}}`))
+			_, _ = w.Write([]byte(`{"subsonic-response":{"status":"ok"}}`))
 		}))
 		defer srv.Close()
 
-		err := Ping(srv.URL, "mario", "hunter2")
+		err := Ping(t.Context(), srv.URL, "mario", "hunter2")
 		assert.NoError(t, err)
 	})
 
 	t.Run("server rejects credentials", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"subsonic-response":{"status":"failed","error":{"code":40,"message":"Wrong username or password"}}}`))
+			_, _ = w.Write([]byte(`{"subsonic-response":{"status":"failed","error":{"code":40,"message":"Wrong username or password"}}}`))
 		}))
 		defer srv.Close()
 
-		err := Ping(srv.URL, "mario", "wrong")
+		err := Ping(t.Context(), srv.URL, "mario", "wrong")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "Wrong username or password")
 	})
 
 	t.Run("status failed with no error object still produces an error", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"subsonic-response":{"status":"failed"}}`))
+			_, _ = w.Write([]byte(`{"subsonic-response":{"status":"failed"}}`))
 		}))
 		defer srv.Close()
 
-		err := Ping(srv.URL, "mario", "hunter2")
+		err := Ping(t.Context(), srv.URL, "mario", "hunter2")
 		assert.Error(t, err)
 	})
 
 	t.Run("malformed response body", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("not json"))
+			_, _ = w.Write([]byte("not json"))
 		}))
 		defer srv.Close()
 
-		err := Ping(srv.URL, "mario", "hunter2")
+		err := Ping(t.Context(), srv.URL, "mario", "hunter2")
 		assert.Error(t, err)
 	})
 
@@ -118,18 +118,18 @@ func TestPing(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 		srv.Close() // closed before use: guarantees the connection fails
 
-		err := Ping(srv.URL, "mario", "hunter2")
+		err := Ping(t.Context(), srv.URL, "mario", "hunter2")
 		assert.Error(t, err)
 	})
 
 	t.Run("trailing slash on baseURL is handled", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/rest/ping", r.URL.Path)
-			w.Write([]byte(`{"subsonic-response":{"status":"ok"}}`))
+			_, _ = w.Write([]byte(`{"subsonic-response":{"status":"ok"}}`))
 		}))
 		defer srv.Close()
 
-		err := Ping(srv.URL+"/", "mario", "hunter2")
+		err := Ping(t.Context(), srv.URL+"/", "mario", "hunter2")
 		assert.NoError(t, err)
 	})
 }

@@ -303,10 +303,10 @@ func compareTrack(path string, emb embeddedLyrics, result *lrclibTrack, opts Dif
 			d.Word = &wd
 		}
 
-		switch {
-		case emb.SourceURL == "":
+		switch emb.SourceURL {
+		case "":
 			d.Record = RecordUnknown
-		case emb.SourceURL == in.SourceURL:
+		case in.SourceURL:
 			d.Record = RecordSame
 		default:
 			d.Record = RecordDifferent

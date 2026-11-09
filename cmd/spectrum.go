@@ -85,7 +85,7 @@ func init() {
 	spectrumCmd.Flags().Bool("annotated", false, "Draw the spectrogram from the analysis, with the detected cutoff marked (requires --png)")
 	spectrumCmd.Flags().Bool("fixed-scale", false, "Use the same color scale for every annotated image, so they can be compared (requires --annotated)")
 	spectrumCmd.Flags().BoolP("verbose", "v", false, "Show the technical detail behind each verdict")
-	spectrumCmd.RegisterFlagCompletionFunc("png", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	_ = spectrumCmd.RegisterFlagCompletionFunc("png", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveFilterDirs
 	})
 	rootCmd.AddCommand(spectrumCmd)

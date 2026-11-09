@@ -58,15 +58,15 @@ func parseLRC(lrc string) []lrcEntry {
 			if m == nil {
 				break
 			}
-			var h, min, sec, cs int
+			var h, mins, sec, cs int
 			if m[1] != "" {
 				h, _ = strconv.Atoi(m[1])
 			}
-			min, _ = strconv.Atoi(m[2])
+			mins, _ = strconv.Atoi(m[2])
 			sec, _ = strconv.Atoi(m[3])
 			cs, _ = strconv.Atoi(m[4])
 			stamps = append(stamps, time.Duration(h)*time.Hour+
-				time.Duration(min)*time.Minute+
+				time.Duration(mins)*time.Minute+
 				time.Duration(sec)*time.Second+
 				time.Duration(cs)*10*time.Millisecond)
 			line = line[len(m[0]):]
@@ -93,16 +93,16 @@ func parseLRC(lrc string) []lrcEntry {
 func formatStamp(d time.Duration) string {
 	h := int(d / time.Hour)
 	d -= time.Duration(h) * time.Hour
-	min := int(d / time.Minute)
-	d -= time.Duration(min) * time.Minute
+	mins := int(d / time.Minute)
+	d -= time.Duration(mins) * time.Minute
 	sec := int(d / time.Second)
 	d -= time.Duration(sec) * time.Second
 	cs := int(d / (10 * time.Millisecond))
 
 	if h > 0 {
-		return fmt.Sprintf("[%02d:%02d:%02d.%02d]", h, min, sec, cs)
+		return fmt.Sprintf("[%02d:%02d:%02d.%02d]", h, mins, sec, cs)
 	}
-	return fmt.Sprintf("[%02d:%02d.%02d]", min, sec, cs)
+	return fmt.Sprintf("[%02d:%02d.%02d]", mins, sec, cs)
 }
 
 // Timing summarizes how the times of matching lines differ between two

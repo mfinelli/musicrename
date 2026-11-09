@@ -29,7 +29,7 @@ import (
 func TestNewClient(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"subsonic-response":{"status":"ok"}}`))
+			_, _ = w.Write([]byte(`{"subsonic-response":{"status":"ok"}}`))
 		}))
 		defer srv.Close()
 
@@ -40,7 +40,7 @@ func TestNewClient(t *testing.T) {
 
 	t.Run("server rejects the credentials", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"subsonic-response":{"status":"failed","error":{"code":40,"message":"Wrong username or password"}}}`))
+			_, _ = w.Write([]byte(`{"subsonic-response":{"status":"failed","error":{"code":40,"message":"Wrong username or password"}}}`))
 		}))
 		defer srv.Close()
 

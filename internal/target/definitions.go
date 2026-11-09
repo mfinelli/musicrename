@@ -90,7 +90,7 @@ type VideoScale struct {
 //
 // These specific numbers are WinFF's Rockbox iPod 5th Gen preset values (the
 // only ones found in research actually built for this exact device) used as a
-// starting point to test against real hardware. See the reasearch in VIDEO.md
+// starting point to test against real hardware. See the research in VIDEO.md
 // because testing found meaningfully higher bitrates were needed elsewhere
 // for full quality without frame drops.
 //

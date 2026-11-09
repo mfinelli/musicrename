@@ -215,12 +215,12 @@ func printVideoSummaryLine(out io.Writer, moves, noOps, warnings int, elapsed ti
 }
 
 // videoMoveCounts returns the number of real moves and no-op moves.
-func videoMoveCounts(moves []video.RenameMove) (real, noOps int) {
+func videoMoveCounts(moves []video.RenameMove) (moved, noOps int) {
 	for _, m := range moves {
 		if m.IsNoOp {
 			noOps++
 		} else {
-			real++
+			moved++
 		}
 	}
 	return

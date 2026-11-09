@@ -18,6 +18,7 @@
 package navidrome
 
 import (
+	"context"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
@@ -104,12 +105,12 @@ type subsonicEnvelope struct {
 // /rest/ping endpoint. It returns an error if the server is unreachable,
 // the response isn't well-formed JSON in the expected shape, or the server
 // reports anything other than "ok" (e.g. a bad password) with the server's
-// own error message included when available.
+// own error message included when available. ctx cancels the request.
 //
 // 'login' calls this before saving anything to disk, so a typo'd URL or
 // wrong password is caught immediately rather than failing later during a
 // sync.
-func Ping(baseURL, username, password string) error {
+func Ping(ctx context.Context, baseURL, username, password string) error {
 	params, err := authParams(username, password)
 	if err != nil {
 		return err
@@ -117,8 +118,13 @@ func Ping(baseURL, username, password string) error {
 
 	reqURL := strings.TrimRight(baseURL, "/") + "/rest/ping?" + params.Encode()
 
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("building request for %s: %w", baseURL, err)
+	}
+
 	client := &http.Client{Timeout: pingTimeout}
-	resp, err := client.Get(reqURL)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("contacting %s: %w", baseURL, err)
 	}

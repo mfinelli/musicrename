@@ -444,9 +444,9 @@ func makeLrclibServer(t *testing.T, resp lrclibResponse) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/get":
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 		case "/search":
-			json.NewEncoder(w).Encode([]lrclibResponse{resp})
+			_ = json.NewEncoder(w).Encode([]lrclibResponse{resp})
 		}
 	}))
 }
@@ -562,7 +562,7 @@ func TestFetch(t *testing.T) {
 			case "/get":
 				w.WriteHeader(http.StatusNotFound)
 			case "/search":
-				json.NewEncoder(w).Encode([]lrclibResponse{})
+				_ = json.NewEncoder(w).Encode([]lrclibResponse{})
 			}
 		}))
 		defer srv.Close()
@@ -609,14 +609,14 @@ func TestFetch(t *testing.T) {
 			callCount++
 			if callCount == 1 {
 				// First track: exact match
-				json.NewEncoder(w).Encode(apiResp)
+				_ = json.NewEncoder(w).Encode(apiResp)
 			} else {
 				// Second track: not found
 				switch r.URL.Path {
 				case "/get":
 					w.WriteHeader(http.StatusNotFound)
 				case "/search":
-					json.NewEncoder(w).Encode([]lrclibResponse{})
+					_ = json.NewEncoder(w).Encode([]lrclibResponse{})
 				}
 			}
 		}))
@@ -757,7 +757,7 @@ func makeLrclibByIDServer(t *testing.T, id int, resp lrclibResponse) *httptest.S
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 }
 

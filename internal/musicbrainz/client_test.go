@@ -55,7 +55,7 @@ func TestGetRelease(t *testing.T) {
 				assert.Contains(t, inc, want)
 			}
 
-			json.NewEncoder(w).Encode(Release{ID: "d1d196ec-bb2b-4636-81a0-b8f5c5774514", Title: "Back in Black"})
+			_ = json.NewEncoder(w).Encode(Release{ID: "d1d196ec-bb2b-4636-81a0-b8f5c5774514", Title: "Back in Black"})
 		}))
 		defer srv.Close()
 
@@ -86,7 +86,7 @@ func TestGetRelease(t *testing.T) {
 
 	t.Run("errors on malformed JSON", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("not json"))
+			_, _ = w.Write([]byte("not json"))
 		}))
 		defer srv.Close()
 

@@ -378,7 +378,8 @@ func TestCheckFileTracks(t *testing.T) {
 	t.Run("a track fewer", func(t *testing.T) {
 		rip := blackRip(t)
 		text := readCue(t, rip)
-		setCue(t, rip, text[:strings.Index(text, "  TRACK 10 AUDIO")])
+		before, _, _ := strings.Cut(text, "  TRACK 10 AUDIO")
+		setCue(t, rip, before)
 
 		r := rip.check(t)
 

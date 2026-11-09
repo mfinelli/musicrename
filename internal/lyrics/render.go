@@ -222,12 +222,12 @@ func RenderDetails(w io.Writer, d TrackDiff, pal Palette, indent string, opts Re
 	}
 
 	if d.Word != nil {
-		renderWord(w, *d.Word, pal, indent, row, cont, opts)
+		renderWord(w, *d.Word, pal, row, cont, opts)
 	}
 }
 
 // renderWord writes the Word-synced part of RenderDetails.
-func renderWord(w io.Writer, wd WordDiff, pal Palette, indent string, row func(label, text string), cont string, opts RenderOptions) {
+func renderWord(w io.Writer, wd WordDiff, pal Palette, row func(label, text string), cont string, opts RenderOptions) {
 	switch wd.State {
 	case WordNone:
 		return

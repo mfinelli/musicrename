@@ -274,7 +274,7 @@ func renderAnnotated(g *grid, res *Result, channel int, title string, opts Annot
 	c.fill(img.Rect, colBackground)
 
 	nyq := float64(g.sampleRate) / 2
-	lo, hi := g.levelRange(dynamicRangeDB)
+	lo, hi := g.levelRange()
 	if opts.FixedScale {
 		lo, hi = fixedScaleBottomDB, fixedScaleTopDB
 	}

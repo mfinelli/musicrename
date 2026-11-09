@@ -64,7 +64,7 @@ func DeleteOne(client *subsonic.Client, path string) (warning string, err error)
 	}
 
 	if err := client.DeletePlaylist(gp.NavidromeID); err != nil {
-		if code, ok := navidrome.ErrCode(err); !(ok && code == navidrome.ErrCodeNotFound) {
+		if code, ok := navidrome.ErrCode(err); !ok || code != navidrome.ErrCodeNotFound {
 			return "", fmt.Errorf("deleting remote playlist: %w", err)
 		}
 		// Already gone remotely; still remove the local file below, since

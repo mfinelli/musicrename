@@ -208,7 +208,7 @@ func TestFingerprintBadAudio(t *testing.T) {
 			t.Logf("ffmpeg named the damage: %q", de.Message)
 			return
 		}
-		t.Logf("ffmpeg did not name the damage, and the fingerprint is what shows it (%s)", ffmpegVersion())
+		t.Logf("ffmpeg did not name the damage, and the fingerprint is what shows it (%s)", ffmpegVersion(t))
 		assert.NotEqual(t, clean, got, "damaged audio decoded as if it were good")
 	}
 
@@ -346,7 +346,7 @@ func TestFingerprintEnvironment(t *testing.T) {
 		_, err := exec.LookPath("ffmpeg")
 
 		require.NoError(t, err)
-		t.Logf("ffmpeg: %s", ffmpegVersion())
+		t.Logf("ffmpeg: %s", ffmpegVersion(t))
 	})
 }
 
@@ -382,7 +382,7 @@ func TestHeadBuffer(t *testing.T) {
 		n, err := h.Write([]byte("abc"))
 		require.NoError(t, err)
 		assert.Equal(t, 3, n)
-		h.Write([]byte("def"))
+		_, _ = h.Write([]byte("def"))
 
 		assert.Equal(t, "abcdef", h.String())
 	})
@@ -401,8 +401,8 @@ func TestHeadBuffer(t *testing.T) {
 	t.Run("a write exactly to the limit, then another", func(t *testing.T) {
 		h := &headBuffer{limit: 3}
 
-		h.Write([]byte("abc"))
-		h.Write([]byte("d"))
+		_, _ = h.Write([]byte("abc"))
+		_, _ = h.Write([]byte("d"))
 
 		assert.Equal(t, "abc", h.String())
 	})
@@ -412,8 +412,8 @@ func TestCountWriter(t *testing.T) {
 	var sink strings.Builder
 	c := &countWriter{w: &sink}
 
-	c.Write([]byte("hello "))
-	c.Write([]byte("world"))
+	_, _ = c.Write([]byte("hello "))
+	_, _ = c.Write([]byte("world"))
 
 	assert.Equal(t, int64(11), c.n)
 	assert.Equal(t, "hello world", sink.String())
@@ -515,8 +515,10 @@ func TestFingerprintReadsFFmpegsVerdict(t *testing.T) {
 
 // ffmpegVersion returns the first line of what ffmpeg says of itself, for
 // logging.
-func ffmpegVersion() string {
-	out, err := exec.Command("ffmpeg", "-version").Output()
+func ffmpegVersion(t *testing.T) string {
+	t.Helper()
+
+	out, err := exec.CommandContext(t.Context(), "ffmpeg", "-version").Output()
 	if err != nil {
 		return "unknown: " + err.Error()
 	}

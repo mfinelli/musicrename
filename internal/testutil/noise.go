@@ -31,7 +31,7 @@ import (
 func runFFmpeg(t *testing.T, helper string, args ...string) {
 	t.Helper()
 
-	out, err := exec.Command("ffmpeg", append([]string{"-y", "-v", "error"}, args...)...).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "ffmpeg", append([]string{"-y", "-v", "error"}, args...)...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%s: ffmpeg failed: %v\n%s", helper, err, out)
 	}

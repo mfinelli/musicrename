@@ -425,11 +425,13 @@ func TestWriteAnnotated(t *testing.T) {
 	})
 }
 
-// flatGrid returns a grid of identical frames in which every bin has power p.
-func flatGrid(sampleRate int, p float64, frames int) *grid {
+// flatGrid returns a 44.1 kHz grid of 100 identical frames in which every bin
+// has power p.
+func flatGrid(p float64) *grid {
+	const sampleRate = 44100
 	window := WindowSize(sampleRate)
 	b := newGridBuilder(window, gridMaxColumns)
-	for range frames {
+	for range 100 {
 		b.add(flatFrame(window, p))
 	}
 	return &grid{sampleRate: sampleRate, window: window, cols: b.finish()}
@@ -439,8 +441,8 @@ func TestRenderAnnotatedFixedScale(t *testing.T) {
 	const sr = 44100
 	res := resultFor(sr, nil, VerdictOK)
 
-	loud := flatGrid(sr, 1e-6, 100)  // -60 dB in every bin
-	quiet := flatGrid(sr, 1e-9, 100) // -90 dB in every bin
+	loud := flatGrid(1e-6)  // -60 dB in every bin
+	quiet := flatGrid(1e-9) // -90 dB in every bin
 
 	// A point in the middle of the plot, clear of the axes and markers.
 	probe := func(img *image.RGBA) color.RGBA {
@@ -499,8 +501,8 @@ func TestRenderAnnotatedFixedScale(t *testing.T) {
 
 	t.Run("levels beyond either end saturate", func(t *testing.T) {
 		opts := AnnotateOptions{FixedScale: true}
-		hot := renderAnnotated(flatGrid(sr, 1, 100), res, 0, "h.flac", opts)      // 0 dB
-		cold := renderAnnotated(flatGrid(sr, 1e-18, 100), res, 0, "c.flac", opts) // -180 dB
+		hot := renderAnnotated(flatGrid(1), res, 0, "h.flac", opts)      // 0 dB
+		cold := renderAnnotated(flatGrid(1e-18), res, 0, "c.flac", opts) // -180 dB
 
 		assert.Equal(t, heat(1), probe(hot))
 		assert.Equal(t, heat(0), probe(cold))

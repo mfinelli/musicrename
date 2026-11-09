@@ -68,17 +68,13 @@ func ApplySort(libraryRootRoot, path string, entries []string, sortSpec []string
 	}
 
 	playlistsDir := Dir(libraryRootRoot)
-	if _, statErr := os.Stat(filepath.Join(playlistsDir, hasher.SumsFilename)); statErr != nil {
-		return "", nil
+	if _, statErr := os.Stat(filepath.Join(playlistsDir, hasher.SumsFilename)); statErr == nil {
+		if rel, relErr := filepath.Rel(playlistsDir, path); relErr != nil {
+			warning = fmt.Sprintf("updating %s: could not resolve %s relative to %s", hasher.SumsFilename, path, playlistsDir)
+		} else if updErr := hasher.UpdateFile(playlistsDir, rel); updErr != nil {
+			warning = fmt.Sprintf("updating %s: %v", hasher.SumsFilename, updErr)
+		}
 	}
 
-	rel, relErr := filepath.Rel(playlistsDir, path)
-	if relErr != nil {
-		return fmt.Sprintf("updating %s: could not resolve %s relative to %s", hasher.SumsFilename, path, playlistsDir), nil
-	}
-	if updErr := hasher.UpdateFile(playlistsDir, rel); updErr != nil {
-		return fmt.Sprintf("updating %s: %v", hasher.SumsFilename, updErr), nil
-	}
-
-	return "", nil
+	return warning, nil
 }

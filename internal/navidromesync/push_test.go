@@ -77,17 +77,17 @@ func (f *pushFakeServer) server() *httptest.Server {
 			if body == "" {
 				body = `{"subsonic-response":{"status":"ok","searchResult3":{}}}`
 			}
-			fmt.Fprint(w, body)
+			_, _ = fmt.Fprint(w, body)
 		case "createPlaylist":
 			id := f.createID
 			if id == "" {
 				id = "new-id"
 			}
-			fmt.Fprintf(w, `{"subsonic-response":{"status":"ok","playlist":{"id":%q,"name":"new"}}}`, id)
+			_, _ = fmt.Fprintf(w, `{"subsonic-response":{"status":"ok","playlist":{"id":%q,"name":"new"}}}`, id)
 		case "updatePlaylist":
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		default:
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		}
 	}))
 }
@@ -212,20 +212,20 @@ func TestPushOne(t *testing.T) {
 			f.mu.Lock()
 			f.calls["getPlaylist"]++
 			f.mu.Unlock()
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
 				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
 			f.mu.Lock()
 			f.calls["search3"]++
 			f.mu.Unlock()
-			fmt.Fprint(w, f.search3)
+			_, _ = fmt.Fprint(w, f.search3)
 		})
 		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
 			f.mu.Lock()
 			f.calls["updatePlaylist"]++
 			f.mu.Unlock()
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv2 := httptest.NewServer(mux)
 		defer srv2.Close()
@@ -298,17 +298,17 @@ func TestPushOne(t *testing.T) {
 		var capturedComment string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/createPlaylist", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
 		})
 		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
 			if c := r.URL.Query().Get("comment"); c != "" {
 				capturedComment = c
 			}
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -331,11 +331,11 @@ func TestPushOne(t *testing.T) {
 		var capturedComment string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
 				`"comment":"Great mix [musicrename:targets=ipod]",`+
 				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
@@ -343,7 +343,7 @@ func TestPushOne(t *testing.T) {
 			if c := r.URL.Query().Get("comment"); r.URL.Query().Has("comment") {
 				capturedComment = c
 			}
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -368,11 +368,11 @@ func TestPushOne(t *testing.T) {
 		var commentSent bool
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
 				`"comment":"Great mix [musicrename:targets=ipod]",`+
 				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
@@ -381,7 +381,7 @@ func TestPushOne(t *testing.T) {
 				commentSent = true
 				capturedComment = r.URL.Query().Get("comment")
 			}
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -404,17 +404,17 @@ func TestPushOne(t *testing.T) {
 		var capturedComment string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/createPlaylist", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
 		})
 		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
 			if c := r.URL.Query().Get("comment"); c != "" {
 				capturedComment = c
 			}
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -438,17 +438,17 @@ func TestPushOne(t *testing.T) {
 		var capturedComment string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/createPlaylist", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"new-id","name":"Road Trip"}}}`)
 		})
 		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
 			if c := r.URL.Query().Get("comment"); c != "" {
 				capturedComment = c
 			}
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -472,11 +472,11 @@ func TestPushOne(t *testing.T) {
 		var capturedComment string
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
 				`"comment":"[musicrename:sort=artist;targets=ipod]",`+
 				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
@@ -484,7 +484,7 @@ func TestPushOne(t *testing.T) {
 			if r.URL.Query().Has("comment") {
 				capturedComment = r.URL.Query().Get("comment")
 			}
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -507,19 +507,19 @@ func TestPushOne(t *testing.T) {
 		var updatePlaylistCalls atomic.Int32
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
 			// Same targets, different (unsorted) order in the remote
 			// comment: must not register as a change.
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
 				`"comment":"[musicrename:targets=sdcard,ipod]",`+
 				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
 			updatePlaylistCalls.Add(1)
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -542,16 +542,16 @@ func TestPushOne(t *testing.T) {
 
 		mux := http.NewServeMux()
 		mux.HandleFunc("/rest/search3", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/getPlaylist", func(w http.ResponseWriter, r *http.Request) {
 			// Same name and entries, but no #TARGETS: suffix remotely yet.
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","playlist":{"id":"id-1","name":"Road Trip",`+
 				`"entry":[{"id":"song-1","path":"main/a/artist/album/01 track.flac"}]}}}`)
 		})
 		mux.HandleFunc("/rest/updatePlaylist", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()

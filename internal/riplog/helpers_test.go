@@ -132,10 +132,10 @@ func withoutLine(t *testing.T, text, prefix string) string {
 
 // replaced returns text with the first old replaced by new, failing the test
 // if old is not there.
-func replaced(t *testing.T, text, old, new string) string {
+func replaced(t *testing.T, text, old, replacement string) string {
 	t.Helper()
 	require.Contains(t, text, old)
-	return strings.Replace(text, old, new, 1)
+	return strings.Replace(text, old, replacement, 1)
 }
 
 // encodeUTF16 encodes text as UTF-16, optionally big-endian and optionally with
@@ -302,11 +302,11 @@ func centralRip(t *testing.T) rip {
 
 // rewriteCue changes the rip's cue sheet by replacing old with new (which must
 // be there) in its text.
-func rewriteCue(t *testing.T, r rip, old, new string) {
+func rewriteCue(t *testing.T, r rip, old, replacement string) {
 	t.Helper()
 	b, err := os.ReadFile(r.path(".cue"))
 	require.NoError(t, err)
-	text := replaced(t, string(b), old, new)
+	text := replaced(t, string(b), old, replacement)
 	require.NoError(t, os.WriteFile(r.path(".cue"), []byte(text), 0o644))
 }
 

@@ -66,7 +66,7 @@ func TestLrclibClient_Get(t *testing.T) {
 			assert.Equal(t, "AC/DC", r.URL.Query().Get("artist_name"))
 			assert.Equal(t, "Back In Black", r.URL.Query().Get("album_name"))
 			assert.Equal(t, "255", r.URL.Query().Get("duration"))
-			json.NewEncoder(w).Encode(sampleTrack)
+			_ = json.NewEncoder(w).Encode(sampleTrack)
 		}))
 		defer srv.Close()
 
@@ -106,7 +106,7 @@ func TestLrclibClient_Get(t *testing.T) {
 
 	t.Run("returns error on malformed JSON", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("not json"))
+			_, _ = w.Write([]byte("not json"))
 		}))
 		defer srv.Close()
 
@@ -117,7 +117,7 @@ func TestLrclibClient_Get(t *testing.T) {
 
 	t.Run("honors context cancellation", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(sampleTrack)
+			_ = json.NewEncoder(w).Encode(sampleTrack)
 		}))
 		defer srv.Close()
 
@@ -134,7 +134,7 @@ func TestLrclibClient_GetByID(t *testing.T) {
 	t.Run("returns track on 200", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/get/1", r.URL.Path)
-			json.NewEncoder(w).Encode(sampleTrack)
+			_ = json.NewEncoder(w).Encode(sampleTrack)
 		}))
 		defer srv.Close()
 
@@ -173,7 +173,7 @@ func TestLrclibClient_GetByID(t *testing.T) {
 
 	t.Run("returns error on malformed JSON", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("not json"))
+			_, _ = w.Write([]byte("not json"))
 		}))
 		defer srv.Close()
 
@@ -184,7 +184,7 @@ func TestLrclibClient_GetByID(t *testing.T) {
 
 	t.Run("honors context cancellation", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(sampleTrack)
+			_ = json.NewEncoder(w).Encode(sampleTrack)
 		}))
 		defer srv.Close()
 
@@ -209,7 +209,7 @@ func TestLrclibClient_Search(t *testing.T) {
 			assert.Equal(t, "AC/DC", r.URL.Query().Get("artist_name"))
 			// duration must NOT be sent to /search
 			assert.Empty(t, r.URL.Query().Get("duration"))
-			json.NewEncoder(w).Encode(results)
+			_ = json.NewEncoder(w).Encode(results)
 		}))
 		defer srv.Close()
 
@@ -222,7 +222,7 @@ func TestLrclibClient_Search(t *testing.T) {
 
 	t.Run("returns nil when results are empty", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode([]lrclibTrack{})
+			_ = json.NewEncoder(w).Encode([]lrclibTrack{})
 		}))
 		defer srv.Close()
 
@@ -250,7 +250,7 @@ func TestLrclibClient_FetchForTrack(t *testing.T) {
 		callCount := 0
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			callCount++
-			json.NewEncoder(w).Encode(sampleTrack)
+			_ = json.NewEncoder(w).Encode(sampleTrack)
 		}))
 		defer srv.Close()
 
@@ -269,7 +269,7 @@ func TestLrclibClient_FetchForTrack(t *testing.T) {
 				d := r.URL.Query().Get("duration")
 				requestedDurations = append(requestedDurations, d)
 				if d == "254" { // secs-1 succeeds
-					json.NewEncoder(w).Encode(sampleTrack)
+					_ = json.NewEncoder(w).Encode(sampleTrack)
 					return
 				}
 				w.WriteHeader(http.StatusNotFound)
@@ -297,7 +297,7 @@ func TestLrclibClient_FetchForTrack(t *testing.T) {
 				w.WriteHeader(http.StatusNotFound)
 			case "/search":
 				searchCalled = true
-				json.NewEncoder(w).Encode([]lrclibTrack{sampleTrack})
+				_ = json.NewEncoder(w).Encode([]lrclibTrack{sampleTrack})
 			}
 		}))
 		defer srv.Close()
@@ -317,7 +317,7 @@ func TestLrclibClient_FetchForTrack(t *testing.T) {
 			case "/get":
 				w.WriteHeader(http.StatusNotFound)
 			case "/search":
-				json.NewEncoder(w).Encode([]lrclibTrack{})
+				_ = json.NewEncoder(w).Encode([]lrclibTrack{})
 			}
 		}))
 		defer srv.Close()
@@ -358,9 +358,9 @@ func TestLrclibClient_UserAgent(t *testing.T) {
 		seen = append(seen, r.Header.Get("User-Agent"))
 		switch r.URL.Path {
 		case "/search":
-			json.NewEncoder(w).Encode([]lrclibTrack{sampleTrack})
+			_ = json.NewEncoder(w).Encode([]lrclibTrack{sampleTrack})
 		default:
-			json.NewEncoder(w).Encode(sampleTrack)
+			_ = json.NewEncoder(w).Encode(sampleTrack)
 		}
 	}))
 	defer srv.Close()
@@ -411,7 +411,7 @@ func throttleServer(t *testing.T, n int, status int, retryAfter string, hits *at
 			w.WriteHeader(status)
 			return
 		}
-		json.NewEncoder(w).Encode(sampleTrack)
+		_ = json.NewEncoder(w).Encode(sampleTrack)
 	}))
 }
 

@@ -35,7 +35,7 @@ func TestBuildSongIndex(t *testing.T) {
 		var calls atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			calls.Add(1)
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{}}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{}}}`)
 		}))
 		defer srv.Close()
 
@@ -49,7 +49,7 @@ func TestBuildSongIndex(t *testing.T) {
 		var calls atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			calls.Add(1)
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"s1","path":"a.flac"},{"id":"s2","path":"b.flac"}]}}}`)
 		}))
 		defer srv.Close()
@@ -80,7 +80,7 @@ func TestBuildSongIndex(t *testing.T) {
 				id := offset + i
 				songs = append(songs, fmt.Sprintf(`{"id":"s%d","path":"track%d.flac"}`, id, id))
 			}
-			fmt.Fprintf(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[%s]}}}`,
+			_, _ = fmt.Fprintf(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[%s]}}}`,
 				strings.Join(songs, ","))
 		}))
 		defer srv.Close()
@@ -93,7 +93,7 @@ func TestBuildSongIndex(t *testing.T) {
 
 	t.Run("propagates a search failure", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, genericErrorJSON())
+			_, _ = fmt.Fprint(w, genericErrorJSON())
 		}))
 		defer srv.Close()
 
@@ -103,7 +103,7 @@ func TestBuildSongIndex(t *testing.T) {
 
 	t.Run("skips songs with no path rather than indexing an empty key", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok","searchResult3":{"song":[`+
 				`{"id":"s1","path":""},{"id":"s2","path":"real.flac"}]}}}`)
 		}))
 		defer srv.Close()

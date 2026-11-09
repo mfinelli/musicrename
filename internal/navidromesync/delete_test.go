@@ -69,7 +69,7 @@ func TestDeleteOne(t *testing.T) {
 			assert.Contains(t, r.URL.Path, "deletePlaylist")
 			assert.Equal(t, "id-1", r.URL.Query().Get("id"))
 			deleteCalled = true
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		}))
 		defer srv.Close()
 
@@ -90,7 +90,7 @@ func TestDeleteOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, notFoundJSON())
+			_, _ = fmt.Fprint(w, notFoundJSON())
 		}))
 		defer srv.Close()
 
@@ -110,7 +110,7 @@ func TestDeleteOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, genericErrorJSON())
+			_, _ = fmt.Fprint(w, genericErrorJSON())
 		}))
 		defer srv.Close()
 
@@ -129,7 +129,7 @@ func TestDeleteOne(t *testing.T) {
 		require.NoError(t, hasher.Hash(playlistsDir, nil))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		}))
 		defer srv.Close()
 
@@ -150,7 +150,7 @@ func TestDeleteOne(t *testing.T) {
 		}))
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
+			_, _ = fmt.Fprint(w, `{"subsonic-response":{"status":"ok"}}`)
 		}))
 		defer srv.Close()
 

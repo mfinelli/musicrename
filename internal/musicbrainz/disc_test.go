@@ -61,7 +61,7 @@ func serve(t *testing.T, status int, body string) (*client, *atomic.Int32) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n.Add(1)
 		w.WriteHeader(status)
-		w.Write([]byte(body))
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 	return testClient(srv.URL), &n
@@ -74,7 +74,7 @@ func TestGetReleaseDiscs(t *testing.T) {
 			assert.Equal(t, "discids", r.URL.Query().Get("inc"))
 			assert.Equal(t, "json", r.URL.Query().Get("fmt"))
 			assert.Equal(t, userAgent, r.Header.Get("User-Agent"))
-			w.Write([]byte(releaseWithDiscs))
+			_, _ = w.Write([]byte(releaseWithDiscs))
 		}))
 		defer srv.Close()
 
@@ -213,7 +213,7 @@ func TestGetDiscReleases(t *testing.T) {
 			assert.Equal(t, "/discid/"+testDiscID, r.URL.Path)
 			assert.Equal(t, "json", r.URL.Query().Get("fmt"))
 			assert.Equal(t, userAgent, r.Header.Get("User-Agent"))
-			w.Write([]byte(discIDResponseBody))
+			_, _ = w.Write([]byte(discIDResponseBody))
 		}))
 		defer srv.Close()
 
@@ -229,7 +229,7 @@ func TestGetDiscReleases(t *testing.T) {
 	t.Run("the characters in a disc ID that are special in a URL are escaped", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/discid/a.b_c-", r.URL.EscapedPath())
-			w.Write([]byte(`{"releases": []}`))
+			_, _ = w.Write([]byte(`{"releases": []}`))
 		}))
 		defer srv.Close()
 
@@ -337,7 +337,7 @@ func TestLookup(t *testing.T) {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
 			}
-			w.Write([]byte(releaseWithDiscs))
+			_, _ = w.Write([]byte(releaseWithDiscs))
 		}))
 		defer srv.Close()
 		l := newLookup(testClient(srv.URL))
@@ -357,7 +357,7 @@ func TestLookup(t *testing.T) {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
 			}
-			w.Write([]byte(discIDResponseBody))
+			_, _ = w.Write([]byte(discIDResponseBody))
 		}))
 		defer srv.Close()
 		l := newLookup(testClient(srv.URL))
