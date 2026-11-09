@@ -90,7 +90,7 @@ func runPlaylistSelect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not resolve path %q: %w", albumPath, err)
 	}
 
-	isAlbum, err := sumsIsAlbumRoot(absAlbum)
+	isAlbum, err := metadata.IsAlbumRoot(absAlbum)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", absAlbum, err)
 	}

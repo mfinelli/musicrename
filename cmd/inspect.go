@@ -60,13 +60,10 @@ func init() {
 func runInspect(cmd *cobra.Command, args []string) error {
 	path := args[0]
 
-	ext := strings.ToLower(filepath.Ext(path))
-	if !metadata.IsAudioExt(ext) {
-		return fmt.Errorf(
-			"%q is not a supported audio file (expected one of: %s)",
-			filepath.Base(path), metadata.DottedExtList(metadata.AudioExtensions),
-		)
+	if err := metadata.CheckAudioFile(path); err != nil {
+		return err
 	}
+	ext := strings.ToLower(filepath.Ext(path))
 
 	file, err := taglib.OpenReadOnly(path)
 	if err != nil {

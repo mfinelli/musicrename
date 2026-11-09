@@ -22,10 +22,11 @@ tags are modified by *rename*.
 
 The intended workflow for a full library update is:
 
-	mrr rename    # move files into the normalized structure++
-	mrr lyrics    # fetch and embed lyrics from LRCLIB++
-	mrr check     # audit for metadata and structural issues++
-	mrr sums      # generate md5 checksums
+	mrr rename      # move files into the normalized structure++
+	mrr replaygain  # calculate ReplayGain tags++
+	mrr lyrics      # fetch and embed lyrics from LRCLIB++
+	mrr check       # audit for metadata and structural issues++
+	mrr sums        # generate md5 checksums
 
 All commands accept an optional _path_ argument and default to the current
 directory. Mode is auto-detected from the path: a directory containing audio
@@ -203,6 +204,29 @@ limiting, stops early with an error after printing what was compared.
 	Show the details of each track that differs, not only a line for it, and
 	list the lines that were retimed.
 
+## mrr replaygain [_path_] [*--skip-md5*]
+
+Calculates ReplayGain with *rsgain*(1), which must be on *PATH*, and writes the
+*REPLAYGAIN_TRACK_GAIN*, *REPLAYGAIN_TRACK_PEAK*, *REPLAYGAIN_ALBUM_GAIN*, and
+*REPLAYGAIN_ALBUM_PEAK* tags to every audio file of each album. The target is
+\-18 LUFS (ReplayGain 2.0) and peaks are true peaks.
+
+If _path_ directly contains audio files it is treated as a single album and only
+that album is processed. Otherwise _path_ is treated as a library root and all
+albums within it are processed recursively. _path_ defaults to the current
+directory. Album values are calculated over every track of an album together, so
+a single file is not accepted.
+
+A file whose tags come out the same keeps its content. An album that can't be
+scanned is reported and the others carry on, and the exit status is then
+non-zero.
+
+If an album has a *sums.md5*, the entries of the files that changed are updated
+as necessary.
+
+*--skip-md5*
+	Do not update *sums.md5* even if it exists.
+
 ## mrr check [_path_]
 
 Audits a library or album for metadata and structural issues. Emits all
@@ -216,7 +240,10 @@ Checks include:
 - Inconsistent *MUSICBRAINZ_ALBUMID* across tracks (present on some but not
   others, or two different non-empty values). An album with the tag on none
   of its tracks is not itself a finding.
-- Missing *REPLAYGAIN_TRACK_GAIN* or *REPLAYGAIN_ALBUM_GAIN* tags
+- Missing *REPLAYGAIN_TRACK_GAIN*, *REPLAYGAIN_TRACK_PEAK*,
+  *REPLAYGAIN_ALBUM_GAIN*, or *REPLAYGAIN_ALBUM_PEAK* tags
+- *REPLAYGAIN_ALBUM_GAIN* or *REPLAYGAIN_ALBUM_PEAK* not the same on every track
+  of an album (the tracks were not scanned together)
 - Embedded artwork inside audio files
 - Missing or duplicate primary artwork (*folder.jpg* / *folder.png* /
   *folder.webp* / *folder.mp4*). One static image plus one animated file is

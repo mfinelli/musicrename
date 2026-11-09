@@ -60,10 +60,11 @@ Each album directory may contain:
 ## Workflow
 
 ```sh
-mrr rename   # move files into the normalized structure
-mrr lyrics   # fetch and embed lyrics from LRCLIB
-mrr check    # audit for metadata and structural issues
-mrr sums     # generate md5 checksums
+mrr rename       # move files into the normalized structure
+mrr replaygain   # calculate ReplayGain tags
+mrr lyrics       # fetch and embed lyrics from LRCLIB
+mrr check        # audit for metadata and structural issues
+mrr sums         # generate md5 checksums
 ```
 
 Each command accepts an optional `[path]` argument and defaults to the current
@@ -126,6 +127,17 @@ that could now gain word-synced data.
 ```sh
 mrr lyrics diff ~/music/b/beyonce
 mrr lyrics diff --full-context "~/music/b/beyonce/01 dangerously in love.flac"
+```
+
+### `replaygain`
+
+Calculates ReplayGain with [rsgain](https://github.com/complexlogic/rsgain)
+(which must be on `PATH`) and writes the track and album gain and peak tags to
+every file of each album. Album values are calculated over a whole album, so
+it takes an album directory or a library root, and not a single file.
+
+```sh
+mrr replaygain ~/music/b/beyonce/2003\ dangerously\ in\ love
 ```
 
 ### `check`

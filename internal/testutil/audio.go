@@ -87,26 +87,41 @@ func MakeAudioFile(t *testing.T, dir, name string, tags map[string]string) strin
 // dir/name via a real ffmpeg invocation. Unlike [MakeAudioFile], this
 // carries no tags and always produces actual signal, for tests that
 // measure loudness (e.g., replaygain) where a silent source has nothing to
-// measure. The codec is inferred from name's extension: "libopus" for
-// .opus, "aac" otherwise.
+// measure. The codec is inferred from name's extension: "flac" for .flac,
+// "libopus" for .opus, "aac" otherwise.
 //
 // Requires a real ffmpeg binary on PATH.
 func MakeToneFile(t *testing.T, dir, name string) string {
+	t.Helper()
+	return MakeToneFileAt(t, dir, name, 0)
+}
+
+// MakeToneFileAt is [MakeToneFile] with the tone's volume changed by
+// volumeDB decibels (negative for quieter), for tests that need files of
+// different loudness, such as the tracks of an album with a gain of their own.
+func MakeToneFileAt(t *testing.T, dir, name string, volumeDB float64) string {
 	t.Helper()
 
 	path := filepath.Join(dir, name)
 	ext := strings.ToLower(filepath.Ext(name))
 	codec := "aac"
-	if ext == ".opus" {
+	switch ext {
+	case ".opus":
 		codec = "libopus"
+	case ".flac":
+		codec = "flac"
 	}
 
-	out, err := exec.Command(
-		"ffmpeg", "-y",
+	args := []string{
+		"-y",
 		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-		"-c:a", codec,
-		path,
-	).CombinedOutput()
+	}
+	if volumeDB != 0 {
+		args = append(args, "-af", fmt.Sprintf("volume=%gdB", volumeDB))
+	}
+	args = append(args, "-c:a", codec, path)
+
+	out, err := exec.Command("ffmpeg", args...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("MakeToneFile: ffmpeg failed: %v\n%s", err, out)
 	}

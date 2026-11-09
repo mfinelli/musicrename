@@ -159,7 +159,7 @@ func runLyricsDiff(cmd *cobra.Command, args []string) error {
 		if info.IsDir() {
 			return fmt.Errorf("--url is only valid with a single track, not a directory (%s)", abs)
 		}
-		if err := lyricsDiffCheckAudio(abs); err != nil {
+		if err := metadata.CheckAudioFile(abs); err != nil {
 			return err
 		}
 		id, err := lyrics.ParseID(rawURL)
@@ -170,13 +170,13 @@ func runLyricsDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	if !info.IsDir() {
-		if err := lyricsDiffCheckAudio(abs); err != nil {
+		if err := metadata.CheckAudioFile(abs); err != nil {
 			return err
 		}
 		return r.track(ctx, abs)
 	}
 
-	isAlbum, err := lyricsIsAlbumRoot(abs)
+	isAlbum, err := metadata.IsAlbumRoot(abs)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", abs, err)
 	}
@@ -184,16 +184,6 @@ func runLyricsDiff(cmd *cobra.Command, args []string) error {
 		return r.album(ctx, abs)
 	}
 	return r.library(ctx, abs)
-}
-
-// lyricsDiffCheckAudio reports an error unless path is a supported audio file.
-func lyricsDiffCheckAudio(path string) error {
-	ext := strings.ToLower(filepath.Ext(path))
-	if !metadata.IsAudioExt(ext) {
-		return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
-			path, metadata.DottedExtList(metadata.AudioExtensions))
-	}
-	return nil
 }
 
 // track handles track mode: one file, in full detail.
@@ -228,7 +218,7 @@ func (r *lyricsDiffRun) trackByID(ctx context.Context, path string, id int) erro
 
 // album handles album mode: a directory containing audio files directly.
 func (r *lyricsDiffRun) album(ctx context.Context, dir string) error {
-	paths, err := lyricsAlbumPaths(dir)
+	paths, err := metadata.AudioFiles(dir)
 	if err != nil {
 		return err
 	}
@@ -246,7 +236,7 @@ func (r *lyricsDiffRun) album(ctx context.Context, dir string) error {
 
 // library handles library mode: a directory containing album subdirectories.
 func (r *lyricsDiffRun) library(ctx context.Context, dir string) error {
-	albums, err := lyricsLibraryAlbums(dir)
+	albums, err := metadata.LibraryAlbums(dir)
 	if err != nil {
 		return err
 	}

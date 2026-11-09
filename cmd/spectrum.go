@@ -206,17 +206,13 @@ func spectrumTracks(path string) (tracks []string, isAlbum bool, err error) {
 	}
 
 	if !info.IsDir() {
-		ext := strings.ToLower(filepath.Ext(path))
-		if !metadata.IsAudioExt(ext) {
-			return nil, false, fmt.Errorf(
-				"%q is not a supported audio file (expected one of: %s)",
-				filepath.Base(path), metadata.DottedExtList(metadata.AudioExtensions),
-			)
+		if err := metadata.CheckAudioFile(path); err != nil {
+			return nil, false, err
 		}
 		return []string{path}, false, nil
 	}
 
-	isAlbum, err = sumsIsAlbumRoot(path)
+	isAlbum, err = metadata.IsAlbumRoot(path)
 	if err != nil {
 		return nil, false, fmt.Errorf("reading %s: %w", path, err)
 	}
@@ -227,14 +223,9 @@ func spectrumTracks(path string) (tracks []string, isAlbum bool, err error) {
 		)
 	}
 
-	entries, err := os.ReadDir(path)
+	tracks, err = metadata.AudioFiles(path)
 	if err != nil {
-		return nil, false, fmt.Errorf("reading %s: %w", path, err)
-	}
-	for _, e := range entries {
-		if !e.IsDir() && metadata.IsAudioExt(filepath.Ext(e.Name())) {
-			tracks = append(tracks, filepath.Join(path, e.Name()))
-		}
+		return nil, false, err
 	}
 	return tracks, true, nil
 }

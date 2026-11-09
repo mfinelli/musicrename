@@ -23,7 +23,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -113,10 +112,8 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 		if info.IsDir() {
 			return fmt.Errorf("--url is only valid with a single track, not a directory (%s)", abs)
 		}
-		ext := strings.ToLower(filepath.Ext(abs))
-		if !metadata.IsAudioExt(ext) {
-			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
-				abs, metadata.DottedExtList(metadata.AudioExtensions))
+		if err := metadata.CheckAudioFile(abs); err != nil {
+			return err
 		}
 		id, err := lyrics.ParseID(rawURL)
 		if err != nil {
@@ -126,15 +123,13 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 	}
 
 	if !info.IsDir() {
-		ext := strings.ToLower(filepath.Ext(abs))
-		if !metadata.IsAudioExt(ext) {
-			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
-				abs, metadata.DottedExtList(metadata.AudioExtensions))
+		if err := metadata.CheckAudioFile(abs); err != nil {
+			return err
 		}
 		return runLyricsTrack(ctx, out, abs, opts, start)
 	}
 
-	isAlbum, err := lyricsIsAlbumRoot(abs)
+	isAlbum, err := metadata.IsAlbumRoot(abs)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", abs, err)
 	}
@@ -143,20 +138,6 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 		return runLyricsAlbum(ctx, out, abs, opts, start)
 	}
 	return runLyricsLibrary(ctx, out, abs, opts, start)
-}
-
-// lyricsIsAlbumRoot reports whether dir directly contains at least one audio file.
-func lyricsIsAlbumRoot(dir string) (bool, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false, err
-	}
-	for _, e := range entries {
-		if !e.IsDir() && metadata.IsAudioExt(strings.ToLower(filepath.Ext(e.Name()))) {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // runLyricsTrack handles track mode: a single audio file.
@@ -209,63 +190,9 @@ func runLyricsTrackByID(ctx context.Context, out io.Writer, path string, id int,
 	return nil
 }
 
-// lyricsAlbumPaths returns the audio files directly inside dir, sorted.
-func lyricsAlbumPaths(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", dir, err)
-	}
-
-	var paths []string
-	for _, e := range entries {
-		if !e.IsDir() && metadata.IsAudioExt(strings.ToLower(filepath.Ext(e.Name()))) {
-			paths = append(paths, filepath.Join(dir, e.Name()))
-		}
-	}
-	sort.Strings(paths)
-	return paths, nil
-}
-
-// lyricsLibraryAlbum is one album found by scanning a library: where it is,
-// relative to the library root, and its audio files.
-type lyricsLibraryAlbum struct {
-	Rel   string
-	Paths []string
-}
-
-// lyricsLibraryAlbums scans the library at dir and returns its albums sorted
-// by location, each with its audio files sorted.
-func lyricsLibraryAlbums(dir string) ([]lyricsLibraryAlbum, error) {
-	albums, err := metadata.ScanLibrary(dir)
-	if err != nil {
-		return nil, fmt.Errorf("scanning library: %w", err)
-	}
-
-	sort.Slice(albums, func(i, j int) bool {
-		return albums[i].RootPath < albums[j].RootPath
-	})
-
-	out := make([]lyricsLibraryAlbum, 0, len(albums))
-	for _, album := range albums {
-		rel, err := filepath.Rel(dir, album.RootPath)
-		if err != nil {
-			rel = album.RootPath
-		}
-
-		paths := make([]string, 0, len(album.Tracks))
-		for _, t := range album.Tracks {
-			paths = append(paths, t.Path)
-		}
-		sort.Strings(paths)
-
-		out = append(out, lyricsLibraryAlbum{Rel: rel, Paths: paths})
-	}
-	return out, nil
-}
-
 // runLyricsAlbum handles album mode: a directory containing audio files directly.
 func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, opts lyrics.Options, start time.Time) error {
-	paths, err := lyricsAlbumPaths(dir)
+	paths, err := metadata.AudioFiles(dir)
 	if err != nil {
 		return err
 	}
@@ -290,7 +217,7 @@ func runLyricsAlbum(ctx context.Context, out io.Writer, dir string, opts lyrics.
 
 // runLyricsLibrary handles library mode: a directory containing album subdirectories.
 func runLyricsLibrary(ctx context.Context, out io.Writer, dir string, opts lyrics.Options, start time.Time) error {
-	albums, err := lyricsLibraryAlbums(dir)
+	albums, err := metadata.LibraryAlbums(dir)
 	if err != nil {
 		return err
 	}

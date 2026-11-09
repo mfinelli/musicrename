@@ -22,7 +22,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -81,7 +80,7 @@ func runSums(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	isTTY := isatty.IsTerminal(os.Stdout.Fd())
 
-	isAlbum, err := sumsIsAlbumRoot(absDir)
+	isAlbum, err := metadata.IsAlbumRoot(absDir)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", absDir, err)
 	}
@@ -90,21 +89,6 @@ func runSums(cmd *cobra.Command, args []string) error {
 		return runSumsAlbum(out, absDir, force, isTTY, start)
 	}
 	return runSumsLibrary(out, absDir, force, isTTY, start)
-}
-
-// sumsIsAlbumRoot reports whether dir directly contains at least one audio
-// file, matching the same heuristic used by the metadata scanner.
-func sumsIsAlbumRoot(dir string) (bool, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false, err
-	}
-	for _, e := range entries {
-		if !e.IsDir() && metadata.IsAudioExt(strings.ToLower(filepath.Ext(e.Name()))) {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // runSumsAlbum generates sums.md5 for a single album directory. It refuses to
@@ -150,15 +134,10 @@ func runSumsAlbum(out io.Writer, dir string, force, isTTY bool, start time.Time)
 // runSumsLibrary generates sums.md5 for every album found under dir. Albums
 // that already have a sums.md5 are skipped unless force is true.
 func runSumsLibrary(out io.Writer, dir string, force, isTTY bool, start time.Time) error {
-	albums, err := metadata.ScanLibrary(dir)
+	albums, err := metadata.LibraryAlbums(dir)
 	if err != nil {
-		return fmt.Errorf("scanning library: %w", err)
+		return err
 	}
-
-	// Sort by path for deterministic, reproducible output order.
-	sort.Slice(albums, func(i, j int) bool {
-		return albums[i].RootPath < albums[j].RootPath
-	})
 
 	lipgloss.Fprintln(out, style.Header.Render("Generating checksums..."))
 	fmt.Fprintln(out)
@@ -171,10 +150,7 @@ func runSumsLibrary(out io.Writer, dir string, force, isTTY bool, start time.Tim
 	var generated, skipped int
 
 	for _, album := range albums {
-		relPath, err := filepath.Rel(dir, album.RootPath)
-		if err != nil {
-			relPath = album.RootPath
-		}
+		relPath := album.Rel
 
 		// Print the album path before processing so the user can see
 		// which album is active while hashing runs below it.
