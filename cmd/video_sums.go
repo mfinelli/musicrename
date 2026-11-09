@@ -96,8 +96,8 @@ func runVideoSums(cmd *cobra.Command, args []string) error {
 // dirIsVideoDir reports whether dir directly contains at least one video
 // file, matching the same heuristic used elsewhere in internal/video
 // (dirHasVideoFile), reimplemented here at the cmd layer purely for the
-// mode-detection decision, mirroring how sums.go's sumsIsAlbumRoot avoids
-// importing an unexported variable from another package.
+// mode-detection decision, mirroring metadata.IsAlbumRoot (which can't be
+// shared, since it is for audio and this is for video).
 func dirIsVideoDir(dir string) (bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

@@ -159,7 +159,7 @@ func runLyricsDiff(cmd *cobra.Command, args []string) error {
 		if info.IsDir() {
 			return fmt.Errorf("--url is only valid with a single track, not a directory (%s)", abs)
 		}
-		if err := lyricsDiffCheckAudio(abs); err != nil {
+		if err := metadata.CheckAudioFile(abs); err != nil {
 			return err
 		}
 		id, err := lyrics.ParseID(rawURL)
@@ -170,7 +170,7 @@ func runLyricsDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	if !info.IsDir() {
-		if err := lyricsDiffCheckAudio(abs); err != nil {
+		if err := metadata.CheckAudioFile(abs); err != nil {
 			return err
 		}
 		return r.track(ctx, abs)
@@ -184,16 +184,6 @@ func runLyricsDiff(cmd *cobra.Command, args []string) error {
 		return r.album(ctx, abs)
 	}
 	return r.library(ctx, abs)
-}
-
-// lyricsDiffCheckAudio reports an error unless path is a supported audio file.
-func lyricsDiffCheckAudio(path string) error {
-	ext := strings.ToLower(filepath.Ext(path))
-	if !metadata.IsAudioExt(ext) {
-		return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
-			path, metadata.DottedExtList(metadata.AudioExtensions))
-	}
-	return nil
 }
 
 // track handles track mode: one file, in full detail.

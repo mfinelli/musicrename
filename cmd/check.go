@@ -89,20 +89,15 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	if !info.IsDir() {
 		// Single audio file mode.
-		ext := strings.ToLower(filepath.Ext(absPath))
-		if !metadata.IsAudioExt(ext) {
-			return fmt.Errorf(
-				"%q is not a supported audio file (expected one of: %s)",
-				filepath.Base(absPath), metadata.DottedExtList(metadata.AudioExtensions),
-			)
+		if err := metadata.CheckAudioFile(absPath); err != nil {
+			return err
 		}
 		return runCheckTrack(out, absPath, start)
 	}
 
 	// Directory mode: check whether the directory directly contains audio to
-	// decide between single-album and library mode. sumsIsAlbumRoot is defined
-	// in sums.go and performs the same heuristic used by the sums command.
-	isAlbum, err := sumsIsAlbumRoot(absPath)
+	// decide between single-album and library mode.
+	isAlbum, err := metadata.IsAlbumRoot(absPath)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", absPath, err)
 	}

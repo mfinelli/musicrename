@@ -37,6 +37,30 @@ func touchFiles(t *testing.T, dir string, rels ...string) {
 	}
 }
 
+func TestCheckAudioFile(t *testing.T) {
+	t.Run("accepts every supported extension, whatever its case", func(t *testing.T) {
+		for _, name := range []string{"01 a.flac", "01 a.mp3", "01 a.m4a", "01 a.FLAC", "/some/dir/01 a.Mp3"} {
+			assert.NoError(t, CheckAudioFile(name), name)
+		}
+	})
+
+	t.Run("rejects anything else, naming the file and what is accepted", func(t *testing.T) {
+		for _, name := range []string{"folder.jpg", "sums.md5", "noextension", "01 a.flac.bak"} {
+			err := CheckAudioFile("/some/dir/" + name)
+			require.Error(t, err, name)
+			assert.Contains(t, err.Error(), name)
+			assert.NotContains(t, err.Error(), "/some/dir/", "only the file's name is shown")
+			assert.Contains(t, err.Error(), "supported audio file")
+		}
+	})
+
+	t.Run("a directory named like audio is judged by its name only", func(t *testing.T) {
+		// CheckAudioFile looks at the extension and not at the file system,
+		// which is the caller's business.
+		assert.NoError(t, CheckAudioFile("/some/dir.flac"))
+	})
+}
+
 func TestAudioFiles(t *testing.T) {
 	t.Run("lists the audio files directly inside, sorted", func(t *testing.T) {
 		dir := t.TempDir()

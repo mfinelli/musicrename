@@ -326,7 +326,7 @@ func (m *entriesAddModel) enter() tea.Cmd {
 		return m.openArtistVideos(full)
 	}
 
-	isAlbum, err := sumsIsAlbumRoot(full)
+	isAlbum, err := metadata.IsAlbumRoot(full)
 	if err != nil {
 		m.errMsg = err.Error()
 		return nil

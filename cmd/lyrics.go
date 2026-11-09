@@ -112,10 +112,8 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 		if info.IsDir() {
 			return fmt.Errorf("--url is only valid with a single track, not a directory (%s)", abs)
 		}
-		ext := strings.ToLower(filepath.Ext(abs))
-		if !metadata.IsAudioExt(ext) {
-			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
-				abs, metadata.DottedExtList(metadata.AudioExtensions))
+		if err := metadata.CheckAudioFile(abs); err != nil {
+			return err
 		}
 		id, err := lyrics.ParseID(rawURL)
 		if err != nil {
@@ -125,10 +123,8 @@ func runLyrics(cmd *cobra.Command, args []string) error {
 	}
 
 	if !info.IsDir() {
-		ext := strings.ToLower(filepath.Ext(abs))
-		if !metadata.IsAudioExt(ext) {
-			return fmt.Errorf("%s is not a supported audio file (expected one of: %s)",
-				abs, metadata.DottedExtList(metadata.AudioExtensions))
+		if err := metadata.CheckAudioFile(abs); err != nil {
+			return err
 		}
 		return runLyricsTrack(ctx, out, abs, opts, start)
 	}

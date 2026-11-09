@@ -22,8 +22,19 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 )
+
+// CheckAudioFile returns an error unless path names a supported audio file,
+// judged by its extension, for the commands that take a single track.
+func CheckAudioFile(path string) error {
+	if !IsAudioExt(filepath.Ext(path)) {
+		return fmt.Errorf(
+			"%q is not a supported audio file (expected one of: %s)",
+			filepath.Base(path), DottedExtList(AudioExtensions),
+		)
+	}
+	return nil
+}
 
 // AudioFiles returns the audio files directly inside dir, not those in its
 // subdirectories, sorted by name.
@@ -35,7 +46,7 @@ func AudioFiles(dir string) ([]string, error) {
 
 	var paths []string
 	for _, e := range entries {
-		if !e.IsDir() && IsAudioExt(strings.ToLower(filepath.Ext(e.Name()))) {
+		if !e.IsDir() && IsAudioExt(filepath.Ext(e.Name())) {
 			paths = append(paths, filepath.Join(dir, e.Name()))
 		}
 	}
@@ -52,7 +63,7 @@ func IsAlbumRoot(dir string) (bool, error) {
 		return false, err
 	}
 	for _, e := range entries {
-		if !e.IsDir() && IsAudioExt(strings.ToLower(filepath.Ext(e.Name()))) {
+		if !e.IsDir() && IsAudioExt(filepath.Ext(e.Name())) {
 			return true, nil
 		}
 	}
