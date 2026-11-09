@@ -311,33 +311,6 @@ func UpdateFile(dir, rel string) error {
 	return writeSumsEntries(dir, entries)
 }
 
-// UpdateExisting is UpdateFile for each of the files rels (relative to dir) that
-// already has a line in dir/sums.md5, and only those. A file with no line was
-// never recorded, so there is no recorded content for a change to bring up to
-// date, and adding one here would hide that it is missing from the record, which
-// is something check reports and a person should decide about.
-//
-// If dir/sums.md5 does not exist, UpdateExisting is a no-op.
-func UpdateExisting(dir string, rels []string) error {
-	sums, existed, err := ReadSums(dir, SumsFilename)
-	if err != nil {
-		return err
-	}
-	if !existed {
-		return nil
-	}
-
-	for _, rel := range rels {
-		if _, recorded := sums[rel]; !recorded {
-			continue
-		}
-		if err := UpdateFile(dir, rel); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // ReadSums reads and parses a sums.md5-formatted file at dir/filename into
 // a map of recorded filename -> hash. Works for sums.md5 itself
 // (SumsFilename) and equally for a {target}.src.md5 sidecar, which shares

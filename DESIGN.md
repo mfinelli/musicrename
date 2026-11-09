@@ -196,11 +196,11 @@ the same content (rsgain rewrites them but only their modification times move),
 so nothing is lost by always scanning except the time to decode.
 
 Because the tags are rewritten in the files, `sums.md5` has to follow. The
-command compares the content of each file before and after the scan and updates
-the entry of exactly the files that changed. It does not rehash the rest, which
-would hide damage to files it did not touch, and it does not add an entry for a
-file that has none, which is something `check` reports and a person should
-decide about. `--skip-md5` leaves `sums.md5` alone.
+command compares the content of each file before and after the scan and
+refreshes the entry of exactly the files that changed, as the other commands
+that rewrite a file do (`hasher.UpdateFile`). It does not rehash the rest, which
+would hide damage to files it did not touch. `--skip-md5` leaves `sums.md5`
+alone.
 
 `check` reports a track that is missing any of the four tags, and an album whose
 tracks do not all carry the same album gain, or the same album peak, which means

@@ -176,7 +176,14 @@ func (r *replaygainRun) scan(ctx context.Context, dir, name string, paths []stri
 
 	res, err := replaygain.ScanAlbum(ctx, paths)
 	if err == nil && !r.skipMD5 {
-		err = updateSums(dir, res.Changed)
+		// UpdateFile does nothing without a sums.md5 and rehashes only the
+		// file it is given, so the other entries keep what was recorded.
+		for _, p := range res.Changed {
+			if err = hasher.UpdateFile(dir, filepath.Base(p)); err != nil {
+				err = fmt.Errorf("updating %s: %w", hasher.SumsFilename, err)
+				break
+			}
+		}
 	}
 
 	r.clearProgress()
@@ -197,20 +204,6 @@ func (r *replaygainRun) scan(ctx context.Context, dir, name string, paths []stri
 		detail += fmt.Sprintf("%d changed", len(res.Changed))
 	}
 	lipgloss.Fprintln(r.out, "  "+style.OK.Render("✓")+"  "+style.Name.Render(name)+"  "+style.Faint.Render(detail))
-}
-
-// updateSums brings the entries in dir's sums.md5 of the files whose content
-// changed up to date, only those that have one, and only the files that changed:
-// see hasher.UpdateFile for why not the whole file.
-func updateSums(dir string, changed []string) error {
-	rels := make([]string, len(changed))
-	for i, p := range changed {
-		rels[i] = filepath.Base(p)
-	}
-	if err := hasher.UpdateExisting(dir, rels); err != nil {
-		return fmt.Errorf("updating %s: %w", hasher.SumsFilename, err)
-	}
-	return nil
 }
 
 // finish writes the rule and summary line, like the other commands, and turns
