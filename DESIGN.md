@@ -168,6 +168,48 @@ already named (`03 original.flac`) keeps its name rather than gaining another
 prefix (`03 03 original.flac`). If neither the title nor the stem yields any
 usable characters, the filename is the number prefix alone (`03.flac`).
 
+### 2.5 ReplayGain
+
+`mrr replaygain` calculates ReplayGain with rsgain and writes the four tags
+`REPLAYGAIN_TRACK_GAIN`, `REPLAYGAIN_TRACK_PEAK`, `REPLAYGAIN_ALBUM_GAIN`, and
+`REPLAYGAIN_ALBUM_PEAK`. One tool with one set of settings produces every value
+in the library, so they are uniform: a target of -18 LUFS (ReplayGain 2.0) and
+true peaks, with rsgain's default clipping behavior. These are the settings used
+for the audio extracted from videos (7.3), too.
+
+A true peak is the highest level of the waveform as it is reconstructed between
+the samples, which can be over full scale even when no stored sample is, where a
+sample peak is only the highest sample. The gain is the same either way, since
+it comes from loudness. Only the peak tag differs, and players use it to stop
+positive gain from clipping, so it should not be an understatement.
+
+Album gain and peak are calculated over all the tracks of an album together, so
+the command works on an album (the audio files directly in a directory, so a
+multi-disc album sharing a directory is one album) or on a library of them,
+never on a single file. Every track is measured every time, and albums that
+already have tags are not skipped. The tags can't say whether the audio they
+were measured from is the audio there now, as after a track is replaced or
+added, and measuring again is the only way to know that the album values are
+right. Adding a track changes the album values, and so rewrites the tags of
+every track. A rescan of an album that is already right leaves its files with
+the same content (rsgain rewrites them but only their modification times move),
+so nothing is lost by always scanning except the time to decode.
+
+Because the tags are rewritten in the files, `sums.md5` has to follow. The
+command compares the content of each file before and after the scan and updates
+the entry of exactly the files that changed. It does not rehash the rest, which
+would hide damage to files it did not touch, and it does not add an entry for a
+file that has none, which is something `check` reports and a person should
+decide about. `--skip-md5` leaves `sums.md5` alone.
+
+`check` reports a track that is missing any of the four tags, and an album whose
+tracks do not all carry the same album gain, or the same album peak, which means
+they were not scanned together.
+
+In the ripping workflow (`WORKFLOW.md`) the command replaces foobar2000's scan.
+It runs before the final foobar2000 conversion, which carries the tags over and
+collapses the files to their smallest size.
+
 ---
 
 ## 3. Renaming

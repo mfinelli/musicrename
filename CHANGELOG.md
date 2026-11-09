@@ -29,6 +29,10 @@ my own reference.
   word-synced Lyricsfile is compared by what it says. Tracks that could gain
   word-synced data are listed. `-v` adds details, `--full-context` shows whole
   lyrics, and `--raw` also diffs the Lyricsfile text.
+- Add `replaygain`, which calculates ReplayGain with `rsgain` for each album
+  (track and album gain and peak, true peaks, -18 LUFS). `check` now also
+  requires the peak tags and reports albums whose tracks disagree on album gain
+  or peak. Audio extracted from videos now uses true peaks as well.
 
 ## v4.6.0 — 2026-10-26
 

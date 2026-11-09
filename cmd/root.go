@@ -38,10 +38,11 @@ Artist, album, and title strings are transliterated to ASCII, lowercased, and
 stripped of non-alphanumeric characters before use.
 
 Intended workflow:
-  mrr rename   # move files into place
-  mrr lyrics   # fetch and embed lyrics
-  mrr check    # audit the result
-  mrr sums     # generate md5 checksums`,
+  mrr rename       # move files into place
+  mrr replaygain   # calculate ReplayGain tags
+  mrr lyrics       # fetch and embed lyrics
+  mrr check        # audit the result
+  mrr sums         # generate md5 checksums`,
 	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
 	Version:           "4.6.0",
 }

@@ -151,6 +151,8 @@ Homepage: <https://www.makemkv.com/>
 Homepage: <https://github.com/mfinelli/musicrename>
 
 - Used at various stages of the workflow.
+- Needs [rsgain](https://github.com/complexlogic/rsgain) on `PATH` for
+  ReplayGain.
 
 ## Ripping (Exact Audio Copy)
 
@@ -313,10 +315,12 @@ with the right title and anything else that's missing.
 1. Add the freshly tagged tracks back into foobar2000.
 2. This is where any custom edits can be made.
 3. Right-click the tracks and select `Tagging -> Remove all pictures`.
-4. Select all the tracks, right-click, and choose
-   `ReplayGain -> Scan as single albums (by tags)`. Occasionally this needs to
-   be overridden by directly choosing "Scan as single album" and then updating
-   the file tags.
+
+## ReplayGain (`mrr`)
+
+1. Switch into the album's `WORKING` directory.
+2. Run `mrr replaygain`. It scans all of the album's tracks together and writes
+   the track and album gain and peak tags.
 
 ## Lyrics (`mrr`)
 

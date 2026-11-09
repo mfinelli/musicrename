@@ -776,3 +776,56 @@ func TestIsTextFile(t *testing.T) {
 		assert.False(t, isTextFile("README"))
 	})
 }
+
+func TestUpdateExisting(t *testing.T) {
+	t.Run("no-op when sums.md5 does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+
+		require.NoError(t, UpdateExisting(dir, []string{"01 track.flac"}))
+
+		_, err := os.Stat(filepath.Join(dir, SumsFilename))
+		assert.True(t, os.IsNotExist(err), "sums.md5 should not have been created")
+	})
+
+	t.Run("updates the recorded files that were given and nothing else", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio one")
+		makeFile(t, filepath.Join(dir, "02 track.flac"), "audio two")
+		makeFile(t, filepath.Join(dir, "03 track.flac"), "audio three")
+		require.NoError(t, Hash(dir, nil))
+
+		// All three change, but only two are named.
+		for _, n := range []string{"01 track.flac", "02 track.flac", "03 track.flac"} {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, n), []byte("new "+n), 0o644))
+		}
+		require.NoError(t, UpdateExisting(dir, []string{"01 track.flac", "03 track.flac"}))
+
+		got := readSums(t, dir)
+		assert.Contains(t, got, md5hex("new 01 track.flac")+" *01 track.flac\n")
+		assert.Contains(t, got, md5hex("new 03 track.flac")+" *03 track.flac\n")
+		assert.Contains(t, got, md5hex("audio two")+" *02 track.flac\n", "an unnamed file keeps its recorded hash")
+	})
+
+	t.Run("a file with no line is not added", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+		before := readSums(t, dir)
+
+		makeFile(t, filepath.Join(dir, "02 new.flac"), "a track added later")
+		require.NoError(t, UpdateExisting(dir, []string{"02 new.flac"}))
+
+		assert.Equal(t, before, readSums(t, dir))
+	})
+
+	t.Run("no files given changes nothing", func(t *testing.T) {
+		dir := t.TempDir()
+		makeFile(t, filepath.Join(dir, "01 track.flac"), "audio")
+		require.NoError(t, Hash(dir, nil))
+		before := readSums(t, dir)
+
+		require.NoError(t, UpdateExisting(dir, nil))
+		assert.Equal(t, before, readSums(t, dir))
+	})
+}
