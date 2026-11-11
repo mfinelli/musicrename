@@ -4,7 +4,7 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
-## Unreleased
+## v4.8.0 — 2026-11-11
 
 - `check` now requires every track to have a `GENRE` that is one of the allowed
   genres (Winamp's extended ID3v1 list, spelled exactly: `Rock`, not `rock`;
