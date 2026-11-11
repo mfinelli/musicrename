@@ -4,6 +4,13 @@ This is a personal tool and may not follow
 [semantic versioning](https://semver.org), but I'll track major changes here for
 my own reference.
 
+## Unreleased
+
+- `check` now requires every track to have a `GENRE` that is one of the allowed
+  genres (Winamp's extended ID3v1 list, spelled exactly: `Rock`, not `rock`;
+  `Other` is there for anything else), and reports albums whose tracks disagree
+  on genre.
+
 ## v4.7.0 — 2026-11-09
 
 - `lyrics` now records which LRCLIB track the synced lyrics came from in a new
