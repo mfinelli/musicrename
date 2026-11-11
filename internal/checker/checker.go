@@ -44,6 +44,7 @@ import (
 
 	"go.senan.xyz/taglib"
 
+	"github.com/mfinelli/musicrename/internal/genre"
 	"github.com/mfinelli/musicrename/internal/hasher"
 	"github.com/mfinelli/musicrename/internal/metadata"
 	"github.com/mfinelli/musicrename/internal/planner"
@@ -171,6 +172,7 @@ func checkAlbum(album *metadata.Album, libraryRoot string) (*AlbumResult, error)
 	checkAlbumTags(album, ar)
 	checkAlbumMusicBrainzID(mbids, ar)
 	checkAlbumReplayGain(audio, ar)
+	checkAlbumGenre(audio, ar)
 	checkArtwork(album, ar)
 	checkIntegrity(album, ar)
 	checkUnknownFiles(album, ar)
@@ -217,6 +219,8 @@ type trackAudio struct {
 	// AlbumGain and AlbumPeak are its REPLAYGAIN_ALBUM_GAIN and
 	// REPLAYGAIN_ALBUM_PEAK values, "" if absent.
 	AlbumGain, AlbumPeak string
+	// Genres is every value of its GENRE tag, nil if absent.
+	Genres []string
 }
 
 // checkTrackAudio performs a second read-only pass over each audio file to
@@ -225,6 +229,8 @@ type trackAudio struct {
 // Specifically it checks for:
 //   - missing REPLAYGAIN_TRACK_GAIN and REPLAYGAIN_TRACK_PEAK tags
 //   - missing REPLAYGAIN_ALBUM_GAIN and REPLAYGAIN_ALBUM_PEAK tags
+//   - a missing GENRE tag, or one that is not an allowed genre (see
+//     checkTrackGenre)
 //   - embedded artwork (detected via Properties().Images)
 //
 // This is a deliberate design choice: metadata.Track stays focused on the
@@ -232,10 +238,11 @@ type trackAudio struct {
 // read here in a separate pass rather than expanding the shared data model.
 // The WASM call is read-only and inexpensive relative to the overall check run.
 //
-// It returns the tags of the track that checkAlbumMusicBrainzID and
-// checkAlbumReplayGain compare across the album, read here alongside everything
-// else rather than as their own separate pass, since the file is already open
-// for the checks above. A file that couldn't be opened gives the zero value.
+// It returns the tags of the track that checkAlbumMusicBrainzID,
+// checkAlbumReplayGain and checkAlbumGenre compare across the album, read here
+// alongside everything else rather than as their own separate pass, since the
+// file is already open for the checks above. A file that couldn't be opened
+// gives the zero value.
 func checkTrackAudio(track *metadata.Track, ar *AlbumResult) (audio trackAudio) {
 	file, err := taglib.OpenReadOnly(track.Path)
 	if err != nil {
@@ -257,6 +264,8 @@ func checkTrackAudio(track *metadata.Track, ar *AlbumResult) (audio trackAudio) 
 				})
 			}
 		}
+		checkTrackGenre(track, tags[taglib.Genre], ar)
+		audio.Genres = tags[taglib.Genre]
 		if vals := tags["REPLAYGAIN_ALBUM_GAIN"]; len(vals) > 0 {
 			audio.AlbumGain = vals[0]
 		}
@@ -276,6 +285,42 @@ func checkTrackAudio(track *metadata.Track, ar *AlbumResult) (audio trackAudio) 
 	}
 
 	return audio
+}
+
+// checkTrackGenre emits warnings for a track's GENRE tag: one if it has no
+// genre (an empty value counts as none, and "Other" is there for a track that
+// has no better one), and one for each value that is not an allowed genre (see
+// package genre). Matching is exact, so "rock" is reported even though "Rock"
+// is allowed; the warning then says what the right spelling is.
+//
+// values is every value of the tag, since a FLAC file can have the tag more
+// than once. Each is checked as it is: nothing is split on a separator, so
+// until several genres are supported a value such as "Rock; Pop" is one genre
+// that is not allowed.
+func checkTrackGenre(track *metadata.Track, values []string, ar *AlbumResult) {
+	present := false
+	for _, v := range values {
+		if v == "" {
+			continue
+		}
+		present = true
+		if genre.Valid(v) {
+			continue
+		}
+
+		msg := fmt.Sprintf("GENRE %q is not an allowed genre", v)
+		if want, ok := genre.Canonical(v); ok {
+			msg += fmt.Sprintf(" (expected %q)", want)
+		}
+		ar.Warnings = append(ar.Warnings, Warning{Path: track.Path, Message: msg})
+	}
+
+	if !present {
+		ar.Warnings = append(ar.Warnings, Warning{
+			Path:    track.Path,
+			Message: "missing GENRE tag",
+		})
+	}
 }
 
 // checkTrackFilename warns when the file's current basename does not match
@@ -467,6 +512,47 @@ func checkAlbumReplayGain(audio []trackAudio, ar *AlbumResult) {
 			Message: "inconsistent REPLAYGAIN_ALBUM_PEAK tags across tracks",
 		})
 	}
+}
+
+// checkAlbumGenre warns when the tracks of an album don't all have the same
+// genre. An album is tagged with one genre as a whole, so tracks that disagree
+// were tagged separately (one was changed, or added from elsewhere) and at
+// least one of them is probably wrong. Which is not for the check to say: it
+// reports every genre found, and the curator decides.
+//
+// Only tracks that have a genre are compared, as for checkAlbumReplayGain: a
+// track with none is already reported as missing it by checkTrackGenre. A track
+// is compared by all its values, in any order, and exactly, so "Rock" and
+// "rock" disagree (and the second is also reported as not allowed, by
+// checkTrackGenre). There is one warning however many tracks disagree.
+func checkAlbumGenre(audio []trackAudio, ar *AlbumResult) {
+	found := map[string]struct{}{}
+	for _, a := range audio {
+		var values []string
+		for _, v := range a.Genres {
+			if v != "" {
+				values = append(values, v)
+			}
+		}
+		if len(values) == 0 {
+			continue
+		}
+		sort.Strings(values)
+		found[strings.Join(values, "; ")] = struct{}{}
+	}
+	if len(found) < 2 {
+		return
+	}
+
+	genres := make([]string, 0, len(found))
+	for g := range found {
+		genres = append(genres, fmt.Sprintf("%q", g))
+	}
+	sort.Strings(genres)
+	ar.Warnings = append(ar.Warnings, Warning{
+		Path:    ar.AlbumPath,
+		Message: "inconsistent GENRE tags across tracks (" + strings.Join(genres, ", ") + ")",
+	})
 }
 
 // checkArtwork warns when the album has no primary artwork file (static or
