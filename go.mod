@@ -1,13 +1,13 @@
 module github.com/mfinelli/musicrename
 
-go 1.27.3
+go 1.27.4
 
 replace go.senan.xyz/taglib => github.com/deluan/go-taglib v0.0.0-20260619222856-1975cb12f59d
 
 require (
 	charm.land/bubbletea/v2 v2.1.1
 	charm.land/huh/v2 v2.0.3
-	charm.land/lipgloss/v2 v2.0.6
+	charm.land/lipgloss/v2 v2.1.0
 	github.com/alexsergivan/transliterator v1.0.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/spf13/cobra v1.10.2
@@ -15,8 +15,8 @@ require (
 	github.com/supersonic-app/go-subsonic v0.0.0-20260807144657-acbe3dde04b7
 	go.senan.xyz/taglib v0.15.0
 	go.yaml.in/yaml/v3 v3.0.6
-	golang.org/x/image v0.47.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/image v0.48.0
+	golang.org/x/sys v0.50.0
 	golang.org/x/time v0.16.0
 )
 
@@ -44,5 +44,5 @@ require (
 	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/xo/terminfo v1.3.1 // indirect
-	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 )
