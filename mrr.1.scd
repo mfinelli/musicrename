@@ -235,6 +235,10 @@ findings to stdout grouped by album and exits non-zero if any are present.
 Checks include:
 
 - Missing *TITLE*, *TRACKNUMBER*, *DATE*, or artist tags
+- A missing *GENRE* tag, or a *GENRE* that is not an allowed genre. The allowed
+  genres are Winamp's extended ID3v1 list and a genre must match one exactly,
+  including its case.
+- *GENRE* not the same on every track of an album.
 - Inconsistent *ALBUMARTIST* or *ALBUM* across tracks
 - Partial *DISCNUMBER* coverage or duplicate track numbers
 - Inconsistent *MUSICBRAINZ_ALBUMID* across tracks (present on some but not

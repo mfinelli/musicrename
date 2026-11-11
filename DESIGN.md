@@ -210,6 +210,56 @@ In the ripping workflow (`WORKFLOW.md`) the command replaces foobar2000's scan.
 It runs before the final foobar2000 conversion, which carries the tags over and
 collapses the files to their smallest size.
 
+### 2.6 Genres
+
+The `GENRE` tag has no part in naming; it is audited. The genres a track may
+have are a closed list kept in code (`internal/genre`), like the other short
+lists the project keeps there (13.3, 13.5), and `check` reports a track whose
+genre is missing or not on it (5). Nothing rewrites the tag.
+
+The list is Winamp's extended ID3v1 list, indices 0 to 191, which is the de
+facto standard: the original ID3v1 list stopped at 79 and Winamp added the rest,
+the last of it in 5.6. Exact Audio Copy's genre menu is the same list as far as
+index 147 and has nothing after it. A genre is stored as text, so ID3v1's
+numbers are not used. Winamp's joke entries (Primus, Porn Groove, Pranks, ...)
+are kept, to stay true to it.
+
+A genre is allowed only if it is on the list, spelled exactly as it is there:
+matching is case-sensitive, so `Rock` is allowed and `rock` is not, and
+surrounding whitespace is not ignored. A track with no genre is a finding too;
+`Other` is on the list for a track that has no better one. When a genre is wrong
+only in its case, the finding says what the spelling should be.
+
+An album has one genre as a whole, so `check` also reports an album whose tracks
+do not all have the same genre, listing the ones it found. As with ReplayGain,
+only tracks that have a genre are compared: one with none is reported as missing
+it, not as disagreeing. A track is compared by all of its genre values, in any
+order, and exactly, so `Rock` and `rock` disagree. Which of them is right is for
+the curator to say.
+
+The copies of Winamp's list in other tools disagree on some spellings, and since
+Winamp is defunct there is nothing to settle them. The choices are the
+project's, and `internal/genre` records them beside the entries:
+
+| Spelling used              | Elsewhere                                                                   |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `Meditative`               | EAC: `Mediative`                                                            |
+| `Bebop`                    | EAC: `Bebob`, and FFmpeg until 2019                                         |
+| `A Cappella`               | EAC: `A Capella`                                                            |
+| `Afro-Punk`                | EAC: `Negerpunk`                                                            |
+| `Folk/Rock`                | Winamp 5.63: `Folk-Rock`; EAC and squell/id3: `Folk/Rock`                   |
+| `JPop`                     | FFmpeg and Wikipedia: `Jpop`                                                |
+| `Synthpop`                 | FFmpeg until 2019: `SynthPop`                                               |
+| `Fast-Fusion`              | FFmpeg: `Fast Fusion`                                                       |
+| `Abstract` and `Christmas` | Index 148 is `Christmas` in Wikipedia, `Abstract` in Winamp 5.63 and FFmpeg |
+
+Wikipedia also writes the whole list in sentence case (`Thrash metal`).
+
+A track has one genre for now. If several are ever supported they will be
+separated with a semicolon, so no genre on the list may contain one; until then
+a value that has one is simply not on the list. MusicBrainz's much larger genre
+list is not used: the allowed genres are limited to Winamp's.
+
 ---
 
 ## 3. Renaming
@@ -289,6 +339,7 @@ Checks include:
 - missing track number
 - missing date/year
 - missing both artist and album artist
+- missing genre, or a genre that is not an allowed one (2.6)
 
 ### Album consistency
 
@@ -299,6 +350,7 @@ Checks include:
 - inconsistent MusicBrainz release ID (`MUSICBRAINZ_ALBUMID`) across tracks,
   present on some tracks but not others, or two different non-empty values; an
   album with the tag on none of its tracks is not itself a finding
+- genres that are not the same on every track that has one (2.6)
 
 ### Audio quality
 

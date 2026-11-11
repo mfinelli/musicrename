@@ -552,6 +552,234 @@ func TestCheckTrackAudio_MusicBrainzAlbumID(t *testing.T) {
 	})
 }
 
+func TestCheckTrackGenre(t *testing.T) {
+	const path = "/a/t.flac"
+
+	// run reports what checkTrackGenre says about a track whose GENRE tag has
+	// the given values, as messages.
+	run := func(t *testing.T, values []string) []string {
+		ar := &AlbumResult{}
+		checkTrackGenre(&metadata.Track{Path: path}, values, ar)
+		msgs := make([]string, len(ar.Warnings))
+		for i, w := range ar.Warnings {
+			assert.Equal(t, path, w.Path)
+			msgs[i] = w.Message
+		}
+		return msgs
+	}
+
+	t.Run("a track with no GENRE tag is missing one", func(t *testing.T) {
+		assert.Equal(t, []string{"missing GENRE tag"}, run(t, nil))
+		assert.Equal(t, []string{"missing GENRE tag"}, run(t, []string{}))
+	})
+
+	t.Run("an empty GENRE value is as good as none", func(t *testing.T) {
+		assert.Equal(t, []string{"missing GENRE tag"}, run(t, []string{""}))
+		assert.Equal(t, []string{"missing GENRE tag"}, run(t, []string{"", ""}))
+	})
+
+	t.Run("an allowed genre produces no warning", func(t *testing.T) {
+		assert.Empty(t, run(t, []string{"Rock"}))
+		assert.Empty(t, run(t, []string{"Folk/Rock"}))
+		assert.Empty(t, run(t, []string{"Abstract"}))
+		assert.Empty(t, run(t, []string{"Christmas"}))
+	})
+
+	t.Run("Other is a genre like any other", func(t *testing.T) {
+		// It is what to use for a track with no better genre, so a track that
+		// has it is not missing one.
+		assert.Empty(t, run(t, []string{"Other"}))
+	})
+
+	t.Run("a genre in the wrong case is reported with the right spelling", func(t *testing.T) {
+		assert.Equal(t,
+			[]string{`GENRE "rock" is not an allowed genre (expected "Rock")`},
+			run(t, []string{"rock"}))
+		assert.Equal(t,
+			[]string{`GENRE "JPOP" is not an allowed genre (expected "JPop")`},
+			run(t, []string{"JPOP"}))
+	})
+
+	t.Run("a genre that is not on the list is reported with no suggestion", func(t *testing.T) {
+		assert.Equal(t,
+			[]string{`GENRE "Synthwave" is not an allowed genre`},
+			run(t, []string{"Synthwave"}))
+	})
+
+	t.Run("another spelling of an allowed genre is not a suggestion", func(t *testing.T) {
+		// Only case is looked past, so Winamp's own Folk-Rock is plainly not
+		// allowed, and nothing is suggested for it.
+		assert.Equal(t,
+			[]string{`GENRE "Folk-Rock" is not an allowed genre`},
+			run(t, []string{"Folk-Rock"}))
+	})
+
+	t.Run("a value is not split on the multi-value separator", func(t *testing.T) {
+		assert.Equal(t,
+			[]string{`GENRE "Rock; Pop" is not an allowed genre`},
+			run(t, []string{"Rock; Pop"}))
+	})
+
+	t.Run("padding is not trimmed", func(t *testing.T) {
+		assert.Equal(t,
+			[]string{`GENRE " Rock" is not an allowed genre`},
+			run(t, []string{" Rock"}))
+	})
+
+	t.Run("a tag with several values has each checked", func(t *testing.T) {
+		assert.Empty(t, run(t, []string{"Rock", "Pop"}))
+		assert.Equal(t,
+			[]string{`GENRE "pop" is not an allowed genre (expected "Pop")`},
+			run(t, []string{"Rock", "pop"}))
+		assert.Len(t, run(t, []string{"rock", "pop"}), 2)
+	})
+
+	t.Run("an empty value beside a real one is ignored", func(t *testing.T) {
+		assert.Empty(t, run(t, []string{"", "Rock"}))
+	})
+
+	t.Run("a genre that is not allowed is not also reported as missing", func(t *testing.T) {
+		for _, msg := range run(t, []string{"rock"}) {
+			assert.NotContains(t, msg, "missing")
+		}
+	})
+}
+
+func TestCheckAlbumGenre(t *testing.T) {
+	const album = "/a"
+
+	// run reports what checkAlbumGenre says about tracks with the given genre
+	// values, one list of values for each track, as a list of warnings.
+	run := func(tracks ...[]string) []Warning {
+		audio := make([]trackAudio, len(tracks))
+		for i, g := range tracks {
+			audio[i] = trackAudio{Genres: g}
+		}
+		ar := &AlbumResult{AlbumPath: album}
+		checkAlbumGenre(audio, ar)
+		return ar.Warnings
+	}
+	g := func(values ...string) []string { return values }
+
+	t.Run("tracks that agree produce no warning", func(t *testing.T) {
+		assert.Empty(t, run(g("Rock"), g("Rock"), g("Rock")))
+	})
+
+	t.Run("a single track produces no warning", func(t *testing.T) {
+		assert.Empty(t, run(g("Rock")))
+	})
+
+	t.Run("no tracks produce no warning", func(t *testing.T) {
+		assert.Empty(t, run())
+	})
+
+	t.Run("tracks that disagree produce one warning for the album", func(t *testing.T) {
+		ws := run(g("Rock"), g("Pop"))
+		require.Len(t, ws, 1)
+		assert.Equal(t, album, ws[0].Path)
+		assert.Equal(t, `inconsistent GENRE tags across tracks ("Pop", "Rock")`, ws[0].Message)
+	})
+
+	t.Run("the genres are listed once each, in order, however many tracks have them", func(t *testing.T) {
+		ws := run(g("Rock"), g("Pop"), g("Rock"), g("Jazz"), g("Pop"))
+		require.Len(t, ws, 1)
+		assert.Equal(t, `inconsistent GENRE tags across tracks ("Jazz", "Pop", "Rock")`, ws[0].Message)
+	})
+
+	t.Run("one track that disagrees is enough", func(t *testing.T) {
+		assert.Len(t, run(g("Rock"), g("Rock"), g("Rock"), g("Pop")), 1)
+		assert.Len(t, run(g("Pop"), g("Rock"), g("Rock"), g("Rock")), 1)
+	})
+
+	t.Run("a track with no genre is left to the check of the track", func(t *testing.T) {
+		assert.Empty(t, run(g("Rock"), nil, g("Rock")))
+		assert.Empty(t, run(g("Rock"), g(), g("Rock")))
+	})
+
+	t.Run("an empty genre is no genre", func(t *testing.T) {
+		assert.Empty(t, run(g("Rock"), g(""), g("Rock")))
+	})
+
+	t.Run("tracks with no genre at all produce no warning", func(t *testing.T) {
+		assert.Empty(t, run(nil, nil, g("")))
+	})
+
+	t.Run("a track with no genre does not hide a disagreement", func(t *testing.T) {
+		assert.Len(t, run(g("Rock"), nil, g("Pop")), 1)
+	})
+
+	t.Run("genres that differ only in case disagree", func(t *testing.T) {
+		assert.Len(t, run(g("Rock"), g("rock")), 1)
+	})
+
+	t.Run("genres that differ only in padding disagree", func(t *testing.T) {
+		assert.Len(t, run(g("Rock"), g("Rock ")), 1)
+	})
+
+	t.Run("tracks with the same genres in another order agree", func(t *testing.T) {
+		assert.Empty(t, run(g("Rock", "Pop"), g("Pop", "Rock")))
+	})
+
+	t.Run("a track with more genres than another disagrees with it", func(t *testing.T) {
+		ws := run(g("Rock", "Pop"), g("Rock"))
+		require.Len(t, ws, 1)
+		assert.Equal(t, `inconsistent GENRE tags across tracks ("Pop; Rock", "Rock")`, ws[0].Message)
+	})
+}
+
+func TestCheckTrackAudio_Genre(t *testing.T) {
+	// withGenre makes a track with the ReplayGain tags, so that the only thing
+	// that can be reported about it is its genre; genre "" leaves the tag off.
+	withGenre := func(t *testing.T, genre string) string {
+		tags := map[string]string{
+			"TITLE":                 "Track",
+			"ARTIST":                "Artist",
+			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
+			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
+			"REPLAYGAIN_TRACK_PEAK": "0.987654",
+			"REPLAYGAIN_ALBUM_PEAK": "0.999999",
+		}
+		if genre != "" {
+			tags["GENRE"] = genre
+		}
+		return testutil.MakeAudioFile(t, t.TempDir(), "track.flac", tags)
+	}
+
+	t.Run("an allowed genre produces no warning", func(t *testing.T) {
+		ar := &AlbumResult{}
+		checkTrackAudio(&metadata.Track{Path: withGenre(t, "Hip-Hop")}, ar)
+		assert.Empty(t, ar.Warnings)
+	})
+
+	t.Run("no GENRE tag produces a warning", func(t *testing.T) {
+		path := withGenre(t, "")
+		ar := &AlbumResult{}
+		checkTrackAudio(&metadata.Track{Path: path}, ar)
+		require.Len(t, ar.Warnings, 1)
+		assert.Equal(t, "missing GENRE tag", ar.Warnings[0].Message)
+		assert.Equal(t, path, ar.Warnings[0].Path)
+	})
+
+	t.Run("a genre in the wrong case produces a warning", func(t *testing.T) {
+		path := withGenre(t, "hip-hop")
+		ar := &AlbumResult{}
+		checkTrackAudio(&metadata.Track{Path: path}, ar)
+		require.Len(t, ar.Warnings, 1)
+		assert.Equal(t, `GENRE "hip-hop" is not an allowed genre (expected "Hip-Hop")`, ar.Warnings[0].Message)
+		assert.Equal(t, path, ar.Warnings[0].Path)
+	})
+
+	t.Run("returns the genre for the check across the album", func(t *testing.T) {
+		audio := checkTrackAudio(&metadata.Track{Path: withGenre(t, "Hip-Hop")}, &AlbumResult{})
+		assert.Equal(t, []string{"Hip-Hop"}, audio.Genres)
+	})
+
+	t.Run("returns no genre when the tag is absent", func(t *testing.T) {
+		audio := checkTrackAudio(&metadata.Track{Path: withGenre(t, "")}, &AlbumResult{})
+		assert.Empty(t, audio.Genres)
+	})
+}
+
 func TestCheckTrackAudio_EmbeddedArtwork(t *testing.T) {
 	t.Run("embedded artwork produces warning", func(t *testing.T) {
 		path := testutil.MakeAudioFile(t, t.TempDir(), "track.flac", map[string]string{
@@ -868,6 +1096,7 @@ func TestCheckLibrary(t *testing.T) {
 			"ALBUMARTIST":           "Artist",
 			"ALBUM":                 "Album",
 			"DATE":                  "2000",
+			"GENRE":                 "Rock",
 			"TRACKNUMBER":           "1",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",
@@ -978,6 +1207,74 @@ func TestCheckAlbum(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, findWarning(ar, "MUSICBRAINZ_ALBUMID"))
 	})
+
+	t.Run("genre findings of real tracks surface end to end", func(t *testing.T) {
+		dir := t.TempDir()
+		tags := func(n, genre string) map[string]string {
+			m := map[string]string{
+				"TITLE": "Track " + n, "ARTIST": "Artist", "TRACKNUMBER": n, "DATE": "2000",
+			}
+			if genre != "" {
+				m["GENRE"] = genre
+			}
+			return m
+		}
+		good := testutil.MakeAudioFile(t, dir, "01 track.flac", tags("1", "Rock"))
+		wrongCase := testutil.MakeAudioFile(t, dir, "02 track.flac", tags("2", "rock"))
+		missing := testutil.MakeAudioFile(t, dir, "03 track.flac", tags("3", ""))
+
+		ar, err := CheckAlbum(dir, "")
+		require.NoError(t, err)
+
+		// The findings about single tracks, which are on the track's path. The
+		// one about the album, on the album's path, is left out here: the tracks
+		// have different genres, which is what the next case is about.
+		genreWarnings := map[string]string{}
+		for _, w := range ar.Warnings {
+			if strings.Contains(w.Message, "GENRE") && w.Path != dir {
+				genreWarnings[w.Path] = w.Message
+			}
+		}
+		assert.NotContains(t, genreWarnings, good)
+		assert.Equal(t, `GENRE "rock" is not an allowed genre (expected "Rock")`, genreWarnings[wrongCase])
+		assert.Equal(t, "missing GENRE tag", genreWarnings[missing])
+		assert.Len(t, genreWarnings, 2)
+	})
+
+	t.Run("tracks with different genres surface end to end", func(t *testing.T) {
+		dir := t.TempDir()
+		tags := func(n, genre string) map[string]string {
+			return map[string]string{
+				"TITLE": "Track " + n, "ARTIST": "Artist", "TRACKNUMBER": n, "DATE": "2000",
+				"GENRE": genre,
+			}
+		}
+		testutil.MakeAudioFile(t, dir, "01 track.flac", tags("1", "Rock"))
+		testutil.MakeAudioFile(t, dir, "02 track.flac", tags("2", "Pop"))
+
+		ar, err := CheckAlbum(dir, "")
+		require.NoError(t, err)
+		w := findWarning(ar, "inconsistent GENRE")
+		require.NotNil(t, w)
+		assert.Equal(t, dir, w.Path)
+		assert.Equal(t, `inconsistent GENRE tags across tracks ("Pop", "Rock")`, w.Message)
+		// Both genres are allowed, so that is all there is to say.
+		assert.Nil(t, findWarning(ar, "not an allowed genre"))
+		assert.Nil(t, findWarning(ar, "missing GENRE"))
+	})
+
+	t.Run("tracks with the same genre produce no genre warning end to end", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, n := range []string{"1", "2"} {
+			testutil.MakeAudioFile(t, dir, "0"+n+" track.flac", map[string]string{
+				"TITLE": "Track " + n, "ARTIST": "Artist", "TRACKNUMBER": n, "DATE": "2000",
+				"GENRE": "Rock",
+			})
+		}
+		ar, err := CheckAlbum(dir, "")
+		require.NoError(t, err)
+		assert.Nil(t, findWarning(ar, "GENRE"))
+	})
 }
 
 func TestCheckTrack(t *testing.T) {
@@ -988,6 +1285,7 @@ func TestCheckTrack(t *testing.T) {
 			"ALBUMARTIST":           "Artist",
 			"ALBUM":                 "Album",
 			"DATE":                  "2000",
+			"GENRE":                 "Rock",
 			"TRACKNUMBER":           "1",
 			"REPLAYGAIN_TRACK_GAIN": "+0.50 dB",
 			"REPLAYGAIN_ALBUM_GAIN": "+1.00 dB",

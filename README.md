@@ -133,8 +133,8 @@ mrr lyrics diff --full-context "~/music/b/beyonce/01 dangerously in love.flac"
 
 Calculates ReplayGain with [rsgain](https://github.com/complexlogic/rsgain)
 (which must be on `PATH`) and writes the track and album gain and peak tags to
-every file of each album. Album values are calculated over a whole album, so
-it takes an album directory or a library root, and not a single file.
+every file of each album. Album values are calculated over a whole album, so it
+takes an album directory or a library root, and not a single file.
 
 ```sh
 mrr replaygain ~/music/b/beyonce/2003\ dangerously\ in\ love
@@ -287,6 +287,11 @@ mrr inspect "01 back in black.flac"
   the lowest-numbered track if absent.
 - **Year:** extracted from the `DATE` tag; full ISO-8601 dates and year-month
   values are supported (only the four-character year is used).
+- **Genre:** not used for naming, but `check` reports a track with no `GENRE`
+  tag, or one that is not on the allowed list. The list is Winamp's extended
+  ID3v1 genres (`Rock`, `Hip-Hop`, `Folk/Rock`, `Other`, ...) and a genre must
+  match one exactly, including its case. An album's tracks should all have the
+  same genre.
 - **Disc numbers:** all-or-nothing per album. If any track has a `DISCNUMBER`
   tag, all tracks must have one or the album is skipped with an error.
 - **Track numbers:** zero-padded to two digits; switches to three digits if any
